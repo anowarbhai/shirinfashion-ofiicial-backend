@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\Admin\CouponController as AdminCouponController;
 use App\Http\Controllers\Api\Admin\CustomerController as AdminCustomerController;
 use App\Http\Controllers\Api\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Api\Admin\FacebookMarketingController as AdminFacebookMarketingController;
+use App\Http\Controllers\Api\Admin\GoogleMarketingController as AdminGoogleMarketingController;
 use App\Http\Controllers\Api\Admin\AttributeController as AdminAttributeController;
 use App\Http\Controllers\Api\Admin\MediaController as AdminMediaController;
 use App\Http\Controllers\Api\Admin\OrderController as AdminOrderController;
@@ -17,6 +18,7 @@ use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ContactMessageController;
 use App\Http\Controllers\Api\CouponController;
 use App\Http\Controllers\Api\FacebookMarketingController;
+use App\Http\Controllers\Api\GoogleMarketingController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ReviewController;
@@ -41,6 +43,7 @@ Route::get('/home', [StorefrontController::class, 'index']);
 Route::get('/sliders', [SliderController::class, 'index']);
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/marketing/facebook', [FacebookMarketingController::class, 'show']);
+Route::get('/marketing/google', [GoogleMarketingController::class, 'show']);
 Route::post('/contact-messages', [ContactMessageController::class, 'store']);
 Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/{product}', [ProductController::class, 'show']);
@@ -80,6 +83,8 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::get('/customers', [AdminCustomerController::class, 'index']);
         Route::get('/marketing/facebook', [AdminFacebookMarketingController::class, 'show']);
         Route::patch('/marketing/facebook', [AdminFacebookMarketingController::class, 'update']);
+        Route::get('/marketing/google', [AdminGoogleMarketingController::class, 'show']);
+        Route::patch('/marketing/google', [AdminGoogleMarketingController::class, 'update']);
         Route::apiResource('reviews', AdminReviewController::class)->only([
             'index',
             'store',
