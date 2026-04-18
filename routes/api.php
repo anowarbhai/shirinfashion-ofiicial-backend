@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Admin\CustomerController as AdminCustomerController
 use App\Http\Controllers\Api\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Api\Admin\FacebookMarketingController as AdminFacebookMarketingController;
 use App\Http\Controllers\Api\Admin\GoogleMarketingController as AdminGoogleMarketingController;
+use App\Http\Controllers\Api\Admin\SeoMarketingController as AdminSeoMarketingController;
 use App\Http\Controllers\Api\Admin\AttributeController as AdminAttributeController;
 use App\Http\Controllers\Api\Admin\MediaController as AdminMediaController;
 use App\Http\Controllers\Api\Admin\OrderController as AdminOrderController;
@@ -22,6 +23,7 @@ use App\Http\Controllers\Api\GoogleMarketingController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ReviewController;
+use App\Http\Controllers\Api\SeoMarketingController;
 use App\Http\Controllers\Api\SliderController;
 use App\Http\Controllers\Api\StorefrontController;
 use App\Http\Controllers\Api\TagController;
@@ -44,6 +46,7 @@ Route::get('/sliders', [SliderController::class, 'index']);
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/marketing/facebook', [FacebookMarketingController::class, 'show']);
 Route::get('/marketing/google', [GoogleMarketingController::class, 'show']);
+Route::get('/marketing/seo', [SeoMarketingController::class, 'show']);
 Route::post('/contact-messages', [ContactMessageController::class, 'store']);
 Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/{product}', [ProductController::class, 'show']);
@@ -85,6 +88,8 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::patch('/marketing/facebook', [AdminFacebookMarketingController::class, 'update']);
         Route::get('/marketing/google', [AdminGoogleMarketingController::class, 'show']);
         Route::patch('/marketing/google', [AdminGoogleMarketingController::class, 'update']);
+        Route::get('/marketing/seo', [AdminSeoMarketingController::class, 'show']);
+        Route::patch('/marketing/seo', [AdminSeoMarketingController::class, 'update']);
         Route::apiResource('reviews', AdminReviewController::class)->only([
             'index',
             'store',
