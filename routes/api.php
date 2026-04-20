@@ -88,6 +88,8 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::get('/orders', [AdminOrderController::class, 'index']);
         Route::patch('/orders/{order}', [AdminOrderController::class, 'update']);
         Route::get('/customers', [AdminCustomerController::class, 'index']);
+        Route::get('/customers/{customer}', [AdminCustomerController::class, 'show']);
+        Route::patch('/customers/{customer}', [AdminCustomerController::class, 'update']);
         Route::get('/contact-messages', [AdminContactMessageController::class, 'index']);
         Route::patch('/contact-messages/{contactMessage}', [AdminContactMessageController::class, 'update']);
         Route::delete('/contact-messages/{contactMessage}', [AdminContactMessageController::class, 'destroy']);
