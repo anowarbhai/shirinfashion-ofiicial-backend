@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\Admin\CategoryController as AdminCategoryController;
 use App\Http\Controllers\Api\Admin\CouponController as AdminCouponController;
+use App\Http\Controllers\Api\Admin\ContactMessageController as AdminContactMessageController;
 use App\Http\Controllers\Api\Admin\CustomerController as AdminCustomerController;
 use App\Http\Controllers\Api\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Api\Admin\FacebookMarketingController as AdminFacebookMarketingController;
@@ -87,6 +88,9 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::get('/orders', [AdminOrderController::class, 'index']);
         Route::patch('/orders/{order}', [AdminOrderController::class, 'update']);
         Route::get('/customers', [AdminCustomerController::class, 'index']);
+        Route::get('/contact-messages', [AdminContactMessageController::class, 'index']);
+        Route::patch('/contact-messages/{contactMessage}', [AdminContactMessageController::class, 'update']);
+        Route::delete('/contact-messages/{contactMessage}', [AdminContactMessageController::class, 'destroy']);
         Route::apiResource('pages', AdminPageController::class);
         Route::get('/marketing/facebook', [AdminFacebookMarketingController::class, 'show']);
         Route::patch('/marketing/facebook', [AdminFacebookMarketingController::class, 'update']);
