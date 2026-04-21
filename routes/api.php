@@ -16,6 +16,10 @@ use App\Http\Controllers\Api\Admin\ProductController as AdminProductController;
 use App\Http\Controllers\Api\Admin\ReviewController as AdminReviewController;
 use App\Http\Controllers\Api\Admin\SliderController as AdminSliderController;
 use App\Http\Controllers\Api\Admin\TagController as AdminTagController;
+use App\Http\Controllers\Api\Admin\ThemeAppearanceController as AdminThemeAppearanceController;
+use App\Http\Controllers\Api\Admin\ThemeFooterController as AdminThemeFooterController;
+use App\Http\Controllers\Api\Admin\ThemeHeaderController as AdminThemeHeaderController;
+use App\Http\Controllers\Api\Admin\ThemeMenuController as AdminThemeMenuController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ContactMessageController;
@@ -30,6 +34,7 @@ use App\Http\Controllers\Api\SeoMarketingController;
 use App\Http\Controllers\Api\SliderController;
 use App\Http\Controllers\Api\StorefrontController;
 use App\Http\Controllers\Api\TagController;
+use App\Http\Controllers\Api\ThemeController;
 use App\Http\Controllers\Api\WishlistController;
 use Illuminate\Support\Facades\Route;
 
@@ -50,6 +55,7 @@ Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/marketing/facebook', [FacebookMarketingController::class, 'show']);
 Route::get('/marketing/google', [GoogleMarketingController::class, 'show']);
 Route::get('/marketing/seo', [SeoMarketingController::class, 'show']);
+Route::get('/theme', [ThemeController::class, 'show']);
 Route::post('/contact-messages', [ContactMessageController::class, 'store']);
 Route::get('/pages/{slug}', [PageController::class, 'show']);
 Route::get('/products', [ProductController::class, 'index']);
@@ -100,6 +106,17 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::patch('/marketing/google', [AdminGoogleMarketingController::class, 'update']);
         Route::get('/marketing/seo', [AdminSeoMarketingController::class, 'show']);
         Route::patch('/marketing/seo', [AdminSeoMarketingController::class, 'update']);
+        Route::get('/themes/appearance', [AdminThemeAppearanceController::class, 'show']);
+        Route::patch('/themes/appearance', [AdminThemeAppearanceController::class, 'update']);
+        Route::get('/themes/header', [AdminThemeHeaderController::class, 'show']);
+        Route::patch('/themes/header', [AdminThemeHeaderController::class, 'update']);
+        Route::get('/themes/footer', [AdminThemeFooterController::class, 'show']);
+        Route::patch('/themes/footer', [AdminThemeFooterController::class, 'update']);
+        Route::get('/themes/menus', [AdminThemeMenuController::class, 'index']);
+        Route::post('/themes/menus', [AdminThemeMenuController::class, 'store']);
+        Route::get('/themes/menus/{menu}', [AdminThemeMenuController::class, 'show']);
+        Route::patch('/themes/menus/{menu}', [AdminThemeMenuController::class, 'update']);
+        Route::delete('/themes/menus/{menu}', [AdminThemeMenuController::class, 'destroy']);
         Route::apiResource('reviews', AdminReviewController::class)->only([
             'index',
             'store',
