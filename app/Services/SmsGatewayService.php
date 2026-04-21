@@ -16,7 +16,7 @@ class SmsGatewayService
     public function getBalance(): array
     {
         $config = $this->config();
-        $provider = $config['provider'] ?? 'custom';
+        $provider = $this->resolvedProvider($config);
 
         if ($provider !== 'onecodesoft') {
             throw new RuntimeException('Balance check is currently available only for OneCodeSoft.');
@@ -51,7 +51,7 @@ class SmsGatewayService
     public function sendTestMessage(string $number, string $message): array
     {
         $config = $this->config();
-        $provider = $config['provider'] ?? 'custom';
+        $provider = $this->resolvedProvider($config);
 
         if ($provider !== 'onecodesoft') {
             throw new RuntimeException('Test message is currently available only for OneCodeSoft.');
@@ -128,5 +128,20 @@ class SmsGatewayService
     private function endpoint(array $config, string $path): string
     {
         return rtrim((string) $config['base_url'], '/').'/'.$path;
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     */
+    private function resolvedProvider(array $config): string
+    {
+        $provider = strtolower((string) ($config['provider'] ?? 'custom'));
+        $baseUrl = strtolower((string) ($config['base_url'] ?? ''));
+
+        if ($provider === 'onecodesoft' || str_contains($baseUrl, 'sms.onecodesoft.com')) {
+            return 'onecodesoft';
+        }
+
+        return $provider;
     }
 }
