@@ -20,7 +20,8 @@ class SmsIntegrationSettingsUpdateRequest extends FormRequest
             'api_secret' => ['nullable', 'string', 'max:255'],
             'sender_id' => ['nullable', 'string', 'max:80'],
             'base_url' => ['nullable', 'url', 'max:255'],
-            'otp_template' => ['nullable', 'string', 'max:1000'],
+            'customer_otp_template' => ['nullable', 'string', 'max:1000'],
+            'admin_otp_template' => ['nullable', 'string', 'max:1000'],
             'order_template' => ['nullable', 'string', 'max:1000'],
             'status_callback_url' => ['nullable', 'url', 'max:255'],
         ];
