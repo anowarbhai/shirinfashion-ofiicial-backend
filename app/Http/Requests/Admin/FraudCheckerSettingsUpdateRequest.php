@@ -1,0 +1,31 @@
+<?php
+
+namespace App\Http\Requests\Admin;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class FraudCheckerSettingsUpdateRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [
+            'enabled' => ['required', 'boolean'],
+            'auto_hold_high_risk' => ['required', 'boolean'],
+            'block_disposable_email' => ['required', 'boolean'],
+            'block_international_phone_mismatch' => ['required', 'boolean'],
+            'risk_score_threshold' => ['required', 'integer', 'min:0', 'max:100'],
+            'max_orders_per_phone_per_day' => ['required', 'integer', 'min:1', 'max:999'],
+            'max_orders_per_ip_per_day' => ['required', 'integer', 'min:1', 'max:999'],
+            'blacklist_phones' => ['array'],
+            'blacklist_phones.*' => ['string', 'max:50'],
+            'blacklist_ips' => ['array'],
+            'blacklist_ips.*' => ['string', 'max:50'],
+            'review_note' => ['nullable', 'string', 'max:1000'],
+        ];
+    }
+}

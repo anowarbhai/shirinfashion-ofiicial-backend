@@ -5,9 +5,14 @@ use App\Http\Controllers\Api\Admin\CouponController as AdminCouponController;
 use App\Http\Controllers\Api\Admin\ContactMessageController as AdminContactMessageController;
 use App\Http\Controllers\Api\Admin\CustomerController as AdminCustomerController;
 use App\Http\Controllers\Api\Admin\DashboardController as AdminDashboardController;
+use App\Http\Controllers\Api\Admin\FraudCheckerSettingsController as AdminFraudCheckerSettingsController;
 use App\Http\Controllers\Api\Admin\FacebookMarketingController as AdminFacebookMarketingController;
+use App\Http\Controllers\Api\Admin\GeneralSettingsController as AdminGeneralSettingsController;
 use App\Http\Controllers\Api\Admin\GoogleMarketingController as AdminGoogleMarketingController;
+use App\Http\Controllers\Api\Admin\AdminPermissionController as AdminPermissionController;
+use App\Http\Controllers\Api\Admin\AdminRoleController as AdminRoleController;
 use App\Http\Controllers\Api\Admin\SeoMarketingController as AdminSeoMarketingController;
+use App\Http\Controllers\Api\Admin\SmsIntegrationSettingsController as AdminSmsIntegrationSettingsController;
 use App\Http\Controllers\Api\Admin\AttributeController as AdminAttributeController;
 use App\Http\Controllers\Api\Admin\MediaController as AdminMediaController;
 use App\Http\Controllers\Api\Admin\OrderController as AdminOrderController;
@@ -117,6 +122,21 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::get('/themes/menus/{menu}', [AdminThemeMenuController::class, 'show']);
         Route::patch('/themes/menus/{menu}', [AdminThemeMenuController::class, 'update']);
         Route::delete('/themes/menus/{menu}', [AdminThemeMenuController::class, 'destroy']);
+        Route::get('/settings/general', [AdminGeneralSettingsController::class, 'show']);
+        Route::patch('/settings/general', [AdminGeneralSettingsController::class, 'update']);
+        Route::get('/settings/fraud-checker', [AdminFraudCheckerSettingsController::class, 'show']);
+        Route::patch('/settings/fraud-checker', [AdminFraudCheckerSettingsController::class, 'update']);
+        Route::get('/settings/sms-integration', [AdminSmsIntegrationSettingsController::class, 'show']);
+        Route::patch('/settings/sms-integration', [AdminSmsIntegrationSettingsController::class, 'update']);
+        Route::get('/settings/roles', [AdminRoleController::class, 'index']);
+        Route::post('/settings/roles', [AdminRoleController::class, 'store']);
+        Route::patch('/settings/roles/{role}', [AdminRoleController::class, 'update']);
+        Route::delete('/settings/roles/{role}', [AdminRoleController::class, 'destroy']);
+        Route::get('/settings/permissions', [AdminPermissionController::class, 'index']);
+        Route::post('/settings/permissions', [AdminPermissionController::class, 'store']);
+        Route::patch('/settings/permissions/{permission}', [AdminPermissionController::class, 'update']);
+        Route::delete('/settings/permissions/{permission}', [AdminPermissionController::class, 'destroy']);
+        Route::patch('/settings/roles/{role}/permissions', [AdminPermissionController::class, 'updateRolePermissions']);
         Route::apiResource('reviews', AdminReviewController::class)->only([
             'index',
             'store',
