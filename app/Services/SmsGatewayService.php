@@ -59,6 +59,7 @@ class SmsGatewayService
         $config = $this->config();
         $provider = $this->resolvedProvider($config);
         $number = $this->normalizeRecipient($number);
+        $senderId = $this->normalizeSenderId((string) ($config['sender_id'] ?? ''));
 
         if ($provider !== 'onecodesoft') {
             throw new RuntimeException('Test message is currently available only for OneCodeSoft.');
@@ -73,7 +74,7 @@ class SmsGatewayService
                     'api_key' => $config['api_key'],
                     'type' => 'text',
                     'number' => $number,
-                    'senderid' => $config['sender_id'],
+                    'senderid' => $senderId,
                     'message' => $message,
                 ]);
         } catch (ConnectionException $exception) {
@@ -83,15 +84,23 @@ class SmsGatewayService
         $payload = $response->json();
 
         if (! $response->successful()) {
-            throw new RuntimeException('Provider rejected the test SMS request.');
+            throw new RuntimeException($this->buildProviderErrorMessage($response->status(), $payload, $response->body()));
+        }
+
+        $statusCode = (string) (
+            Arr::get($payload, 'response_code')
+            ?? Arr::get($payload, 'status')
+            ?? Arr::get($payload, 'code')
+            ?? $response->status()
+        );
+
+        if (in_array($statusCode, ['1007', '400', '401', '403', '422', '500'], true)) {
+            throw new RuntimeException($this->buildProviderErrorMessage($response->status(), $payload, $response->body()));
         }
 
         return [
             'provider' => 'onecodesoft',
-            'status_code' => Arr::get($payload, 'response_code')
-                ?? Arr::get($payload, 'status')
-                ?? Arr::get($payload, 'code')
-                ?? $response->status(),
+            'status_code' => $statusCode,
             'message' => Arr::get($payload, 'message')
                 ?? Arr::get($payload, 'response_message')
                 ?? 'Test SMS request submitted successfully.',
@@ -106,6 +115,21 @@ class SmsGatewayService
         } catch (\InvalidArgumentException $exception) {
             throw new RuntimeException($exception->getMessage());
         }
+    }
+
+    public function normalizeSenderId(string $senderId): string
+    {
+        $cleaned = trim($senderId);
+
+        if ($cleaned === '') {
+            throw new RuntimeException('Sender ID is missing.');
+        }
+
+        if (preg_match('/^\+?[0-9\s-]+$/', $cleaned) === 1) {
+            return preg_replace('/\D+/', '', $cleaned) ?? $cleaned;
+        }
+
+        return $cleaned;
     }
 
     /**
@@ -159,5 +183,38 @@ class SmsGatewayService
         }
 
         return $provider;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $payload
+     */
+    private function buildProviderErrorMessage(int $status, ?array $payload, string $rawBody): string
+    {
+        $providerMessage = Arr::get($payload, 'message')
+            ?? Arr::get($payload, 'response_message')
+            ?? Arr::get($payload, 'ErrorDescription')
+            ?? Arr::get($payload, 'error')
+            ?? null;
+
+        $providerCode = Arr::get($payload, 'response_code')
+            ?? Arr::get($payload, 'code')
+            ?? Arr::get($payload, 'ErrorCode')
+            ?? null;
+
+        if ($providerMessage || $providerCode) {
+            return trim(sprintf(
+                'Provider rejected the test SMS request%s%s',
+                $providerCode ? " [code: {$providerCode}]" : '',
+                $providerMessage ? ": {$providerMessage}" : '.',
+            ));
+        }
+
+        $body = trim($rawBody);
+
+        if ($body !== '') {
+            return sprintf('Provider rejected the test SMS request [HTTP %d]: %s', $status, mb_strimwidth($body, 0, 220, '...'));
+        }
+
+        return sprintf('Provider rejected the test SMS request [HTTP %d]. Please check your Sender ID, API key, and balance.', $status);
     }
 }
