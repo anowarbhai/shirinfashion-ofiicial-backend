@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\SmsOtp;
 use App\Services\JwtService;
+use App\Services\SmsOtpService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -16,6 +18,7 @@ class AuthController extends Controller
 {
     public function __construct(
         protected JwtService $jwtService,
+        protected SmsOtpService $smsOtpService,
     ) {
     }
 
@@ -49,9 +52,30 @@ class AuthController extends Controller
     {
         $user = $this->attemptCustomer($request);
 
+        if ($this->smsOtpService->isEnabled('customer_login')) {
+            if (! $user->phone) {
+                return response()->json([
+                    'message' => 'This customer account does not have a phone number for OTP verification.',
+                ], 422);
+            }
+
+            $otp = $this->smsOtpService->issue('customer_login', $user->phone, $user, [
+                'name' => $user->name,
+            ]);
+
+            return response()->json([
+                'message' => 'OTP sent successfully. Please verify to continue.',
+                'data' => [
+                    'requires_otp' => true,
+                    ...$otp,
+                ],
+            ]);
+        }
+
         return response()->json([
             'message' => 'Login successful.',
             'data' => [
+                'requires_otp' => false,
                 'token' => $this->jwtService->issueToken($user),
                 'user' => $user,
             ],
@@ -68,9 +92,96 @@ class AuthController extends Controller
             ], 403);
         }
 
+        if ($this->smsOtpService->isEnabled('admin_login')) {
+            if (! $user->phone) {
+                return response()->json([
+                    'message' => 'This admin account does not have a phone number for OTP verification.',
+                ], 422);
+            }
+
+            $otp = $this->smsOtpService->issue('admin_login', $user->phone, $user, [
+                'name' => $user->name,
+            ]);
+
+            return response()->json([
+                'message' => 'Admin OTP sent successfully. Please verify to continue.',
+                'data' => [
+                    'requires_otp' => true,
+                    ...$otp,
+                ],
+            ]);
+        }
+
         return response()->json([
             'message' => 'Admin login successful.',
             'data' => [
+                'requires_otp' => false,
+                'token' => $this->jwtService->issueToken($user),
+                'user' => $user,
+            ],
+        ]);
+    }
+
+    public function verifyCustomerLoginOtp(Request $request): JsonResponse
+    {
+        $payload = $request->validate([
+            'otp_session_token' => ['required', 'string'],
+            'code' => ['required', 'string', 'size:6'],
+        ]);
+
+        $verification = $this->smsOtpService->verify(
+            'customer_login',
+            $payload['otp_session_token'],
+            $payload['code'],
+        );
+
+        $user = $this->resolveOtpUser($payload['otp_session_token'], 'customer_login');
+
+        if (! $user) {
+            return response()->json([
+                'message' => 'Unable to resolve the customer account for this OTP.',
+            ], 422);
+        }
+
+        $this->smsOtpService->consumeVerified('customer_login', $payload['otp_session_token'], $user->phone);
+
+        return response()->json([
+            'message' => 'Login successful.',
+            'data' => [
+                'requires_otp' => false,
+                'token' => $this->jwtService->issueToken($user),
+                'user' => $user,
+            ],
+        ]);
+    }
+
+    public function verifyAdminLoginOtp(Request $request): JsonResponse
+    {
+        $payload = $request->validate([
+            'otp_session_token' => ['required', 'string'],
+            'code' => ['required', 'string', 'size:6'],
+        ]);
+
+        $this->smsOtpService->verify(
+            'admin_login',
+            $payload['otp_session_token'],
+            $payload['code'],
+        );
+
+        $user = $this->resolveOtpUser($payload['otp_session_token'], 'admin_login');
+
+        if (! $user || ! $user->isAdmin()) {
+            return response()->json([
+                'message' => 'Unable to resolve the admin account for this OTP.',
+            ], 422);
+        }
+
+        $this->smsOtpService->consumeVerified('admin_login', $payload['otp_session_token'], $user->phone);
+
+        return response()->json([
+            'message' => 'Admin login successful.',
+            'data' => [
+                'requires_otp' => false,
                 'token' => $this->jwtService->issueToken($user),
                 'user' => $user,
             ],
@@ -222,5 +333,23 @@ class AuthController extends Controller
         if ($storagePath !== '') {
             Storage::disk('public')->delete($storagePath);
         }
+    }
+
+    protected function resolveOtpUser(string $sessionToken, string $purpose): ?User
+    {
+        $otp = SmsOtp::query()
+            ->where('session_token', $sessionToken)
+            ->where('purpose', $purpose)
+            ->first();
+
+        if (! $otp) {
+            return null;
+        }
+
+        if ($otp->user_id) {
+            return User::find($otp->user_id);
+        }
+
+        return User::query()->where('phone', $otp->phone)->first();
     }
 }

@@ -7,7 +7,10 @@ use App\Models\Coupon;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
+use App\Services\AdminSettingsService;
 use App\Services\JwtService;
+use App\Services\SmsGatewayService;
+use App\Services\SmsOtpService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -19,6 +22,9 @@ class OrderController extends Controller
 {
     public function __construct(
         protected JwtService $jwtService,
+        protected SmsOtpService $smsOtpService,
+        protected SmsGatewayService $smsGatewayService,
+        protected AdminSettingsService $settings,
     ) {
     }
 
@@ -44,6 +50,7 @@ class OrderController extends Controller
             'payment_method' => ['required', 'in:stripe,paypal,cod'],
             'shipping_method' => ['required', 'in:inside-dhaka,outside-dhaka'],
             'coupon_code' => ['nullable', 'string'],
+            'otp_session_token' => ['nullable', 'string'],
             'shipping_address' => ['required', 'array'],
             'shipping_address.address' => ['required', 'string'],
             'shipping_address.city' => ['nullable', 'string'],
@@ -54,6 +61,20 @@ class OrderController extends Controller
         ]);
 
         $customer = $this->resolveAuthenticatedUser($request);
+
+        if ($this->smsOtpService->isEnabled('order')) {
+            if (empty($payload['otp_session_token'])) {
+                throw ValidationException::withMessages([
+                    'otp_session_token' => ['Please verify the order OTP before placing your order.'],
+                ]);
+            }
+
+            $this->smsOtpService->consumeVerified(
+                'order',
+                $payload['otp_session_token'],
+                $payload['phone'],
+            );
+        }
 
         $order = DB::transaction(function () use ($customer, $payload) {
             $productIds = collect($payload['items'])->pluck('product_id')->all();
@@ -137,10 +158,62 @@ class OrderController extends Controller
             return $order->load('items');
         });
 
+        $this->sendOrderNotification($order);
+
         return response()->json([
             'message' => 'Order created successfully.',
             'data' => $order,
         ], 201);
+    }
+
+    public function sendOtp(Request $request): JsonResponse
+    {
+        $payload = $request->validate([
+            'phone' => ['required', 'string', 'max:30'],
+            'customer_name' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        try {
+            $otp = $this->smsOtpService->issue('order', $payload['phone'], null, [
+                'name' => $payload['customer_name'] ?? 'Customer',
+            ]);
+
+            return response()->json([
+                'message' => 'Order OTP sent successfully.',
+                'data' => $otp,
+            ]);
+        } catch (Throwable $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function verifyOtp(Request $request): JsonResponse
+    {
+        $payload = $request->validate([
+            'phone' => ['required', 'string', 'max:30'],
+            'otp_session_token' => ['required', 'string'],
+            'code' => ['required', 'string', 'size:6'],
+        ]);
+
+        try {
+            $result = $this->smsOtpService->verify(
+                'order',
+                $payload['otp_session_token'],
+                $payload['code'],
+                $payload['phone'],
+            );
+
+            return response()->json([
+                'message' => 'Order OTP verified successfully.',
+                'data' => $result,
+            ]);
+        } catch (Throwable $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
     }
 
     public function track(Request $request): JsonResponse
@@ -237,6 +310,28 @@ class OrderController extends Controller
             return $user;
         } catch (Throwable) {
             return null;
+        }
+    }
+
+    protected function sendOrderNotification(Order $order): void
+    {
+        $smsSettings = $this->settings->getGroup('sms_integration');
+
+        if (! ($smsSettings['enabled'] ?? false) || ! $order->phone) {
+            return;
+        }
+
+        try {
+            $message = $this->smsOtpService->renderOrderTemplate([
+                'order_number' => $order->order_number,
+                'customer_name' => $order->customer_name,
+                'total' => number_format((float) $order->grand_total, 0),
+                'phone' => $order->phone,
+            ]);
+
+            $this->smsGatewayService->sendMessage($order->phone, $message);
+        } catch (Throwable) {
+            // Do not block successful order placement if SMS provider is unavailable.
         }
     }
 }

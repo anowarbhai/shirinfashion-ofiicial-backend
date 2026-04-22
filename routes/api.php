@@ -36,6 +36,7 @@ use App\Http\Controllers\Api\PageController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ReviewController;
 use App\Http\Controllers\Api\SeoMarketingController;
+use App\Http\Controllers\Api\SmsIntegrationController;
 use App\Http\Controllers\Api\SliderController;
 use App\Http\Controllers\Api\StorefrontController;
 use App\Http\Controllers\Api\TagController;
@@ -51,7 +52,9 @@ Route::get('/health', fn () => response()->json([
 Route::prefix('auth')->group(function (): void {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/login/verify-otp', [AuthController::class, 'verifyCustomerLoginOtp']);
     Route::post('/admin/login', [AuthController::class, 'adminLogin']);
+    Route::post('/admin/login/verify-otp', [AuthController::class, 'verifyAdminLoginOtp']);
 });
 
 Route::get('/home', [StorefrontController::class, 'index']);
@@ -60,6 +63,7 @@ Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/marketing/facebook', [FacebookMarketingController::class, 'show']);
 Route::get('/marketing/google', [GoogleMarketingController::class, 'show']);
 Route::get('/marketing/seo', [SeoMarketingController::class, 'show']);
+Route::get('/settings/sms-integration/public', [SmsIntegrationController::class, 'publicConfig']);
 Route::get('/theme', [ThemeController::class, 'show']);
 Route::post('/contact-messages', [ContactMessageController::class, 'store']);
 Route::get('/pages/{slug}', [PageController::class, 'show']);
@@ -70,6 +74,8 @@ Route::post('/reviews', [ReviewController::class, 'store']);
 Route::get('/tags', [TagController::class, 'index']);
 Route::post('/coupons/validate', [CouponController::class, 'validateCode']);
 Route::post('/orders', [OrderController::class, 'store']);
+Route::post('/orders/send-otp', [OrderController::class, 'sendOtp']);
+Route::post('/orders/verify-otp', [OrderController::class, 'verifyOtp']);
 Route::post('/orders/track', [OrderController::class, 'track']);
 
 Route::middleware('jwt.auth')->group(function (): void {

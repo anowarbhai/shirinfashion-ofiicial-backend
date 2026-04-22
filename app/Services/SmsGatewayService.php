@@ -50,6 +50,11 @@ class SmsGatewayService
 
     public function sendTestMessage(string $number, string $message): array
     {
+        return $this->sendMessage($number, $message);
+    }
+
+    public function sendMessage(string $number, string $message): array
+    {
         $config = $this->config();
         $provider = $this->resolvedProvider($config);
 
