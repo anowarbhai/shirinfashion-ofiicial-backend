@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\BangladeshPhone;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
@@ -57,6 +58,7 @@ class SmsGatewayService
     {
         $config = $this->config();
         $provider = $this->resolvedProvider($config);
+        $number = $this->normalizeRecipient($number);
 
         if ($provider !== 'onecodesoft') {
             throw new RuntimeException('Test message is currently available only for OneCodeSoft.');
@@ -95,6 +97,15 @@ class SmsGatewayService
                 ?? 'Test SMS request submitted successfully.',
             'raw' => $payload,
         ];
+    }
+
+    public function normalizeRecipient(string $number): string
+    {
+        try {
+            return BangladeshPhone::normalizeToLocal($number);
+        } catch (\InvalidArgumentException $exception) {
+            throw new RuntimeException($exception->getMessage());
+        }
     }
 
     /**

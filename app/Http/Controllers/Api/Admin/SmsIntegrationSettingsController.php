@@ -53,7 +53,7 @@ class SmsIntegrationSettingsController extends Controller
     {
         try {
             $result = $this->smsGateway->sendTestMessage(
-                $request->string('number')->toString(),
+                $this->smsGateway->normalizeRecipient($request->string('number')->toString()),
                 $request->string('message')->toString(),
             );
 

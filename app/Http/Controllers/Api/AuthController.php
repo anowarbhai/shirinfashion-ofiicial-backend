@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\SmsOtp;
+use App\Support\BangladeshPhone;
 use App\Services\JwtService;
 use App\Services\SmsOtpService;
 use Illuminate\Http\JsonResponse;
@@ -30,6 +31,14 @@ class AuthController extends Controller
             'email' => ['nullable', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
+
+        $payload['phone'] = BangladeshPhone::normalizeToLocal($payload['phone']);
+
+        if (User::query()->where('phone', $payload['phone'])->exists()) {
+            throw ValidationException::withMessages([
+                'phone' => ['This phone number is already registered.'],
+            ]);
+        }
 
         $user = User::create([
             'name' => $payload['name'],
@@ -222,8 +231,22 @@ class AuthController extends Controller
             'avatar_url' => ['nullable', 'string', 'max:1000000'],
         ]);
 
+        $payload['phone'] = BangladeshPhone::normalizeToLocal($payload['phone']);
+
         /** @var User $user */
         $user = $request->user();
+
+        if (
+            User::query()
+                ->where('phone', $payload['phone'])
+                ->whereKeyNot($user->id)
+                ->exists()
+        ) {
+            throw ValidationException::withMessages([
+                'phone' => ['This phone number is already in use.'],
+            ]);
+        }
+
         $user->update($payload);
 
         return response()->json([
@@ -288,7 +311,8 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        $user = User::where('phone', $payload['phone'])->first();
+        $phone = BangladeshPhone::normalizeToLocal($payload['phone']);
+        $user = User::where('phone', $phone)->first();
 
         if (! $user || $user->role !== 'customer' || ! Hash::check($payload['password'], $user->password)) {
             throw ValidationException::withMessages([
@@ -317,8 +341,15 @@ class AuthController extends Controller
 
         $user = User::query()
             ->where('email', $identifier)
-            ->orWhere('phone', $identifier)
             ->first();
+
+        if (! $user) {
+            $normalizedPhone = $this->normalizePhoneForLookup($identifier);
+
+            if ($normalizedPhone) {
+                $user = User::query()->where('phone', $normalizedPhone)->first();
+            }
+        }
 
         if (! $user || ! Hash::check($payload['password'], $user->password)) {
             throw ValidationException::withMessages([
@@ -370,5 +401,14 @@ class AuthController extends Controller
         }
 
         return User::query()->where('phone', $otp->phone)->first();
+    }
+
+    protected function normalizePhoneForLookup(string $value): ?string
+    {
+        try {
+            return BangladeshPhone::normalizeToLocal($value);
+        } catch (\InvalidArgumentException) {
+            return null;
+        }
     }
 }

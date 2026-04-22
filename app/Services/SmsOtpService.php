@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\SmsOtp;
 use App\Models\User;
+use App\Support\BangladeshPhone;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -204,7 +205,7 @@ class SmsOtpService
 
     private function normalizePhone(string $phone): string
     {
-        return preg_replace('/[^0-9+]/', '', trim($phone)) ?: trim($phone);
+        return BangladeshPhone::normalizeToLocal($phone);
     }
 
     private function maskPhone(string $phone): string
