@@ -100,10 +100,32 @@ class MediaController extends Controller
 
     public function destroy(MediaAsset $mediaAsset): JsonResponse
     {
+        $this->deleteStoredMedia($mediaAsset);
         $mediaAsset->delete();
 
         return response()->json([
             'message' => 'Media asset deleted successfully.',
         ]);
+    }
+
+    protected function deleteStoredMedia(MediaAsset $mediaAsset): void
+    {
+        $url = $mediaAsset->getRawOriginal('url');
+
+        if (! is_string($url) || $url === '') {
+            return;
+        }
+
+        $path = parse_url($url, PHP_URL_PATH);
+
+        if (! is_string($path) || ! str_contains($path, '/storage/')) {
+            return;
+        }
+
+        $storagePath = ltrim(substr($path, strpos($path, '/storage/') + 9), '/');
+
+        if ($storagePath !== '' && Storage::disk('public')->exists($storagePath)) {
+            Storage::disk('public')->delete($storagePath);
+        }
     }
 }
