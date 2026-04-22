@@ -243,7 +243,8 @@ class AuthController extends Controller
 
         $this->deleteStoredAvatar($user->avatar_url);
 
-        $path = $payload['avatar']->store('avatars/customers', 'public');
+        $directory = $user->isAdmin() ? 'avatars/admins' : 'avatars/customers';
+        $path = $payload['avatar']->store($directory, 'public');
 
         $user->update([
             'avatar_url' => url(Storage::url($path)),
@@ -301,15 +302,27 @@ class AuthController extends Controller
     protected function attemptAdmin(Request $request): User
     {
         $payload = $request->validate([
-            'email' => ['required', 'email'],
+            'identifier' => ['nullable', 'string', 'max:255'],
+            'email' => ['nullable', 'string', 'max:255'],
             'password' => ['required', 'string'],
         ]);
 
-        $user = User::where('email', $payload['email'])->first();
+        $identifier = trim((string) ($payload['identifier'] ?? $payload['email'] ?? ''));
+
+        if ($identifier === '') {
+            throw ValidationException::withMessages([
+                'identifier' => ['Please enter your admin email or phone number.'],
+            ]);
+        }
+
+        $user = User::query()
+            ->where('email', $identifier)
+            ->orWhere('phone', $identifier)
+            ->first();
 
         if (! $user || ! Hash::check($payload['password'], $user->password)) {
             throw ValidationException::withMessages([
-                'email' => ['The provided credentials are invalid.'],
+                'identifier' => ['The provided credentials are invalid.'],
             ]);
         }
 
@@ -318,7 +331,13 @@ class AuthController extends Controller
 
     protected function deleteStoredAvatar(?string $avatarUrl): void
     {
-        if (! $avatarUrl || ! str_contains($avatarUrl, '/storage/avatars/customers/')) {
+        if (
+            ! $avatarUrl ||
+            (
+                ! str_contains($avatarUrl, '/storage/avatars/customers/') &&
+                ! str_contains($avatarUrl, '/storage/avatars/admins/')
+            )
+        ) {
             return;
         }
 
