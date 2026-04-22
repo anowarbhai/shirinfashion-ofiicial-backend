@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Support\MediaUrl;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -43,7 +45,6 @@ class Product extends Model
             'compare_price' => 'decimal:2',
             'rating' => 'decimal:1',
             'skin_types' => 'array',
-            'gallery' => 'array',
             'highlights' => 'array',
             'ingredients' => 'array',
             'is_active' => 'boolean',
@@ -79,5 +80,34 @@ class Product extends Model
     public function attributeTerms(): BelongsToMany
     {
         return $this->belongsToMany(AttributeTerm::class, 'attribute_term_product');
+    }
+
+    protected function gallery(): Attribute
+    {
+        return Attribute::make(
+            get: function (mixed $value): array {
+                $items = is_array($value)
+                    ? $value
+                    : (json_decode((string) $value, true) ?: []);
+
+                return collect($items)
+                    ->map(fn ($item) => MediaUrl::toPublic(is_string($item) ? $item : null))
+                    ->filter()
+                    ->values()
+                    ->all();
+            },
+            set: function (mixed $value): string {
+                $items = is_array($value) ? $value : [];
+
+                return json_encode(
+                    collect($items)
+                        ->map(fn ($item) => MediaUrl::normalizeStored(is_string($item) ? $item : null))
+                        ->filter()
+                        ->values()
+                        ->all(),
+                    JSON_UNESCAPED_SLASHES
+                ) ?: '[]';
+            },
+        );
     }
 }

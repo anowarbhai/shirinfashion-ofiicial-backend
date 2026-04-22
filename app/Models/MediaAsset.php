@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Support\MediaUrl;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 
 class MediaAsset extends Model
@@ -26,5 +28,13 @@ class MediaAsset extends Model
         return [
             'metadata' => 'array',
         ];
+    }
+
+    protected function url(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value) => MediaUrl::toPublic($value),
+            set: fn (?string $value) => MediaUrl::normalizeStored($value),
+        );
     }
 }

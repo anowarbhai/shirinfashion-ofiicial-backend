@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Support\MediaUrl;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 
 class Slider extends Model
@@ -30,5 +32,21 @@ class Slider extends Model
             'sort_order' => 'integer',
             'is_active' => 'boolean',
         ];
+    }
+
+    protected function imageUrl(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value) => MediaUrl::toPublic($value),
+            set: fn (?string $value) => MediaUrl::normalizeStored($value),
+        );
+    }
+
+    protected function floatingImageUrl(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value) => MediaUrl::toPublic($value),
+            set: fn (?string $value) => MediaUrl::normalizeStored($value),
+        );
     }
 }
