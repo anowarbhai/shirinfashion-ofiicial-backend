@@ -111,7 +111,7 @@ class SmsGatewayService
     public function normalizeRecipient(string $number): string
     {
         try {
-            return BangladeshPhone::normalizeToLocal($number);
+            return BangladeshPhone::normalizeToInternational($number);
         } catch (\InvalidArgumentException $exception) {
             throw new RuntimeException($exception->getMessage());
         }

@@ -27,6 +27,13 @@ class BangladeshPhone
         return $digits;
     }
 
+    public static function normalizeToInternational(string $phone): string
+    {
+        $local = self::normalizeToLocal($phone);
+
+        return '880'.substr($local, 1);
+    }
+
     public static function isValidLocal(string $phone): bool
     {
         try {
