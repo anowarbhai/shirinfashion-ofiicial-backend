@@ -90,6 +90,8 @@ class AdminSettingsService
             ],
             'fraud_checker' => [
                 'enabled' => false,
+                'api_key' => '',
+                'api_url' => 'https://fraudchecker.ocs-api.top/api/v3',
                 'auto_hold_high_risk' => true,
                 'block_disposable_email' => true,
                 'block_international_phone_mismatch' => false,

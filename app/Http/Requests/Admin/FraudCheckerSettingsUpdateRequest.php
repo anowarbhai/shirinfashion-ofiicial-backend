@@ -15,6 +15,8 @@ class FraudCheckerSettingsUpdateRequest extends FormRequest
     {
         return [
             'enabled' => ['required', 'boolean'],
+            'api_key' => ['nullable', 'string', 'max:500'],
+            'api_url' => ['nullable', 'url', 'max:500'],
             'auto_hold_high_risk' => ['required', 'boolean'],
             'block_disposable_email' => ['required', 'boolean'],
             'block_international_phone_mismatch' => ['required', 'boolean'],

@@ -132,6 +132,7 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::patch('/settings/general', [AdminGeneralSettingsController::class, 'update']);
         Route::get('/settings/fraud-checker', [AdminFraudCheckerSettingsController::class, 'show']);
         Route::patch('/settings/fraud-checker', [AdminFraudCheckerSettingsController::class, 'update']);
+        Route::post('/settings/fraud-checker/test', [AdminFraudCheckerSettingsController::class, 'test']);
         Route::get('/settings/sms-integration', [AdminSmsIntegrationSettingsController::class, 'show']);
         Route::patch('/settings/sms-integration', [AdminSmsIntegrationSettingsController::class, 'update']);
         Route::get('/settings/sms-integration/balance', [AdminSmsIntegrationSettingsController::class, 'balance']);
