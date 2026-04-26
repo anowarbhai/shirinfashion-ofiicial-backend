@@ -25,6 +25,7 @@ class Order extends Model
         'shipping_total',
         'grand_total',
         'shipping_address',
+        'fraud_check',
         'tracking_number',
         'placed_at',
         'notes',
@@ -38,6 +39,7 @@ class Order extends Model
             'shipping_total' => 'decimal:2',
             'grand_total' => 'decimal:2',
             'shipping_address' => 'array',
+            'fraud_check' => 'array',
             'placed_at' => 'datetime',
         ];
     }

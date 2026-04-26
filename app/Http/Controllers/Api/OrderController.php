@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\AdminSettingsService;
+use App\Services\FraudCheckerService;
 use App\Services\JwtService;
 use App\Services\SmsGatewayService;
 use App\Services\SmsOtpService;
@@ -25,6 +26,7 @@ class OrderController extends Controller
         protected SmsOtpService $smsOtpService,
         protected SmsGatewayService $smsGatewayService,
         protected AdminSettingsService $settings,
+        protected FraudCheckerService $fraudCheckerService,
     ) {
     }
 
@@ -116,6 +118,7 @@ class OrderController extends Controller
             ];
             $shippingTotal = $this->resolveShippingTotal($payload['shipping_method'], $subtotal);
             $grandTotal = $subtotal + $shippingTotal - $discountTotal;
+            $fraudCheck = $this->resolveFraudCheck($payload['phone']);
 
             $order = Order::create([
                 'order_number' => 'SBA-'.random_int(1000, 9999),
@@ -131,6 +134,7 @@ class OrderController extends Controller
                 'shipping_total' => $shippingTotal,
                 'grand_total' => $grandTotal,
                 'shipping_address' => $shippingAddress,
+                'fraud_check' => $fraudCheck,
                 'tracking_number' => 'TRK-'.random_int(100000, 999999),
                 'placed_at' => Carbon::now(),
             ]);
@@ -276,6 +280,31 @@ class OrderController extends Controller
         }
 
         return $shippingMethod === 'outside-dhaka' ? 120 : 80;
+    }
+
+    protected function resolveFraudCheck(string $phone): ?array
+    {
+        $fraudSettings = $this->settings->getGroup('fraud_checker');
+
+        if (! ($fraudSettings['enabled'] ?? false) || empty($fraudSettings['api_key'])) {
+            return null;
+        }
+
+        try {
+            return $this->fraudCheckerService->check($phone);
+        } catch (Throwable $exception) {
+            return [
+                'phone' => $phone,
+                'status' => 'Unavailable',
+                'score' => 0,
+                'total_parcel' => 0,
+                'success_parcel' => 0,
+                'cancel_parcel' => 0,
+                'source' => 'ERROR',
+                'couriers' => [],
+                'error' => $exception->getMessage(),
+            ];
+        }
     }
 
     protected function buildGuestEmail(string $phone): string
