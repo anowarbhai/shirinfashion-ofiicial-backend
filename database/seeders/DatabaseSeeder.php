@@ -4,6 +4,8 @@ namespace Database\Seeders;
 
 use App\Models\Category;
 use App\Models\Coupon;
+use App\Models\AdminPermission;
+use App\Models\AdminRole;
 use App\Models\MediaAsset;
 use App\Models\Order;
 use App\Models\Product;
@@ -34,6 +36,30 @@ class DatabaseSeeder extends Seeder
             'role' => 'admin',
             'marketing_opt_in' => true,
             'password' => Hash::make('password'),
+        ]);
+
+        $superAdminRole = AdminRole::updateOrCreate(
+            ['slug' => 'super-admin'],
+            [
+                'name' => 'Super Admin',
+                'description' => 'Default system role with full access to every admin feature.',
+                'is_system' => true,
+                'is_active' => true,
+            ],
+        );
+
+        $canDoEverythingPermission = AdminPermission::updateOrCreate(
+            ['slug' => 'system.everything'],
+            [
+                'name' => 'Can do everything',
+                'group' => 'system',
+                'description' => 'Allows full access to all current and future admin capabilities.',
+                'is_active' => true,
+            ],
+        );
+
+        $superAdminRole->permissions()->syncWithoutDetaching([
+            $canDoEverythingPermission->id,
         ]);
 
         $customer = User::updateOrCreate([
