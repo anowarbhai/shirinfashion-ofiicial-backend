@@ -10,12 +10,17 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table): void {
-            $table->foreignId('admin_role_id')
-                ->nullable()
-                ->after('role')
-                ->constrained('admin_roles')
-                ->nullOnDelete();
-            $table->string('status')->default('active')->after('admin_role_id')->index();
+            if (! Schema::hasColumn('users', 'admin_role_id')) {
+                $table->foreignId('admin_role_id')
+                    ->nullable()
+                    ->after('role')
+                    ->constrained('admin_roles')
+                    ->nullOnDelete();
+            }
+
+            if (! Schema::hasColumn('users', 'status')) {
+                $table->string('status')->default('active')->after('admin_role_id')->index();
+            }
         });
 
         $superAdminRoleId = DB::table('admin_roles')->where('slug', 'super-admin')->value('id');
@@ -38,8 +43,13 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('users', function (Blueprint $table): void {
-            $table->dropConstrainedForeignId('admin_role_id');
-            $table->dropColumn('status');
+            if (Schema::hasColumn('users', 'admin_role_id')) {
+                $table->dropConstrainedForeignId('admin_role_id');
+            }
+
+            if (Schema::hasColumn('users', 'status')) {
+                $table->dropColumn('status');
+            }
         });
     }
 };
