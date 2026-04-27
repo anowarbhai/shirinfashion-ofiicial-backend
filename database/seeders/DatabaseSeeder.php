@@ -62,6 +62,11 @@ class DatabaseSeeder extends Seeder
             $canDoEverythingPermission->id,
         ]);
 
+        $admin->update([
+            'admin_role_id' => $superAdminRole->id,
+            'status' => 'active',
+        ]);
+
         $customer = User::updateOrCreate([
             'email' => 'customer@shirinfashionbd.test',
         ], [
@@ -69,6 +74,7 @@ class DatabaseSeeder extends Seeder
             'phone' => '+8801800000000',
             'address' => 'House 14, Road 7, Dhanmondi, Dhaka',
             'role' => 'customer',
+            'status' => 'active',
             'marketing_opt_in' => true,
             'password' => Hash::make('password'),
         ]);

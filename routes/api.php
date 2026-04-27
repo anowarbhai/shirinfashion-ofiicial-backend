@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\Admin\ProductController as AdminProductController;
 use App\Http\Controllers\Api\Admin\ReviewController as AdminReviewController;
 use App\Http\Controllers\Api\Admin\SliderController as AdminSliderController;
 use App\Http\Controllers\Api\Admin\TagController as AdminTagController;
+use App\Http\Controllers\Api\Admin\TeamMemberController as AdminTeamMemberController;
 use App\Http\Controllers\Api\Admin\ThemeAppearanceController as AdminThemeAppearanceController;
 use App\Http\Controllers\Api\Admin\ThemeFooterController as AdminThemeFooterController;
 use App\Http\Controllers\Api\Admin\ThemeHeaderController as AdminThemeHeaderController;
@@ -107,6 +108,8 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::get('/customers', [AdminCustomerController::class, 'index']);
         Route::get('/customers/{customer}', [AdminCustomerController::class, 'show']);
         Route::patch('/customers/{customer}', [AdminCustomerController::class, 'update']);
+        Route::delete('/customers/{customer}', [AdminCustomerController::class, 'destroy']);
+        Route::apiResource('team-members', AdminTeamMemberController::class);
         Route::get('/contact-messages', [AdminContactMessageController::class, 'index']);
         Route::patch('/contact-messages/{contactMessage}', [AdminContactMessageController::class, 'update']);
         Route::delete('/contact-messages/{contactMessage}', [AdminContactMessageController::class, 'destroy']);

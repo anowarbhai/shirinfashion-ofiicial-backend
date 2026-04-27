@@ -70,4 +70,15 @@ class CustomerController extends Controller
             'data' => $customer,
         ]);
     }
+
+    public function destroy(User $customer): JsonResponse
+    {
+        abort_unless($customer->role === 'customer', 404);
+
+        $customer->delete();
+
+        return response()->json([
+            'message' => 'Customer deleted successfully.',
+        ]);
+    }
 }
