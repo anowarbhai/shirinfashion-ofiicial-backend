@@ -50,13 +50,11 @@ class ReviewController extends Controller
             'rating' => $payload['rating'],
             'title' => $payload['title'] ?? null,
             'body' => $payload['body'] ?? null,
-            'status' => 'approved',
+            'status' => 'pending',
         ]);
 
-        $this->refreshProductMetrics($review->product);
-
         return response()->json([
-            'message' => 'Review submitted successfully.',
+            'message' => 'Review submitted successfully and is waiting for approval.',
             'data' => $review,
         ], 201);
     }
