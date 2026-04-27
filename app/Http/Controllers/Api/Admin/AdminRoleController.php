@@ -38,6 +38,12 @@ class AdminRoleController extends Controller
 
     public function update(AdminRoleUpdateRequest $request, AdminRole $role): JsonResponse
     {
+        if ($role->slug === 'super-admin') {
+            return response()->json([
+                'message' => 'Super Admin role is permanent and cannot be edited.',
+            ], 422);
+        }
+
         if ($role->is_system) {
             $requestData = $request->validated();
             unset($requestData['slug']);
@@ -54,6 +60,12 @@ class AdminRoleController extends Controller
 
     public function destroy(AdminRole $role): JsonResponse
     {
+        if ($role->slug === 'super-admin') {
+            return response()->json([
+                'message' => 'Super Admin role is permanent and cannot be deleted.',
+            ], 422);
+        }
+
         if ($role->is_system) {
             return response()->json([
                 'message' => 'System roles cannot be deleted.',

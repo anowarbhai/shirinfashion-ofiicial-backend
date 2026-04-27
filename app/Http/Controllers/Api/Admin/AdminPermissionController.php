@@ -75,6 +75,12 @@ class AdminPermissionController extends Controller
 
     public function updateRolePermissions(UpdateRolePermissionsRequest $request, AdminRole $role): JsonResponse
     {
+        if ($role->slug === 'super-admin') {
+            return response()->json([
+                'message' => 'Super Admin permissions are permanent and cannot be changed.',
+            ], 422);
+        }
+
         $role->permissions()->sync($request->validated('permission_ids', []));
 
         return response()->json([
