@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Order;
+use App\Models\Review;
 use App\Models\User;
+use App\Support\BangladeshPhone;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -12,15 +15,18 @@ class CustomerController extends Controller
 {
     public function index(): JsonResponse
     {
+        $customers = User::query()
+            ->where('role', 'customer')
+            ->withCount(['wishlistItems'])
+            ->latest()
+            ->paginate(20);
+
+        $customers->getCollection()->transform(
+            fn (User $customer): User => $this->enrichCustomerActivity($customer),
+        );
+
         return response()->json([
-            'data' => User::query()
-                ->where('role', 'customer')
-                ->with([
-                    'orders' => fn ($query) => $query->latest('placed_at'),
-                ])
-                ->withCount(['orders', 'wishlistItems'])
-                ->latest()
-                ->paginate(20),
+            'data' => $customers,
         ]);
     }
 
@@ -28,9 +34,8 @@ class CustomerController extends Controller
     {
         abort_unless($customer->role === 'customer', 404);
 
-        $customer->load([
-            'orders' => fn ($query) => $query->latest('placed_at'),
-        ])->loadCount(['orders', 'wishlistItems', 'reviews']);
+        $customer->loadCount(['wishlistItems']);
+        $this->enrichCustomerActivity($customer);
 
         return response()->json([
             'data' => $customer,
@@ -61,9 +66,8 @@ class CustomerController extends Controller
 
         $customer->update($validated);
 
-        $customer->load([
-            'orders' => fn ($query) => $query->latest('placed_at'),
-        ])->loadCount(['orders', 'wishlistItems', 'reviews']);
+        $customer->loadCount(['wishlistItems']);
+        $this->enrichCustomerActivity($customer);
 
         return response()->json([
             'message' => 'Customer updated successfully.',
@@ -80,5 +84,78 @@ class CustomerController extends Controller
         return response()->json([
             'message' => 'Customer deleted successfully.',
         ]);
+    }
+
+    protected function enrichCustomerActivity(User $customer): User
+    {
+        $orders = $this->customerOrderQuery($customer)
+            ->latest('placed_at')
+            ->limit(5)
+            ->get();
+
+        $customer->setAttribute('orders_count', $this->customerOrderQuery($customer)->count());
+        $customer->setAttribute('reviews_count', $this->customerReviewQuery($customer)->count());
+        $customer->setRelation('orders', $orders);
+
+        return $customer;
+    }
+
+    protected function customerOrderQuery(User $customer)
+    {
+        return Order::query()->where(function ($query) use ($customer): void {
+            $query->where('user_id', $customer->id);
+
+            $phones = $this->phoneVariants($customer->phone);
+
+            if ($phones !== []) {
+                $query->orWhereIn('phone', $phones);
+            }
+
+            if ($customer->email) {
+                $query->orWhere('email', $customer->email);
+            }
+        });
+    }
+
+    protected function customerReviewQuery(User $customer)
+    {
+        return Review::query()->where(function ($query) use ($customer): void {
+            $query->where('user_id', $customer->id);
+
+            $phones = $this->phoneVariants($customer->phone);
+
+            if ($phones !== []) {
+                $query->orWhereIn('author_phone', $phones);
+            }
+
+            if ($customer->email) {
+                $query->orWhere('author_email', $customer->email);
+            }
+        });
+    }
+
+    protected function phoneVariants(?string $phone): array
+    {
+        if (! $phone) {
+            return [];
+        }
+
+        $variants = [$phone];
+
+        try {
+            $local = BangladeshPhone::normalizeToLocal($phone);
+            $international = BangladeshPhone::normalizeToInternational($phone);
+            $variants[] = $local;
+            $variants[] = $international;
+            $variants[] = '+'.$international;
+        } catch (\Throwable) {
+            $digits = preg_replace('/\D+/', '', $phone);
+
+            if ($digits) {
+                $variants[] = $digits;
+            }
+        }
+
+        return array_values(array_unique(array_filter($variants)));
     }
 }
