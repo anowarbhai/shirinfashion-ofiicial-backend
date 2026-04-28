@@ -215,12 +215,7 @@ class AuthController extends Controller
     {
         $payload = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'phone' => [
-                'required',
-                'string',
-                'max:30',
-                Rule::unique('users', 'phone')->ignore($request->user()->id),
-            ],
+            'phone' => ['required', 'string', 'max:30'],
             'email' => [
                 'nullable',
                 'email',
@@ -238,7 +233,8 @@ class AuthController extends Controller
 
         if (
             User::query()
-                ->where('phone', $payload['phone'])
+                ->where('role', $user->role)
+                ->whereIn('phone', $this->phoneLookupVariants($payload['phone']))
                 ->whereKeyNot($user->id)
                 ->exists()
         ) {
@@ -312,9 +308,12 @@ class AuthController extends Controller
         ]);
 
         $phone = BangladeshPhone::normalizeToLocal($payload['phone']);
-        $user = User::where('phone', $phone)->first();
+        $user = User::query()
+            ->where('role', 'customer')
+            ->whereIn('phone', $this->phoneLookupVariants($phone))
+            ->first();
 
-        if (! $user || $user->role !== 'customer' || ! Hash::check($payload['password'], $user->password)) {
+        if (! $user || ! Hash::check($payload['password'], $user->password)) {
             throw ValidationException::withMessages([
                 'phone' => ['The provided credentials are invalid.'],
             ]);
@@ -340,6 +339,7 @@ class AuthController extends Controller
         }
 
         $user = User::query()
+            ->where('role', 'admin')
             ->where('email', $identifier)
             ->first();
 
@@ -347,7 +347,10 @@ class AuthController extends Controller
             $normalizedPhone = $this->normalizePhoneForLookup($identifier);
 
             if ($normalizedPhone) {
-                $user = User::query()->where('phone', $normalizedPhone)->first();
+                $user = User::query()
+                    ->where('role', 'admin')
+                    ->whereIn('phone', $this->phoneLookupVariants($normalizedPhone))
+                    ->first();
             }
         }
 
@@ -410,5 +413,22 @@ class AuthController extends Controller
         } catch (\InvalidArgumentException) {
             return null;
         }
+    }
+
+    /**
+     * Keep admin/customer login spaces independent while still catching old
+     * local/international rows that may exist from earlier phone handling.
+     *
+     * @return array<int, string>
+     */
+    protected function phoneLookupVariants(string $phone): array
+    {
+        $local = BangladeshPhone::normalizeToLocal($phone);
+
+        return array_values(array_unique([
+            $local,
+            '880'.substr($local, 1),
+            '+880'.substr($local, 1),
+        ]));
     }
 }
