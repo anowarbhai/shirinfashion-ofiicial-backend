@@ -10,6 +10,8 @@ use App\Support\BangladeshPhone;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class CustomerController extends Controller
 {
@@ -28,6 +30,41 @@ class CustomerController extends Controller
         return response()->json([
             'data' => $customers,
         ]);
+    }
+
+    public function store(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'phone' => ['required', 'string', 'max:30'],
+            'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')],
+            'address' => ['nullable', 'string', 'max:500'],
+            'marketing_opt_in' => ['boolean'],
+            'password' => ['nullable', 'string', 'min:8'],
+        ]);
+
+        $validated['phone'] = BangladeshPhone::normalizeToLocal($validated['phone']);
+
+        $this->ensureUniqueCustomerPhone($validated['phone']);
+
+        $customer = User::query()->create([
+            'name' => $validated['name'],
+            'phone' => $validated['phone'],
+            'email' => $validated['email'] ?? null,
+            'address' => $validated['address'] ?? null,
+            'marketing_opt_in' => $validated['marketing_opt_in'] ?? false,
+            'password' => $validated['password'] ?? Str::random(16),
+            'role' => 'customer',
+            'status' => 'active',
+        ]);
+
+        $customer->loadCount(['wishlistItems']);
+        $this->enrichCustomerActivity($customer);
+
+        return response()->json([
+            'message' => 'Customer created successfully.',
+            'data' => $customer,
+        ], 201);
     }
 
     public function show(User $customer): JsonResponse
@@ -52,7 +89,6 @@ class CustomerController extends Controller
                 'required',
                 'string',
                 'max:30',
-                Rule::unique('users', 'phone')->ignore($customer->id),
             ],
             'email' => [
                 'nullable',
@@ -63,6 +99,10 @@ class CustomerController extends Controller
             'address' => ['nullable', 'string', 'max:500'],
             'marketing_opt_in' => ['boolean'],
         ]);
+
+        $validated['phone'] = BangladeshPhone::normalizeToLocal($validated['phone']);
+
+        $this->ensureUniqueCustomerPhone($validated['phone'], $customer->id);
 
         $customer->update($validated);
 
@@ -159,5 +199,22 @@ class CustomerController extends Controller
         }
 
         return array_values(array_unique(array_filter($variants)));
+    }
+
+    protected function ensureUniqueCustomerPhone(string $phone, ?int $ignoreUserId = null): void
+    {
+        $query = User::query()
+            ->where('role', 'customer')
+            ->whereIn('phone', $this->phoneVariants($phone));
+
+        if ($ignoreUserId) {
+            $query->whereKeyNot($ignoreUserId);
+        }
+
+        if ($query->exists()) {
+            throw ValidationException::withMessages([
+                'phone' => ['This phone number is already in use.'],
+            ]);
+        }
     }
 }

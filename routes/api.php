@@ -106,6 +106,7 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::get('/orders', [AdminOrderController::class, 'index']);
         Route::patch('/orders/{order}', [AdminOrderController::class, 'update']);
         Route::get('/customers', [AdminCustomerController::class, 'index']);
+        Route::post('/customers', [AdminCustomerController::class, 'store']);
         Route::get('/customers/{customer}', [AdminCustomerController::class, 'show']);
         Route::patch('/customers/{customer}', [AdminCustomerController::class, 'update']);
         Route::delete('/customers/{customer}', [AdminCustomerController::class, 'destroy']);
