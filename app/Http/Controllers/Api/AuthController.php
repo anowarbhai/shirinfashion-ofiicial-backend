@@ -338,8 +338,13 @@ class AuthController extends Controller
             ]);
         }
 
-        $user = User::query()
-            ->where('role', 'admin')
+        $adminQuery = User::query()
+            ->where(function ($query): void {
+                $query->where('role', 'admin')
+                    ->orWhereNotNull('admin_role_id');
+            });
+
+        $user = (clone $adminQuery)
             ->where('email', $identifier)
             ->first();
 
@@ -347,8 +352,7 @@ class AuthController extends Controller
             $normalizedPhone = $this->normalizePhoneForLookup($identifier);
 
             if ($normalizedPhone) {
-                $user = User::query()
-                    ->where('role', 'admin')
+                $user = (clone $adminQuery)
                     ->whereIn('phone', $this->phoneLookupVariants($normalizedPhone))
                     ->first();
             }

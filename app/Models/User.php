@@ -81,7 +81,8 @@ class User extends Authenticatable
 
     public function isAdmin(): bool
     {
-        return $this->role === 'admin' && ($this->status ?? 'active') === 'active';
+        return ($this->role === 'admin' || $this->admin_role_id !== null)
+            && ($this->status ?? 'active') === 'active';
     }
 
     protected function avatarUrl(): Attribute
