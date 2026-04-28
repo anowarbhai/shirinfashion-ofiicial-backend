@@ -88,12 +88,14 @@ class CustomerController extends Controller
 
     protected function enrichCustomerActivity(User $customer): User
     {
+        $orderQuery = $this->customerOrderQuery($customer);
         $orders = $this->customerOrderQuery($customer)
             ->latest('placed_at')
             ->limit(5)
             ->get();
 
-        $customer->setAttribute('orders_count', $this->customerOrderQuery($customer)->count());
+        $customer->setAttribute('orders_count', (clone $orderQuery)->count());
+        $customer->setAttribute('total_spent', (float) (clone $orderQuery)->sum('grand_total'));
         $customer->setAttribute('reviews_count', $this->customerReviewQuery($customer)->count());
         $customer->setRelation('orders', $orders);
 
