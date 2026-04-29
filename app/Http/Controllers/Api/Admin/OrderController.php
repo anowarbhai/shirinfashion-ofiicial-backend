@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Coupon;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\ProductVolumeDiscount;
 use App\Services\AdminSettingsService;
 use App\Services\FraudCheckerService;
 use Illuminate\Http\JsonResponse;
@@ -52,11 +53,17 @@ class OrderController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'integer', 'exists:products,id'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
+            'items.*.volume_discount_id' => ['nullable', 'integer', 'exists:product_volume_discounts,id'],
         ]);
 
         $order = DB::transaction(function () use ($payload) {
             $productIds = collect($payload['items'])->pluck('product_id')->all();
             $products = Product::whereIn('id', $productIds)->get()->keyBy('id');
+            $tierIds = collect($payload['items'])->pluck('volume_discount_id')->filter()->all();
+            $tiers = ProductVolumeDiscount::with('freeProduct')
+                ->whereIn('id', $tierIds)
+                ->get()
+                ->keyBy('id');
             $subtotal = 0;
             $orderItems = [];
 
@@ -69,16 +76,37 @@ class OrderController extends Controller
                     ]);
                 }
 
+                $tier = ! empty($item['volume_discount_id'])
+                    ? $tiers->get($item['volume_discount_id'])
+                    : null;
+
+                if ($tier) {
+                    if ($tier->product_id !== $product->id || ! $tier->is_active) {
+                        throw ValidationException::withMessages([
+                            'items' => ["Selected volume discount is not available for {$product->name}."],
+                        ]);
+                    }
+
+                    if ((int) $item['quantity'] !== $tier->quantity) {
+                        throw ValidationException::withMessages([
+                            'items' => ["{$tier->label} requires exactly {$tier->quantity} items."],
+                        ]);
+                    }
+                }
+
                 if ($product->inventory < $item['quantity']) {
                     throw ValidationException::withMessages([
                         'items' => ["{$product->name} does not have enough stock."],
                     ]);
                 }
 
-                $lineTotal = (float) $product->price * (int) $item['quantity'];
+                $lineTotal = $tier
+                    ? (float) $tier->flat_price
+                    : (float) $product->price * (int) $item['quantity'];
                 $subtotal += $lineTotal;
                 $orderItems[] = [
                     'product' => $product,
+                    'tier' => $tier,
                     'quantity' => (int) $item['quantity'],
                     'line_total' => $lineTotal,
                 ];
@@ -123,14 +151,37 @@ class OrderController extends Controller
 
                 $order->items()->create([
                     'product_id' => $product->id,
+                    'volume_discount_id' => $item['tier']?->id,
                     'product_name' => $product->name,
                     'sku' => $product->sku,
-                    'price' => $product->price,
+                    'price' => $item['tier']
+                        ? round($item['line_total'] / max(1, $item['quantity']), 2)
+                        : $product->price,
                     'quantity' => $item['quantity'],
                     'line_total' => $item['line_total'],
+                    'is_free_gift' => false,
                 ]);
 
                 $product->decrement('inventory', $item['quantity']);
+
+                if ($item['tier']?->freeProduct) {
+                    $gift = $item['tier']->freeProduct;
+
+                    $order->items()->create([
+                        'product_id' => $gift->id,
+                        'volume_discount_id' => $item['tier']->id,
+                        'product_name' => $gift->name.' (Free Gift)',
+                        'sku' => $gift->sku,
+                        'price' => 0,
+                        'quantity' => 1,
+                        'line_total' => 0,
+                        'is_free_gift' => true,
+                    ]);
+
+                    if ($gift->inventory > 0) {
+                        $gift->decrement('inventory');
+                    }
+                }
             }
 
             if (! empty($payload['coupon_code'])) {

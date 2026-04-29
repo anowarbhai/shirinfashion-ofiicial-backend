@@ -12,7 +12,7 @@ class ProductController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = Product::query()
-            ->with('category')
+            ->with(['category', 'activeVolumeDiscounts.freeProduct'])
             ->withCount([
                 'reviews as approved_reviews_count' => fn ($builder) => $builder->where('status', 'approved'),
             ])
@@ -54,6 +54,7 @@ class ProductController extends Controller
         $product->load([
             'category',
             'attributeTerms.attribute',
+            'activeVolumeDiscounts.freeProduct',
             'reviews' => fn ($query) => $query
                 ->where('status', 'approved')
                 ->latest(),

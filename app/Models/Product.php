@@ -82,6 +82,19 @@ class Product extends Model
         return $this->belongsToMany(AttributeTerm::class, 'attribute_term_product');
     }
 
+    public function volumeDiscounts(): HasMany
+    {
+        return $this->hasMany(ProductVolumeDiscount::class);
+    }
+
+    public function activeVolumeDiscounts(): HasMany
+    {
+        return $this->volumeDiscounts()
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('quantity');
+    }
+
     protected function gallery(): Attribute
     {
         return Attribute::make(

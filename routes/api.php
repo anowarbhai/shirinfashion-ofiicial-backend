@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\Admin\MediaController as AdminMediaController;
 use App\Http\Controllers\Api\Admin\OrderController as AdminOrderController;
 use App\Http\Controllers\Api\Admin\PageController as AdminPageController;
 use App\Http\Controllers\Api\Admin\ProductController as AdminProductController;
+use App\Http\Controllers\Api\Admin\ProductVolumeDiscountController as AdminProductVolumeDiscountController;
 use App\Http\Controllers\Api\Admin\ReviewController as AdminReviewController;
 use App\Http\Controllers\Api\Admin\SliderController as AdminSliderController;
 use App\Http\Controllers\Api\Admin\TagController as AdminTagController;
@@ -95,6 +96,8 @@ Route::middleware('jwt.auth')->group(function (): void {
     Route::prefix('admin')->middleware('admin')->group(function (): void {
         Route::get('/dashboard', AdminDashboardController::class);
         Route::apiResource('products', AdminProductController::class);
+        Route::get('/products/{product}/volume-discounts', [AdminProductVolumeDiscountController::class, 'index']);
+        Route::put('/products/{product}/volume-discounts', [AdminProductVolumeDiscountController::class, 'update']);
         Route::apiResource('sliders', AdminSliderController::class);
         Route::apiResource('categories', AdminCategoryController::class);
         Route::apiResource('tags', AdminTagController::class);
