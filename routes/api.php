@@ -96,8 +96,8 @@ Route::middleware('jwt.auth')->group(function (): void {
     Route::prefix('admin')->middleware('admin')->group(function (): void {
         Route::get('/dashboard', AdminDashboardController::class);
         Route::apiResource('products', AdminProductController::class);
-        Route::get('/products/{product}/volume-discounts', [AdminProductVolumeDiscountController::class, 'index']);
-        Route::put('/products/{product}/volume-discounts', [AdminProductVolumeDiscountController::class, 'update']);
+        Route::get('/products/{productIdentifier}/volume-discounts', [AdminProductVolumeDiscountController::class, 'index']);
+        Route::put('/products/{productIdentifier}/volume-discounts', [AdminProductVolumeDiscountController::class, 'update']);
         Route::apiResource('sliders', AdminSliderController::class);
         Route::apiResource('categories', AdminCategoryController::class);
         Route::apiResource('tags', AdminTagController::class);

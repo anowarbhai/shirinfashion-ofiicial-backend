@@ -10,8 +10,16 @@ use Illuminate\Support\Facades\DB;
 
 class ProductVolumeDiscountController extends Controller
 {
-    public function index(Product $product): JsonResponse
+    public function index(string $productIdentifier): JsonResponse
     {
+        $product = $this->resolveProduct($productIdentifier);
+
+        if (! $product) {
+            return response()->json([
+                'message' => 'Product could not be found for volume discounts.',
+            ], 404);
+        }
+
         return response()->json([
             'data' => $product->volumeDiscounts()
                 ->with('freeProduct:id,name,slug,gallery')
@@ -21,8 +29,16 @@ class ProductVolumeDiscountController extends Controller
         ]);
     }
 
-    public function update(Request $request, Product $product): JsonResponse
+    public function update(Request $request, string $productIdentifier): JsonResponse
     {
+        $product = $this->resolveProduct($productIdentifier);
+
+        if (! $product) {
+            return response()->json([
+                'message' => 'Product could not be found for volume discounts.',
+            ], 404);
+        }
+
         $payload = $request->validate([
             'tiers' => ['array'],
             'tiers.*.id' => ['nullable', 'integer', 'exists:product_volume_discounts,id'],
@@ -70,5 +86,13 @@ class ProductVolumeDiscountController extends Controller
                 ->orderBy('quantity')
                 ->get(),
         ]);
+    }
+
+    protected function resolveProduct(string $identifier): ?Product
+    {
+        return Product::query()
+            ->where('slug', $identifier)
+            ->when(is_numeric($identifier), fn ($query) => $query->orWhereKey((int) $identifier))
+            ->first();
     }
 }
