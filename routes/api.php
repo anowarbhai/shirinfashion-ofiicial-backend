@@ -104,6 +104,7 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::delete('/attribute-terms/{term}', [AdminAttributeController::class, 'destroyTerm']);
         Route::apiResource('coupons', AdminCouponController::class);
         Route::get('/orders', [AdminOrderController::class, 'index']);
+        Route::post('/orders', [AdminOrderController::class, 'store']);
         Route::patch('/orders/{order}', [AdminOrderController::class, 'update']);
         Route::get('/customers', [AdminCustomerController::class, 'index']);
         Route::post('/customers', [AdminCustomerController::class, 'store']);
