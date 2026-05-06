@@ -12,6 +12,26 @@ class FraudCheckerSettingsUpdateRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'provider' => $this->input('provider', 'onesoftcode'),
+            'api_url' => $this->input('api_url', 'https://fraudchecker.ocs-api.top/api/v3'),
+            'bd_courier_api_url' => $this->input('bd_courier_api_url', 'https://api.bdcourier.com'),
+            'couriers' => array_replace(
+                [
+                    'pathao' => true,
+                    'steadfast' => true,
+                    'parceldex' => true,
+                    'redx' => true,
+                    'paperfly' => true,
+                    'carrybee' => true,
+                ],
+                is_array($this->input('couriers')) ? $this->input('couriers') : [],
+            ),
+        ]);
+    }
+
     public function rules(): array
     {
         return [
