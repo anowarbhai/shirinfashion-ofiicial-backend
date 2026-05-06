@@ -8,7 +8,9 @@ use App\Http\Requests\Admin\MailSetupTestRequest;
 use App\Services\AdminSettingsService;
 use App\Services\MailSetupService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
+use Throwable;
 
 class MailSetupSettingsController extends Controller
 {
@@ -52,6 +54,14 @@ class MailSetupSettingsController extends Controller
         } catch (RuntimeException $exception) {
             return response()->json([
                 'message' => $exception->getMessage(),
+            ], 422);
+        } catch (Throwable $exception) {
+            Log::error('Mail setup test failed.', [
+                'error' => $exception->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => $exception->getMessage() ?: 'Unable to send test email.',
             ], 422);
         }
     }
