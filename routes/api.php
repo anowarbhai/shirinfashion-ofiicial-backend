@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\Admin\CategoryController as AdminCategoryController;
+use App\Http\Controllers\Api\Admin\CheckoutGuardSettingsController as AdminCheckoutGuardSettingsController;
 use App\Http\Controllers\Api\Admin\CouponController as AdminCouponController;
 use App\Http\Controllers\Api\Admin\ContactMessageController as AdminContactMessageController;
 use App\Http\Controllers\Api\Admin\CustomerController as AdminCustomerController;
@@ -141,6 +142,8 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::get('/settings/fraud-checker', [AdminFraudCheckerSettingsController::class, 'show']);
         Route::patch('/settings/fraud-checker', [AdminFraudCheckerSettingsController::class, 'update']);
         Route::post('/settings/fraud-checker/test', [AdminFraudCheckerSettingsController::class, 'test']);
+        Route::get('/settings/checkout-guard', [AdminCheckoutGuardSettingsController::class, 'show']);
+        Route::patch('/settings/checkout-guard', [AdminCheckoutGuardSettingsController::class, 'update']);
         Route::get('/settings/sms-integration', [AdminSmsIntegrationSettingsController::class, 'show']);
         Route::patch('/settings/sms-integration', [AdminSmsIntegrationSettingsController::class, 'update']);
         Route::get('/settings/sms-integration/balance', [AdminSmsIntegrationSettingsController::class, 'balance']);

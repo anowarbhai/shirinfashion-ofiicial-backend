@@ -54,6 +54,7 @@ class OrderController extends Controller
             'shipping_method' => ['required', 'in:inside-dhaka,outside-dhaka'],
             'coupon_code' => ['nullable', 'string'],
             'otp_session_token' => ['nullable', 'string'],
+            'device_id' => ['nullable', 'string', 'max:120'],
             'shipping_address' => ['required', 'array'],
             'shipping_address.address' => ['required', 'string'],
             'shipping_address.city' => ['nullable', 'string'],
@@ -65,6 +66,19 @@ class OrderController extends Controller
         ]);
 
         $customer = $this->resolveAuthenticatedUser($request);
+        $clientIp = $this->resolveClientIp($request);
+        $checkoutGuard = $this->resolveCheckoutGuardBlock(
+            $payload['phone'],
+            $clientIp,
+            $payload['device_id'] ?? null,
+        );
+
+        if ($checkoutGuard) {
+            return response()->json([
+                'message' => $checkoutGuard['message'],
+                'checkout_guard' => $checkoutGuard,
+            ], 429);
+        }
 
         if ($this->smsOtpService->isEnabled('order')) {
             if (empty($payload['otp_session_token'])) {
@@ -80,7 +94,7 @@ class OrderController extends Controller
             );
         }
 
-        $order = DB::transaction(function () use ($customer, $payload) {
+        $order = DB::transaction(function () use ($customer, $payload, $clientIp) {
             $productIds = collect($payload['items'])->pluck('product_id')->all();
             $products = Product::whereIn('id', $productIds)->get()->keyBy('id');
             $tierIds = collect($payload['items'])->pluck('volume_discount_id')->filter()->all();
@@ -154,6 +168,8 @@ class OrderController extends Controller
                 'customer_name' => $payload['customer_name'],
                 'email' => $payload['email'] ?? $customer?->email ?? $this->buildGuestEmail($payload['phone']),
                 'phone' => $payload['phone'],
+                'client_ip' => $clientIp,
+                'device_id' => $payload['device_id'] ?? null,
                 'status' => 'processing',
                 'payment_method' => $payload['payment_method'],
                 'payment_status' => $payload['payment_method'] === 'cod' ? 'pending_collection' : 'authorized',
@@ -218,6 +234,7 @@ class OrderController extends Controller
         return response()->json([
             'message' => 'Order created successfully.',
             'data' => $order,
+            'checkout_guard' => $this->resolveNextCheckoutGuardState($order),
         ], 201);
     }
 
@@ -356,6 +373,136 @@ class OrderController extends Controller
                 'error' => $exception->getMessage(),
             ];
         }
+    }
+
+    protected function resolveCheckoutGuardBlock(
+        string $phone,
+        ?string $clientIp,
+        ?string $deviceId,
+    ): ?array {
+        $settings = $this->settings->getGroup('checkout_guard');
+
+        if (! ($settings['enabled'] ?? false)) {
+            return null;
+        }
+
+        $cooldownMinutes = max(1, (int) ($settings['cooldown_minutes'] ?? 180));
+        $cutoff = Carbon::now()->subMinutes($cooldownMinutes);
+        $matches = [];
+        $normalizedDeviceId = $deviceId ? trim($deviceId) : null;
+        $normalizedClientIp = $clientIp ? trim($clientIp) : null;
+
+        if (($settings['block_by_phone'] ?? true) && trim($phone) !== '') {
+            $matches['phone'] = trim($phone);
+        }
+
+        if (($settings['block_by_ip'] ?? true) && $normalizedClientIp) {
+            $matches['ip'] = $normalizedClientIp;
+        }
+
+        if (($settings['block_by_device'] ?? true) && $normalizedDeviceId) {
+            $matches['device'] = $normalizedDeviceId;
+        }
+
+        if ($matches === []) {
+            return null;
+        }
+
+        $recentOrder = Order::query()
+            ->where('placed_at', '>=', $cutoff)
+            ->whereNotIn('status', ['cancelled', 'refunded'])
+            ->where(function ($query) use ($matches): void {
+                if (isset($matches['phone'])) {
+                    $query->orWhere('phone', $matches['phone']);
+                }
+
+                if (isset($matches['ip'])) {
+                    $query->orWhere('client_ip', $matches['ip']);
+                }
+
+                if (isset($matches['device'])) {
+                    $query->orWhere('device_id', $matches['device']);
+                }
+            })
+            ->latest('placed_at')
+            ->first();
+
+        if (! $recentOrder || ! $recentOrder->placed_at) {
+            return null;
+        }
+
+        $availableAt = $recentOrder->placed_at->copy()->addMinutes($cooldownMinutes);
+
+        if ($availableAt->isPast()) {
+            return null;
+        }
+
+        $remainingSeconds = max(1, Carbon::now()->diffInSeconds($availableAt, false));
+        $messageTemplate = $settings['message'] ?: 'You can place another order after {{time}}.';
+        $readableTime = $this->formatCheckoutGuardDuration($remainingSeconds);
+        $matchedBy = [];
+
+        if (($matches['phone'] ?? null) === $recentOrder->phone) {
+            $matchedBy[] = 'phone';
+        }
+
+        if (($matches['ip'] ?? null) === $recentOrder->client_ip) {
+            $matchedBy[] = 'ip';
+        }
+
+        if (($matches['device'] ?? null) === $recentOrder->device_id) {
+            $matchedBy[] = 'device';
+        }
+
+        return [
+            'blocked' => true,
+            'message' => str_replace('{{time}}', $readableTime, $messageTemplate),
+            'available_at' => $availableAt->toIso8601String(),
+            'remaining_seconds' => $remainingSeconds,
+            'matched_by' => $matchedBy,
+        ];
+    }
+
+    protected function resolveNextCheckoutGuardState(Order $order): ?array
+    {
+        $settings = $this->settings->getGroup('checkout_guard');
+
+        if (! ($settings['enabled'] ?? false) || ! $order->placed_at) {
+            return null;
+        }
+
+        $cooldownMinutes = max(1, (int) ($settings['cooldown_minutes'] ?? 180));
+        $availableAt = $order->placed_at->copy()->addMinutes($cooldownMinutes);
+        $remainingSeconds = max(1, Carbon::now()->diffInSeconds($availableAt, false));
+
+        return [
+            'blocked' => false,
+            'available_at' => $availableAt->toIso8601String(),
+            'remaining_seconds' => $remainingSeconds,
+        ];
+    }
+
+    protected function resolveClientIp(Request $request): ?string
+    {
+        $forwardedFor = $request->header('x-forwarded-for');
+
+        if ($forwardedFor) {
+            return trim(explode(',', $forwardedFor)[0]) ?: null;
+        }
+
+        return $request->ip();
+    }
+
+    protected function formatCheckoutGuardDuration(int $seconds): string
+    {
+        $hours = intdiv($seconds, 3600);
+        $minutes = intdiv($seconds % 3600, 60);
+
+        if ($hours > 0) {
+            return sprintf('%d hour%s %d minute%s', $hours, $hours === 1 ? '' : 's', $minutes, $minutes === 1 ? '' : 's');
+        }
+
+        return sprintf('%d minute%s', max(1, $minutes), $minutes === 1 ? '' : 's');
     }
 
     protected function buildGuestEmail(string $phone): string

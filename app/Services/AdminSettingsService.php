@@ -102,6 +102,14 @@ class AdminSettingsService
                 'blacklist_ips' => [],
                 'review_note' => 'High-risk orders will be held for manual review.',
             ],
+            'checkout_guard' => [
+                'enabled' => true,
+                'block_by_phone' => true,
+                'block_by_ip' => true,
+                'block_by_device' => true,
+                'cooldown_minutes' => 180,
+                'message' => 'You can place another order after {{time}}.',
+            ],
             'sms_integration' => [
                 'enabled' => false,
                 'provider' => 'custom',
