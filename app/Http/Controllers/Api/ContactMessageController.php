@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use RuntimeException;
 use Throwable;
 
 class ContactMessageController extends Controller
@@ -43,6 +44,8 @@ class ContactMessageController extends Controller
         ]);
 
         try {
+            $this->ensureMailIsConfigured();
+
             Mail::to($this->resolveRecipientEmail())->send(
                 new ContactMessageReceived($contactMessage),
             );
@@ -81,5 +84,16 @@ class ContactMessageController extends Controller
         return $supportEmail !== ''
             ? $supportEmail
             : (string) config('mail.from.address');
+    }
+
+    private function ensureMailIsConfigured(): void
+    {
+        $mailer = (string) config('mail.default');
+
+        if (in_array($mailer, ['log', 'array'], true)) {
+            throw new RuntimeException(
+                'Mail server is not configured. Set MAIL_MAILER=smtp or another real mail driver.',
+            );
+        }
     }
 }
