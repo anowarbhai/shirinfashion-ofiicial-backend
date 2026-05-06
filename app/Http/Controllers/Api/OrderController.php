@@ -544,7 +544,11 @@ class OrderController extends Controller
     {
         $smsSettings = $this->settings->getGroup('sms_integration');
 
-        if (! ($smsSettings['enabled'] ?? false) || ! $order->phone) {
+        if (
+            ! ($smsSettings['enabled'] ?? false) ||
+            ! ($smsSettings['enable_order_notification_sms'] ?? true) ||
+            ! $order->phone
+        ) {
             return;
         }
 

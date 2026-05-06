@@ -23,6 +23,7 @@ class SmsIntegrationSettingsUpdateRequest extends FormRequest
             'enable_customer_login_otp' => ['required', 'boolean'],
             'enable_admin_login_otp' => ['required', 'boolean'],
             'enable_order_otp' => ['required', 'boolean'],
+            'enable_order_notification_sms' => ['required', 'boolean'],
             'customer_otp_template' => ['nullable', 'string', 'max:1000'],
             'admin_otp_template' => ['nullable', 'string', 'max:1000'],
             'order_otp_template' => ['nullable', 'string', 'max:1000'],

@@ -145,6 +145,7 @@ class AdminSettingsService
                 'enable_customer_login_otp' => false,
                 'enable_admin_login_otp' => false,
                 'enable_order_otp' => false,
+                'enable_order_notification_sms' => true,
                 'customer_otp_template' => 'Your Shirin Fashion OTP is {{code}}.',
                 'admin_otp_template' => 'Admin login OTP for Shirin Fashion: {{code}}.',
                 'order_otp_template' => 'Your Shirin Fashion order OTP is {{code}}.',
