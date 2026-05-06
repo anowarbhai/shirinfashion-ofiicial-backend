@@ -16,10 +16,14 @@ class FraudCheckerService
     {
         $config = $this->settings->getGroup('fraud_checker');
         $provider = (string) ($config['provider'] ?? 'onesoftcode');
-        $apiKey = trim((string) ($config['api_key'] ?? ''));
+        $apiKey = $provider === 'bd_courier'
+            ? trim((string) ($config['bd_courier_api_key'] ?? ''))
+            : trim((string) ($config['onesoftcode_api_key'] ?? $config['api_key'] ?? ''));
 
         if ($apiKey === '') {
-            throw new RuntimeException('Fraud checker API key is not configured.');
+            throw new RuntimeException($provider === 'bd_courier'
+                ? 'BD Courier API key is not configured.'
+                : 'OneSoftCode API key is not configured.');
         }
 
         $normalizedPhone = $this->normalizePhone($phone);

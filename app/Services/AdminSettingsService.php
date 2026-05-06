@@ -92,6 +92,8 @@ class AdminSettingsService
                 'enabled' => false,
                 'provider' => 'onesoftcode',
                 'api_key' => '',
+                'onesoftcode_api_key' => '',
+                'bd_courier_api_key' => '',
                 'api_url' => 'https://fraudchecker.ocs-api.top/api/v3',
                 'bd_courier_api_url' => 'https://api.bdcourier.com',
                 'couriers' => [

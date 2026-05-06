@@ -17,6 +17,8 @@ class FraudCheckerSettingsUpdateRequest extends FormRequest
         $this->merge([
             'provider' => $this->input('provider', 'onesoftcode'),
             'api_url' => $this->input('api_url', 'https://fraudchecker.ocs-api.top/api/v3'),
+            'onesoftcode_api_key' => $this->input('onesoftcode_api_key', $this->input('api_key', '')),
+            'bd_courier_api_key' => $this->input('bd_courier_api_key', ''),
             'bd_courier_api_url' => $this->input('bd_courier_api_url', 'https://api.bdcourier.com'),
             'couriers' => array_replace(
                 [
@@ -38,6 +40,8 @@ class FraudCheckerSettingsUpdateRequest extends FormRequest
             'enabled' => ['required', 'boolean'],
             'provider' => ['required', Rule::in(['onesoftcode', 'bd_courier'])],
             'api_key' => ['nullable', 'string', 'max:500'],
+            'onesoftcode_api_key' => ['nullable', 'string', 'max:500'],
+            'bd_courier_api_key' => ['nullable', 'string', 'max:500'],
             'api_url' => ['nullable', 'url', 'max:500'],
             'bd_courier_api_url' => ['nullable', 'url', 'max:500'],
             'couriers' => ['array'],
