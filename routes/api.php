@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\Admin\FraudCheckerSettingsController as AdminFraudC
 use App\Http\Controllers\Api\Admin\FacebookMarketingController as AdminFacebookMarketingController;
 use App\Http\Controllers\Api\Admin\GeneralSettingsController as AdminGeneralSettingsController;
 use App\Http\Controllers\Api\Admin\GoogleMarketingController as AdminGoogleMarketingController;
+use App\Http\Controllers\Api\Admin\MailSetupSettingsController as AdminMailSetupSettingsController;
 use App\Http\Controllers\Api\Admin\AdminPermissionController as AdminPermissionController;
 use App\Http\Controllers\Api\Admin\AdminRoleController as AdminRoleController;
 use App\Http\Controllers\Api\Admin\SeoMarketingController as AdminSeoMarketingController;
@@ -144,6 +145,9 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::post('/settings/fraud-checker/test', [AdminFraudCheckerSettingsController::class, 'test']);
         Route::get('/settings/checkout-guard', [AdminCheckoutGuardSettingsController::class, 'show']);
         Route::patch('/settings/checkout-guard', [AdminCheckoutGuardSettingsController::class, 'update']);
+        Route::get('/settings/mail-setup', [AdminMailSetupSettingsController::class, 'show']);
+        Route::patch('/settings/mail-setup', [AdminMailSetupSettingsController::class, 'update']);
+        Route::post('/settings/mail-setup/test', [AdminMailSetupSettingsController::class, 'test']);
         Route::get('/settings/sms-integration', [AdminSmsIntegrationSettingsController::class, 'show']);
         Route::patch('/settings/sms-integration', [AdminSmsIntegrationSettingsController::class, 'update']);
         Route::get('/settings/sms-integration/balance', [AdminSmsIntegrationSettingsController::class, 'balance']);
