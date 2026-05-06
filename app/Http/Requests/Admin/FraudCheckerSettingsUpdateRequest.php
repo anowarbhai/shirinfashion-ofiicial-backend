@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Admin;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class FraudCheckerSettingsUpdateRequest extends FormRequest
 {
@@ -15,8 +16,17 @@ class FraudCheckerSettingsUpdateRequest extends FormRequest
     {
         return [
             'enabled' => ['required', 'boolean'],
+            'provider' => ['required', Rule::in(['onesoftcode', 'bd_courier'])],
             'api_key' => ['nullable', 'string', 'max:500'],
             'api_url' => ['nullable', 'url', 'max:500'],
+            'bd_courier_api_url' => ['nullable', 'url', 'max:500'],
+            'couriers' => ['array'],
+            'couriers.pathao' => ['boolean'],
+            'couriers.steadfast' => ['boolean'],
+            'couriers.parceldex' => ['boolean'],
+            'couriers.redx' => ['boolean'],
+            'couriers.paperfly' => ['boolean'],
+            'couriers.carrybee' => ['boolean'],
             'auto_hold_high_risk' => ['required', 'boolean'],
             'block_disposable_email' => ['required', 'boolean'],
             'block_international_phone_mismatch' => ['required', 'boolean'],

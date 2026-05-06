@@ -15,14 +15,25 @@ class FraudCheckerService
     public function check(string $phone): array
     {
         $config = $this->settings->getGroup('fraud_checker');
+        $provider = (string) ($config['provider'] ?? 'onesoftcode');
         $apiKey = trim((string) ($config['api_key'] ?? ''));
-        $apiUrl = trim((string) ($config['api_url'] ?? 'https://fraudchecker.ocs-api.top/api/v3'));
 
         if ($apiKey === '') {
             throw new RuntimeException('Fraud checker API key is not configured.');
         }
 
         $normalizedPhone = $this->normalizePhone($phone);
+
+        if ($provider === 'bd_courier') {
+            return $this->checkBdCourier($normalizedPhone, $apiKey, $config);
+        }
+
+        return $this->checkOneSoftCode($normalizedPhone, $apiKey, $config);
+    }
+
+    private function checkOneSoftCode(string $normalizedPhone, string $apiKey, array $config): array
+    {
+        $apiUrl = trim((string) ($config['api_url'] ?? 'https://fraudchecker.ocs-api.top/api/v3'));
 
         $response = Http::acceptJson()
             ->timeout(15)
@@ -42,7 +53,33 @@ class FraudCheckerService
             throw new RuntimeException('Fraud checker returned an invalid response.');
         }
 
-        return $this->normalizeResponse($payload, $normalizedPhone);
+        return $this->filterCouriers($this->normalizeOneSoftCodeResponse($payload, $normalizedPhone), $config);
+    }
+
+    private function checkBdCourier(string $normalizedPhone, string $apiKey, array $config): array
+    {
+        $apiUrl = rtrim(trim((string) ($config['bd_courier_api_url'] ?? 'https://api.bdcourier.com')), '/');
+
+        $response = Http::acceptJson()
+            ->asJson()
+            ->withToken($apiKey)
+            ->timeout(15)
+            ->retry(1, 300)
+            ->post($apiUrl.'/courier-check', [
+                'phone' => $normalizedPhone,
+            ]);
+
+        if (! $response->successful()) {
+            throw new RuntimeException($this->errorMessage($response->status()));
+        }
+
+        $payload = $response->json();
+
+        if (! is_array($payload)) {
+            throw new RuntimeException('BD Courier returned an invalid response.');
+        }
+
+        return $this->filterCouriers($this->normalizeBdCourierResponse($payload, $normalizedPhone), $config);
     }
 
     public function normalizePhone(string $phone): string
@@ -64,7 +101,7 @@ class FraudCheckerService
         return $digits;
     }
 
-    private function normalizeResponse(array $payload, string $phone): array
+    private function normalizeOneSoftCodeResponse(array $payload, string $phone): array
     {
         $couriers = [];
 
@@ -94,10 +131,80 @@ class FraudCheckerService
             'total_parcel' => (int) ($payload['total_parcel'] ?? 0),
             'success_parcel' => (int) ($payload['success_parcel'] ?? 0),
             'cancel_parcel' => (int) ($payload['cancel_parcel'] ?? 0),
-            'source' => (string) ($payload['source'] ?? 'LIVE'),
+            'source' => (string) ($payload['source'] ?? 'OneSoftCode'),
             'couriers' => $couriers,
             'raw' => $payload,
         ];
+    }
+
+    private function normalizeBdCourierResponse(array $payload, string $phone): array
+    {
+        $data = is_array($payload['data'] ?? null) ? $payload['data'] : [];
+        $summary = is_array($data['summary'] ?? null) ? $data['summary'] : [];
+        $couriers = [];
+
+        foreach ($data as $key => $source) {
+            if ($key === 'summary' || ! is_array($source)) {
+                continue;
+            }
+
+            $successRatio = (float) ($source['success_ratio'] ?? 0);
+
+            $couriers[] = [
+                'key' => (string) $key,
+                'name' => (string) ($source['name'] ?? ucfirst((string) $key)),
+                'logo' => (string) ($source['logo'] ?? ''),
+                'status' => true,
+                'message' => '',
+                'success' => (int) ($source['success_parcel'] ?? 0),
+                'cancel' => (int) ($source['cancelled_parcel'] ?? 0),
+                'total' => (int) ($source['total_parcel'] ?? 0),
+                'delivered_percentage' => $successRatio,
+                'return_percentage' => max(0, 100 - $successRatio),
+            ];
+        }
+
+        return [
+            'phone' => $phone,
+            'status' => (string) ($payload['status'] ?? 'success'),
+            'score' => (float) ($summary['success_ratio'] ?? 0),
+            'total_parcel' => (int) ($summary['total_parcel'] ?? 0),
+            'success_parcel' => (int) ($summary['success_parcel'] ?? 0),
+            'cancel_parcel' => (int) ($summary['cancelled_parcel'] ?? 0),
+            'source' => 'BD Courier',
+            'couriers' => $couriers,
+            'reports' => is_array($payload['reports'] ?? null) ? $payload['reports'] : [],
+            'raw' => $payload,
+        ];
+    }
+
+    private function filterCouriers(array $result, array $config): array
+    {
+        $enabledCouriers = is_array($config['couriers'] ?? null) ? $config['couriers'] : [];
+
+        if ($enabledCouriers === []) {
+            return $result;
+        }
+
+        $result['couriers'] = array_values(array_filter(
+            $result['couriers'] ?? [],
+            function (array $courier) use ($enabledCouriers): bool {
+                $key = (string) ($courier['key'] ?? Str::of((string) ($courier['name'] ?? ''))->lower()->replace(' ', '')->value());
+
+                return (bool) ($enabledCouriers[$key] ?? true);
+            },
+        ));
+
+        $total = array_sum(array_map(fn (array $courier): int => (int) ($courier['total'] ?? 0), $result['couriers']));
+        $success = array_sum(array_map(fn (array $courier): int => (int) ($courier['success'] ?? 0), $result['couriers']));
+        $cancel = array_sum(array_map(fn (array $courier): int => (int) ($courier['cancel'] ?? 0), $result['couriers']));
+
+        $result['total_parcel'] = $total;
+        $result['success_parcel'] = $success;
+        $result['cancel_parcel'] = $cancel;
+        $result['score'] = $total > 0 ? round(($success / $total) * 100, 2) : 0;
+
+        return $result;
     }
 
     private function errorMessage(int $status): string

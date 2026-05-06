@@ -90,8 +90,18 @@ class AdminSettingsService
             ],
             'fraud_checker' => [
                 'enabled' => false,
+                'provider' => 'onesoftcode',
                 'api_key' => '',
                 'api_url' => 'https://fraudchecker.ocs-api.top/api/v3',
+                'bd_courier_api_url' => 'https://api.bdcourier.com',
+                'couriers' => [
+                    'pathao' => true,
+                    'steadfast' => true,
+                    'parceldex' => true,
+                    'redx' => true,
+                    'paperfly' => true,
+                    'carrybee' => true,
+                ],
                 'auto_hold_high_risk' => true,
                 'block_disposable_email' => true,
                 'block_international_phone_mismatch' => false,
