@@ -206,6 +206,7 @@ class ThemeSettingsService
                 'show_wishlist' => true,
                 'show_announcement_bar' => false,
                 'announcement_text' => '',
+                'announcement_expires_at' => '',
                 'background_color' => '#ffffff',
                 'menu_alignment' => 'center',
                 'logo_position' => 'left',

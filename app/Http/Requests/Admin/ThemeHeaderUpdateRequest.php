@@ -24,6 +24,7 @@ class ThemeHeaderUpdateRequest extends FormRequest
             'show_wishlist' => ['required', 'boolean'],
             'show_announcement_bar' => ['required', 'boolean'],
             'announcement_text' => ['nullable', 'string', 'max:255'],
+            'announcement_expires_at' => ['nullable', 'string', 'max:40'],
             'background_color' => ['required', 'string', 'max:20'],
             'menu_alignment' => ['required', Rule::in(['left', 'center', 'right'])],
             'logo_position' => ['required', Rule::in(['left', 'center'])],
