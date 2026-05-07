@@ -80,6 +80,7 @@ class DashboardController extends Controller
                         'delta' => $this->formatDelta($productsCount, $previousProductsCount),
                     ],
                 ],
+                'today_summary' => $this->buildTodaySummary(),
                 'recent_orders' => (clone $ordersQuery)
                     ->latest('placed_at')
                     ->take(5)
@@ -114,6 +115,7 @@ class DashboardController extends Controller
                         $revenue,
                         $previousRevenue,
                     ),
+                    'activity' => $this->buildActivityChart($startDate, $endDate),
                     'order_sources' => $this->buildOrderSources($startDate, $endDate),
                 ],
                 'quick_actions' => [
@@ -131,7 +133,7 @@ class DashboardController extends Controller
      */
     private function resolveRange(string $rangeKey, mixed $startDate, mixed $endDate): array
     {
-        $today = now()->timezone(config('app.timezone'))->startOfDay();
+        $today = now($this->dashboardTimezone())->startOfDay();
 
         return match ($rangeKey) {
             'today' => ['today', 'Today', $today->copy(), $today->copy()->endOfDay()],
@@ -166,10 +168,10 @@ class DashboardController extends Controller
     private function resolveCustomRange(mixed $startDate, mixed $endDate): array
     {
         $start = is_string($startDate) && $startDate !== ''
-            ? Carbon::parse($startDate, config('app.timezone'))->startOfDay()
+            ? Carbon::parse($startDate, $this->dashboardTimezone())->startOfDay()
             : null;
         $end = is_string($endDate) && $endDate !== ''
-            ? Carbon::parse($endDate, config('app.timezone'))->endOfDay()
+            ? Carbon::parse($endDate, $this->dashboardTimezone())->endOfDay()
             : null;
 
         if (! $start || ! $end) {
@@ -202,11 +204,11 @@ class DashboardController extends Controller
     private function applyRange(Builder $query, string $column, ?Carbon $startDate, ?Carbon $endDate): void
     {
         if ($startDate) {
-            $query->where($column, '>=', $startDate);
+            $query->where($column, '>=', $this->toDatabaseTimezone($startDate));
         }
 
         if ($endDate) {
-            $query->where($column, '<=', $endDate);
+            $query->where($column, '<=', $this->toDatabaseTimezone($endDate));
         }
     }
 
@@ -219,11 +221,11 @@ class DashboardController extends Controller
         $dateColumn = DB::raw('COALESCE(placed_at, created_at)');
 
         if ($startDate) {
-            $query->where($dateColumn, '>=', $startDate);
+            $query->where($dateColumn, '>=', $this->toDatabaseTimezone($startDate));
         }
 
         if ($endDate) {
-            $query->where($dateColumn, '<=', $endDate);
+            $query->where($dateColumn, '<=', $this->toDatabaseTimezone($endDate));
         }
     }
 
@@ -239,14 +241,14 @@ class DashboardController extends Controller
         float $previousRangeRevenue,
     ): array
     {
-        $chartEnd = ($endDate ?? now(config('app.timezone')))->copy()->endOfDay();
+        $chartEnd = ($endDate ?? now($this->dashboardTimezone()))->copy()->endOfDay();
         $oldestOrderDate = ! $startDate
             ? Order::query()
                 ->selectRaw('MIN(COALESCE(placed_at, created_at)) as oldest_order_date')
                 ->value('oldest_order_date')
             : null;
         $chartStart = ($startDate
-            ?? ($oldestOrderDate ? Carbon::parse($oldestOrderDate, config('app.timezone')) : $chartEnd->copy()->subDays(29)))
+            ?? ($oldestOrderDate ? Carbon::parse($oldestOrderDate, $this->databaseTimezone())->timezone($this->dashboardTimezone()) : $chartEnd->copy()->subDays(29)))
             ->copy()
             ->startOfDay();
 
@@ -282,9 +284,14 @@ class DashboardController extends Controller
      */
     private function aggregateRevenueByDay(Carbon $startDate, Carbon $endDate): array
     {
+        $bucketExpression = $this->localDateExpression();
+
         $rows = Order::query()
-            ->selectRaw('DATE(COALESCE(placed_at, created_at)) as bucket, SUM(grand_total) as total')
-            ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [$startDate, $endDate])
+            ->selectRaw("{$bucketExpression} as bucket, SUM(grand_total) as total")
+            ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [
+                $this->toDatabaseTimezone($startDate),
+                $this->toDatabaseTimezone($endDate),
+            ])
             ->groupBy('bucket')
             ->pluck('total', 'bucket');
 
@@ -306,9 +313,14 @@ class DashboardController extends Controller
      */
     private function aggregateRevenueByMonth(Carbon $startDate, Carbon $endDate): array
     {
+        $dateTimeExpression = $this->localDateTimeExpression();
+
         $rows = Order::query()
-            ->selectRaw("DATE_FORMAT(COALESCE(placed_at, created_at), '%Y-%m') as bucket, SUM(grand_total) as total")
-            ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [$startDate, $endDate])
+            ->selectRaw("DATE_FORMAT({$dateTimeExpression}, '%Y-%m') as bucket, SUM(grand_total) as total")
+            ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [
+                $this->toDatabaseTimezone($startDate),
+                $this->toDatabaseTimezone($endDate),
+            ])
             ->groupBy('bucket')
             ->pluck('total', 'bucket');
 
@@ -321,6 +333,95 @@ class DashboardController extends Controller
             $points[] = [
                 'label' => $cursor->format('M Y'),
                 'value' => round((float) ($rows[$key] ?? 0), 2),
+            ];
+            $cursor->addMonth();
+        }
+
+        return $points;
+    }
+
+    /**
+     * @return array{sales:string,orders:string}
+     */
+    private function buildTodaySummary(): array
+    {
+        $today = now($this->dashboardTimezone())->startOfDay();
+        $query = Order::query();
+        $this->applyOrderDateRange($query, $today->copy(), $today->copy()->endOfDay());
+
+        return [
+            'sales' => $this->formatCurrency((float) (clone $query)->sum('grand_total')),
+            'orders' => number_format((clone $query)->count()),
+        ];
+    }
+
+    /**
+     * @return array<int,array{label:string,value:float}>
+     */
+    private function buildActivityChart(?Carbon $startDate, ?Carbon $endDate): array
+    {
+        $chartEnd = ($endDate ?? now($this->dashboardTimezone()))->copy()->endOfDay();
+        $chartStart = ($startDate ?? $chartEnd->copy()->subDays(6))->copy()->startOfDay();
+
+        if ($chartStart->diffInDays($chartEnd) > 370) {
+            return $this->aggregateOrderActivityByMonth($chartStart, $chartEnd);
+        }
+
+        return $this->aggregateOrderActivityByDay($chartStart, $chartEnd);
+    }
+
+    /**
+     * @return array<int,array{label:string,value:float}>
+     */
+    private function aggregateOrderActivityByDay(Carbon $startDate, Carbon $endDate): array
+    {
+        $bucketExpression = $this->localDateExpression();
+        $rows = Order::query()
+            ->selectRaw("{$bucketExpression} as bucket, COUNT(*) as total")
+            ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [
+                $this->toDatabaseTimezone($startDate),
+                $this->toDatabaseTimezone($endDate),
+            ])
+            ->groupBy('bucket')
+            ->pluck('total', 'bucket');
+
+        $points = [];
+
+        foreach (CarbonPeriod::create($startDate->copy()->startOfDay(), '1 day', $endDate->copy()->startOfDay()) as $date) {
+            $key = $date->format('Y-m-d');
+            $points[] = [
+                'label' => $date->format('M j'),
+                'value' => (float) ($rows[$key] ?? 0),
+            ];
+        }
+
+        return $points;
+    }
+
+    /**
+     * @return array<int,array{label:string,value:float}>
+     */
+    private function aggregateOrderActivityByMonth(Carbon $startDate, Carbon $endDate): array
+    {
+        $dateTimeExpression = $this->localDateTimeExpression();
+        $rows = Order::query()
+            ->selectRaw("DATE_FORMAT({$dateTimeExpression}, '%Y-%m') as bucket, COUNT(*) as total")
+            ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [
+                $this->toDatabaseTimezone($startDate),
+                $this->toDatabaseTimezone($endDate),
+            ])
+            ->groupBy('bucket')
+            ->pluck('total', 'bucket');
+
+        $points = [];
+        $cursor = $startDate->copy()->startOfMonth();
+        $last = $endDate->copy()->startOfMonth();
+
+        while ($cursor->lte($last)) {
+            $key = $cursor->format('Y-m');
+            $points[] = [
+                'label' => $cursor->format('M Y'),
+                'value' => (float) ($rows[$key] ?? 0),
             ];
             $cursor->addMonth();
         }
@@ -380,7 +481,10 @@ class DashboardController extends Controller
         }
 
         $total = (float) Order::query()
-            ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [$startDate, $endDate])
+            ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [
+                $this->toDatabaseTimezone($startDate),
+                $this->toDatabaseTimezone($endDate),
+            ])
             ->sum('grand_total');
 
         if ($total <= 0 && $fallbackRevenue > 0) {
@@ -417,5 +521,34 @@ class DashboardController extends Controller
         $delta = (($current - $previous) / $previous) * 100;
 
         return sprintf('%+.1f%%', $delta);
+    }
+
+    private function dashboardTimezone(): string
+    {
+        return (string) config('app.dashboard_timezone', 'Asia/Dhaka');
+    }
+
+    private function databaseTimezone(): string
+    {
+        return (string) config('app.timezone', 'UTC');
+    }
+
+    private function toDatabaseTimezone(Carbon $date): Carbon
+    {
+        return $date->copy()->timezone($this->databaseTimezone());
+    }
+
+    private function localDateExpression(): string
+    {
+        return 'DATE('.$this->localDateTimeExpression().')';
+    }
+
+    private function localDateTimeExpression(): string
+    {
+        return sprintf(
+            "CONVERT_TZ(COALESCE(placed_at, created_at), '%s', '%s')",
+            now($this->databaseTimezone())->format('P'),
+            now($this->dashboardTimezone())->format('P'),
+        );
     }
 }
