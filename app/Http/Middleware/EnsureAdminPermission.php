@@ -16,7 +16,12 @@ class EnsureAdminPermission
             return $next($request);
         }
 
-        if (! $request->user()?->hasAdminPermission($permission)) {
+        $permissions = is_array($permission) ? $permission : [$permission];
+        $hasPermission = collect($permissions)->contains(
+            fn (string $requiredPermission): bool => (bool) $request->user()?->hasAdminPermission($requiredPermission)
+        );
+
+        if (! $hasPermission) {
             return response()->json([
                 'message' => 'You do not have permission to access this admin area.',
                 'required_permission' => $permission,
@@ -26,7 +31,7 @@ class EnsureAdminPermission
         return $next($request);
     }
 
-    private function permissionFor(Request $request): ?string
+    private function permissionFor(Request $request): string|array|null
     {
         $path = trim($request->path(), '/');
         $adminPath = preg_replace('#^api/admin/?#', '', $path) ?? '';
@@ -57,7 +62,7 @@ class EnsureAdminPermission
             str_starts_with($adminPath, 'coupons') => 'coupons.manage',
             str_starts_with($adminPath, 'contact-messages') => 'contact-messages.manage',
             str_starts_with($adminPath, 'team-members') => $isRead ? 'team.view' : 'team.manage',
-            str_starts_with($adminPath, 'audit-logs') => 'audit.view',
+            str_starts_with($adminPath, 'audit-logs') => ['audit.view', 'audit.view.all'],
             str_starts_with($adminPath, 'marketing/facebook') => 'marketing.facebook.manage',
             str_starts_with($adminPath, 'marketing/google') => 'marketing.google.manage',
             str_starts_with($adminPath, 'marketing/seo') => 'marketing.seo.manage',

@@ -26,19 +26,25 @@ class AdminAuditLogController extends Controller
         $to = isset($payload['date_to'])
             ? Carbon::parse($payload['date_to'])->endOfDay()
             : Carbon::now()->endOfDay();
+        $user = $request->user();
+        $canViewAll = (bool) $user?->hasAdminPermission('audit.view.all');
 
         $logs = AdminAuditLog::query()
             ->with('actor.adminRole:id,name,slug')
             ->whereBetween('created_at', [$from, $to])
             ->when(($payload['action'] ?? 'all') !== 'all', fn ($query) => $query->where('action', $payload['action']))
-            ->when(($payload['actor_id'] ?? 'all') !== 'all', fn ($query) => $query->where('actor_id', $payload['actor_id']))
-            ->when(($payload['role'] ?? 'all') !== 'all', fn ($query) => $query->where('actor_role', $payload['role']))
+            ->when($canViewAll && ($payload['actor_id'] ?? 'all') !== 'all', fn ($query) => $query->where('actor_id', $payload['actor_id']))
+            ->when(! $canViewAll, fn ($query) => $query->where('actor_id', $user?->id))
+            ->when($canViewAll && ($payload['role'] ?? 'all') !== 'all', fn ($query) => $query->where('actor_role', $payload['role']))
             ->latest('created_at')
             ->limit(300)
             ->get();
 
         return response()->json([
             'data' => $logs,
+            'meta' => [
+                'scope' => $canViewAll ? 'all' : 'own',
+            ],
         ]);
     }
 }
