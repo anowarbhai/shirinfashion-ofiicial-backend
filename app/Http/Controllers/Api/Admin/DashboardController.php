@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Models\Review;
 use App\Models\User;
 use Carbon\Carbon;
+use Carbon\CarbonPeriod;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -103,6 +104,10 @@ class DashboardController extends Controller
                     ->values(),
                 'pending_reviews' => Review::query()->where('status', 'pending')->count(),
                 'active_coupons' => Coupon::query()->where('is_active', true)->count(),
+                'charts' => [
+                    'revenue' => $this->buildRevenueChart($startDate, $endDate, $previousStartDate, $previousEndDate),
+                    'order_sources' => $this->buildOrderSources($startDate, $endDate),
+                ],
                 'quick_actions' => [
                     'Review pending orders',
                     'Check low stock products',
@@ -195,6 +200,141 @@ class DashboardController extends Controller
         if ($endDate) {
             $query->where($column, '<=', $endDate);
         }
+    }
+
+    /**
+     * @return array{current:array<int,array{label:string,value:float}>,previous:array<int,array{label:string,value:float}>}
+     */
+    private function buildRevenueChart(?Carbon $startDate, ?Carbon $endDate, ?Carbon $previousStartDate, ?Carbon $previousEndDate): array
+    {
+        $chartEnd = ($endDate ?? now(config('app.timezone')))->copy()->endOfDay();
+        $oldestOrderDate = ! $startDate
+            ? Order::query()->whereNotNull('placed_at')->min('placed_at')
+            : null;
+        $chartStart = ($startDate
+            ?? ($oldestOrderDate ? Carbon::parse($oldestOrderDate, config('app.timezone')) : $chartEnd->copy()->subDays(29)))
+            ->copy()
+            ->startOfDay();
+
+        if ($chartStart->diffInDays($chartEnd) > 370) {
+            return [
+                'current' => $this->aggregateRevenueByMonth($chartStart, $chartEnd),
+                'previous' => $previousStartDate && $previousEndDate
+                    ? $this->aggregateRevenueByMonth($previousStartDate, $previousEndDate)
+                    : [],
+            ];
+        }
+
+        return [
+            'current' => $this->aggregateRevenueByDay($chartStart, $chartEnd),
+            'previous' => $previousStartDate && $previousEndDate
+                ? $this->aggregateRevenueByDay($previousStartDate, $previousEndDate)
+                : [],
+        ];
+    }
+
+    /**
+     * @return array<int,array{label:string,value:float}>
+     */
+    private function aggregateRevenueByDay(Carbon $startDate, Carbon $endDate): array
+    {
+        $rows = Order::query()
+            ->selectRaw('DATE(placed_at) as bucket, SUM(grand_total) as total')
+            ->whereNotNull('placed_at')
+            ->whereBetween('placed_at', [$startDate, $endDate])
+            ->groupBy('bucket')
+            ->pluck('total', 'bucket');
+
+        $points = [];
+
+        foreach (CarbonPeriod::create($startDate->copy()->startOfDay(), '1 day', $endDate->copy()->startOfDay()) as $date) {
+            $key = $date->format('Y-m-d');
+            $points[] = [
+                'label' => $date->format('M j'),
+                'value' => round((float) ($rows[$key] ?? 0), 2),
+            ];
+        }
+
+        return $points;
+    }
+
+    /**
+     * @return array<int,array{label:string,value:float}>
+     */
+    private function aggregateRevenueByMonth(Carbon $startDate, Carbon $endDate): array
+    {
+        $rows = Order::query()
+            ->selectRaw("DATE_FORMAT(placed_at, '%Y-%m') as bucket, SUM(grand_total) as total")
+            ->whereNotNull('placed_at')
+            ->whereBetween('placed_at', [$startDate, $endDate])
+            ->groupBy('bucket')
+            ->pluck('total', 'bucket');
+
+        $points = [];
+        $cursor = $startDate->copy()->startOfMonth();
+        $last = $endDate->copy()->startOfMonth();
+
+        while ($cursor->lte($last)) {
+            $key = $cursor->format('Y-m');
+            $points[] = [
+                'label' => $cursor->format('M Y'),
+                'value' => round((float) ($rows[$key] ?? 0), 2),
+            ];
+            $cursor->addMonth();
+        }
+
+        return $points;
+    }
+
+    /**
+     * @return array<int,array{label:string,value:int,percentage:float,color:string}>
+     */
+    private function buildOrderSources(?Carbon $startDate, ?Carbon $endDate): array
+    {
+        $query = Order::query();
+        $this->applyRange($query, 'placed_at', $startDate, $endDate);
+
+        $total = (clone $query)->count();
+
+        if ($total === 0) {
+            return [];
+        }
+
+        $sources = [
+            [
+                'label' => 'Customer Account',
+                'value' => (clone $query)->whereNotNull('user_id')->count(),
+                'color' => '#4f46e5',
+            ],
+            [
+                'label' => 'Guest Website',
+                'value' => (clone $query)
+                    ->whereNull('user_id')
+                    ->where(function (Builder $builder): void {
+                        $builder->whereNotNull('client_ip')->orWhereNotNull('device_id');
+                    })
+                    ->count(),
+                'color' => '#14b8a6',
+            ],
+            [
+                'label' => 'Manual/Admin',
+                'value' => (clone $query)
+                    ->whereNull('user_id')
+                    ->whereNull('client_ip')
+                    ->whereNull('device_id')
+                    ->count(),
+                'color' => '#f97316',
+            ],
+        ];
+
+        return collect($sources)
+            ->filter(fn (array $source): bool => $source['value'] > 0)
+            ->map(fn (array $source): array => [
+                ...$source,
+                'percentage' => round(($source['value'] / $total) * 100, 1),
+            ])
+            ->values()
+            ->all();
     }
 
     private function formatCurrency(float $value): string
