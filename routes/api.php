@@ -99,7 +99,7 @@ Route::middleware('jwt.auth')->group(function (): void {
     Route::post('/account/avatar', [AuthController::class, 'uploadAvatar']);
     Route::patch('/account/password', [AuthController::class, 'updatePassword']);
 
-    Route::prefix('admin')->middleware('admin')->group(function (): void {
+    Route::prefix('admin')->middleware(['admin', 'admin.permission'])->group(function (): void {
         Route::get('/dashboard', AdminDashboardController::class);
         Route::apiResource('products', AdminProductController::class);
         Route::get('/product-page-settings', [AdminProductPageSettingsController::class, 'show']);

@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Support\Collection;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -83,6 +84,38 @@ class User extends Authenticatable
     {
         return ($this->role === 'admin' || $this->admin_role_id !== null)
             && ($this->status ?? 'active') === 'active';
+    }
+
+    public function hasAdminPermission(string $permission): bool
+    {
+        if (! $this->isAdmin()) {
+            return false;
+        }
+
+        if ($this->admin_role_id === null) {
+            return $this->role === 'admin';
+        }
+
+        $permissions = $this->adminPermissionSlugs();
+
+        return $permissions->contains('system.everything') || $permissions->contains($permission);
+    }
+
+    /**
+     * @return Collection<int, string>
+     */
+    public function adminPermissionSlugs(): Collection
+    {
+        $role = $this->adminRole()
+            ->where('is_active', true)
+            ->with(['permissions' => fn ($query) => $query->where('is_active', true)->select('admin_permissions.id', 'slug')])
+            ->first();
+
+        if (! $role) {
+            return collect();
+        }
+
+        return $role->permissions->pluck('slug')->values();
     }
 
     protected function avatarUrl(): Attribute

@@ -130,7 +130,7 @@ class AuthController extends Controller
             'data' => [
                 'requires_otp' => false,
                 'token' => $this->jwtService->issueToken($user),
-                'user' => $user,
+                'user' => $this->adminUserPayload($user),
             ],
         ]);
     }
@@ -163,7 +163,7 @@ class AuthController extends Controller
             'data' => [
                 'requires_otp' => false,
                 'token' => $this->jwtService->issueToken($user),
-                'user' => $user,
+                'user' => $this->adminUserPayload($user),
             ],
         ]);
     }
@@ -205,6 +205,12 @@ class AuthController extends Controller
 
     public function me(Request $request): JsonResponse
     {
+        if ($request->user()?->isAdmin()) {
+            return response()->json([
+                'data' => $this->adminUserPayload($request->user()),
+            ]);
+        }
+
         return response()->json([
             'data' => $request->user(),
         ]);
@@ -395,6 +401,31 @@ class AuthController extends Controller
         }
 
         return $user;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function adminUserPayload(User $user): array
+    {
+        $role = $user->adminRole()->select('id', 'name', 'slug', 'is_active')->first();
+        $permissionSlugs = $user->admin_role_id === null && $user->role === 'admin'
+            ? ['system.everything']
+            : $user->adminPermissionSlugs()->values()->all();
+
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'phone' => $user->phone,
+            'address' => $user->address,
+            'role' => $user->role,
+            'admin_role_id' => $user->admin_role_id,
+            'admin_role' => $role,
+            'status' => $user->status,
+            'avatar_url' => $user->avatar_url,
+            'permission_slugs' => $permissionSlugs,
+        ];
     }
 
     protected function deleteStoredAvatar(?string $avatarUrl): void
