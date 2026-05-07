@@ -45,7 +45,9 @@ class EnsureAdminPermission
 
         return match (true) {
             $adminPath === 'dashboard' => 'dashboard.view',
-            str_starts_with($adminPath, 'orders') => $isRead ? 'orders.view' : 'orders.manage',
+            str_starts_with($adminPath, 'orders') && $isRead => 'orders.view',
+            str_starts_with($adminPath, 'orders') && $method === 'POST' => ['orders.create', 'orders.manage'],
+            str_starts_with($adminPath, 'orders') => ['orders.edit', 'orders.manage'],
             str_starts_with($adminPath, 'customers') => $isRead ? 'customers.view' : 'customers.manage',
             str_starts_with($adminPath, 'product-page-settings'),
             str_starts_with($adminPath, 'products/page-settings'),
