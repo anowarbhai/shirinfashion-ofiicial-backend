@@ -122,6 +122,58 @@ class AdminSettingsService
                 'cooldown_minutes' => 180,
                 'message' => 'You can place another order after {{time}}.',
             ],
+            'product_page' => [
+                'reviewSettings' => [
+                    'enableReviews' => true,
+                    'showAverageRating' => true,
+                    'allowGuestReviews' => true,
+                ],
+                'shippingMethods' => [
+                    [
+                        'id' => 1,
+                        'name' => 'Inside Dhaka',
+                        'description' => 'Delivery within 1-2 days inside Dhaka city',
+                        'cost' => 80,
+                        'isActive' => true,
+                    ],
+                    [
+                        'id' => 2,
+                        'name' => 'Outside Dhaka',
+                        'description' => 'Delivery within 2-3 days outside Dhaka',
+                        'cost' => 120,
+                        'isActive' => true,
+                    ],
+                ],
+                'freeShippingEnabled' => false,
+                'freeShippingThreshold' => '0',
+                'paymentMethods' => [
+                    [
+                        'id' => 'cod',
+                        'name' => 'Cash on Delivery',
+                        'description' => 'Pay after delivery confirmation at your doorstep.',
+                        'active' => true,
+                    ],
+                    [
+                        'id' => 'stripe',
+                        'name' => 'Stripe',
+                        'description' => 'Secure card checkout powered by Stripe.',
+                        'active' => false,
+                    ],
+                    [
+                        'id' => 'paypal',
+                        'name' => 'PayPal',
+                        'description' => 'Pay quickly with your PayPal balance or linked cards.',
+                        'active' => false,
+                    ],
+                ],
+                'taxSettings' => [
+                    'enabled' => false,
+                    'name' => 'VAT',
+                    'type' => 'percentage',
+                    'value' => '0',
+                ],
+                'cartDrawerStyle' => 'style-1',
+            ],
             'mail_setup' => [
                 'enabled' => false,
                 'provider' => 'gmail',
