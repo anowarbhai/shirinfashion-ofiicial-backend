@@ -8,10 +8,15 @@ use App\Http\Requests\Admin\AdminPermissionUpdateRequest;
 use App\Http\Requests\Admin\UpdateRolePermissionsRequest;
 use App\Models\AdminPermission;
 use App\Models\AdminRole;
+use App\Services\AdminAuditLogger;
 use Illuminate\Http\JsonResponse;
 
 class AdminPermissionController extends Controller
 {
+    public function __construct(protected AdminAuditLogger $auditLogger)
+    {
+    }
+
     public function index(): JsonResponse
     {
         $permissions = AdminPermission::query()
@@ -82,6 +87,13 @@ class AdminPermissionController extends Controller
         }
 
         $role->permissions()->sync($request->validated('permission_ids', []));
+        $this->auditLogger->log(
+            $request,
+            'role.permissions.updated',
+            "Updated permissions for role {$role->name}.",
+            $role,
+            ['permission_ids' => $request->validated('permission_ids', [])],
+        );
 
         return response()->json([
             'message' => 'Role permissions updated successfully.',

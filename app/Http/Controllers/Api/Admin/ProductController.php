@@ -4,12 +4,17 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Product;
+use App\Services\AdminAuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class ProductController extends Controller
 {
+    public function __construct(protected AdminAuditLogger $auditLogger)
+    {
+    }
+
     public function index(): JsonResponse
     {
         return response()->json([
@@ -28,6 +33,14 @@ class ProductController extends Controller
         $product->tags()->sync($validated['tag_ids']);
         $product->attributeTerms()->sync($validated['attribute_term_ids']);
 
+        $this->auditLogger->log(
+            $request,
+            'product.created',
+            "Created product {$product->name}.",
+            $product,
+            ['sku' => $product->sku, 'price' => $product->price],
+        );
+
         return response()->json([
             'message' => 'Product created successfully.',
             'data' => $product->load(['category', 'categories', 'tags', 'attributeTerms.attribute']),
@@ -43,21 +56,44 @@ class ProductController extends Controller
 
     public function update(Request $request, Product $product): JsonResponse
     {
+        $before = $product->only(['name', 'sku', 'price', 'inventory', 'is_active', 'is_featured']);
         $validated = $this->validated($request, $product->id);
         $product->update($validated['attributes']);
         $product->categories()->sync($validated['category_ids']);
         $product->tags()->sync($validated['tag_ids']);
         $product->attributeTerms()->sync($validated['attribute_term_ids']);
+        $updated = $product->fresh();
+
+        $this->auditLogger->log(
+            $request,
+            'product.updated',
+            "Updated product {$updated->name}.",
+            $updated,
+            [
+                'before' => $before,
+                'after' => $updated->only(['name', 'sku', 'price', 'inventory', 'is_active', 'is_featured']),
+            ],
+        );
 
         return response()->json([
             'message' => 'Product updated successfully.',
-            'data' => $product->fresh()->load(['category', 'categories', 'tags', 'attributeTerms.attribute']),
+            'data' => $updated->load(['category', 'categories', 'tags', 'attributeTerms.attribute']),
         ]);
     }
 
-    public function destroy(Product $product): JsonResponse
+    public function destroy(Request $request, Product $product): JsonResponse
     {
+        $metadata = ['product_id' => $product->id, 'sku' => $product->sku, 'name' => $product->name];
+        $name = $product->name;
         $product->delete();
+
+        $this->auditLogger->log(
+            $request,
+            'product.deleted',
+            "Deleted product {$name}.",
+            null,
+            $metadata,
+        );
 
         return response()->json([
             'message' => 'Product deleted successfully.',

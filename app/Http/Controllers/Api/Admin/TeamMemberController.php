@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AdminRole;
 use App\Models\User;
+use App\Services\AdminAuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -12,6 +13,10 @@ use Illuminate\Validation\Rule;
 
 class TeamMemberController extends Controller
 {
+    public function __construct(protected AdminAuditLogger $auditLogger)
+    {
+    }
+
     public function index(): JsonResponse
     {
         return response()->json([
@@ -46,6 +51,14 @@ class TeamMemberController extends Controller
             'status' => $validated['status'],
             'marketing_opt_in' => false,
         ])->load('adminRole:id,name,slug');
+
+        $this->auditLogger->log(
+            $request,
+            'team.member.created',
+            "Created admin account {$member->name}.",
+            $member,
+            ['role' => $member->adminRole?->name, 'status' => $member->status],
+        );
 
         return response()->json([
             'message' => 'Admin user created successfully.',
@@ -85,15 +98,28 @@ class TeamMemberController extends Controller
             unset($validated['password']);
         }
 
+        $before = $teamMember->only(['name', 'email', 'phone', 'admin_role_id', 'status']);
         $teamMember->update($validated);
+        $updated = $teamMember->fresh('adminRole:id,name,slug');
+
+        $this->auditLogger->log(
+            $request,
+            'team.member.updated',
+            "Updated admin account {$updated->name}.",
+            $updated,
+            [
+                'before' => $before,
+                'after' => $updated->only(['name', 'email', 'phone', 'admin_role_id', 'status']),
+            ],
+        );
 
         return response()->json([
             'message' => 'Admin user updated successfully.',
-            'data' => $teamMember->fresh('adminRole:id,name,slug'),
+            'data' => $updated,
         ]);
     }
 
-    public function destroy(User $teamMember): JsonResponse
+    public function destroy(Request $request, User $teamMember): JsonResponse
     {
         abort_unless($teamMember->role === 'admin', 404);
 
@@ -103,7 +129,18 @@ class TeamMemberController extends Controller
             ], 422);
         }
 
+        $name = $teamMember->name;
+        $role = $teamMember->adminRole?->name;
+        $id = $teamMember->id;
         $teamMember->delete();
+
+        $this->auditLogger->log(
+            $request,
+            'team.member.deleted',
+            "Deleted admin account {$name}.",
+            null,
+            ['deleted_user_id' => $id, 'deleted_user_name' => $name, 'role' => $role],
+        );
 
         return response()->json([
             'message' => 'Admin user deleted successfully.',

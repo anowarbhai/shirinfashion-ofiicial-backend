@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\Admin\GeneralSettingsController as AdminGeneralSett
 use App\Http\Controllers\Api\Admin\GoogleMarketingController as AdminGoogleMarketingController;
 use App\Http\Controllers\Api\Admin\MailSetupSettingsController as AdminMailSetupSettingsController;
 use App\Http\Controllers\Api\Admin\AdminPermissionController as AdminPermissionController;
+use App\Http\Controllers\Api\Admin\AdminAuditLogController as AdminAuditLogController;
 use App\Http\Controllers\Api\Admin\AdminRoleController as AdminRoleController;
 use App\Http\Controllers\Api\Admin\SeoMarketingController as AdminSeoMarketingController;
 use App\Http\Controllers\Api\Admin\SmsIntegrationSettingsController as AdminSmsIntegrationSettingsController;
@@ -117,6 +118,7 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::patch('/customers/{customer}', [AdminCustomerController::class, 'update']);
         Route::delete('/customers/{customer}', [AdminCustomerController::class, 'destroy']);
         Route::apiResource('team-members', AdminTeamMemberController::class);
+        Route::get('/audit-logs', [AdminAuditLogController::class, 'index']);
         Route::get('/contact-messages', [AdminContactMessageController::class, 'index']);
         Route::patch('/contact-messages/{contactMessage}', [AdminContactMessageController::class, 'update']);
         Route::delete('/contact-messages/{contactMessage}', [AdminContactMessageController::class, 'destroy']);

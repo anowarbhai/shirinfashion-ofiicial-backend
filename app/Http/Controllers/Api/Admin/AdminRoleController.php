@@ -6,10 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\AdminRoleStoreRequest;
 use App\Http\Requests\Admin\AdminRoleUpdateRequest;
 use App\Models\AdminRole;
+use App\Services\AdminAuditLogger;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class AdminRoleController extends Controller
 {
+    public function __construct(protected AdminAuditLogger $auditLogger)
+    {
+    }
+
     public function index(): JsonResponse
     {
         $roles = AdminRole::query()
@@ -30,6 +36,8 @@ class AdminRoleController extends Controller
             'is_system' => false,
         ]);
 
+        $this->auditLogger->log($request, 'role.created', "Created role {$role->name}.", $role);
+
         return response()->json([
             'message' => 'Role created successfully.',
             'data' => $role->loadCount('permissions'),
@@ -44,6 +52,8 @@ class AdminRoleController extends Controller
             ], 422);
         }
 
+        $before = $role->only(['name', 'slug', 'description', 'is_active']);
+
         if ($role->is_system) {
             $requestData = $request->validated();
             unset($requestData['slug']);
@@ -52,13 +62,22 @@ class AdminRoleController extends Controller
             $role->update($request->validated());
         }
 
+        $updated = $role->fresh();
+        $this->auditLogger->log(
+            $request,
+            'role.updated',
+            "Updated role {$updated->name}.",
+            $updated,
+            ['before' => $before, 'after' => $updated->only(['name', 'slug', 'description', 'is_active'])],
+        );
+
         return response()->json([
             'message' => 'Role updated successfully.',
-            'data' => $role->fresh()->loadCount('permissions'),
+            'data' => $updated->loadCount('permissions'),
         ]);
     }
 
-    public function destroy(AdminRole $role): JsonResponse
+    public function destroy(Request $request, AdminRole $role): JsonResponse
     {
         if ($role->slug === 'super-admin') {
             return response()->json([
@@ -72,7 +91,11 @@ class AdminRoleController extends Controller
             ], 422);
         }
 
+        $metadata = ['role_id' => $role->id, 'name' => $role->name, 'slug' => $role->slug];
+        $name = $role->name;
         $role->delete();
+
+        $this->auditLogger->log($request, 'role.deleted', "Deleted role {$name}.", null, $metadata);
 
         return response()->json([
             'message' => 'Role deleted successfully.',

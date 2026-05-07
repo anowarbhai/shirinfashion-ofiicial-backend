@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\SmsOtp;
 use App\Support\BangladeshPhone;
 use App\Services\JwtService;
+use App\Services\AdminAuditLogger;
 use App\Services\SmsOtpService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,6 +21,7 @@ class AuthController extends Controller
     public function __construct(
         protected JwtService $jwtService,
         protected SmsOtpService $smsOtpService,
+        protected AdminAuditLogger $auditLogger,
     ) {
     }
 
@@ -121,6 +123,8 @@ class AuthController extends Controller
             ]);
         }
 
+        $this->auditLogger->log($request, 'auth.login', "{$user->name} logged in.", $user, [], $user);
+
         return response()->json([
             'message' => 'Admin login successful.',
             'data' => [
@@ -187,6 +191,8 @@ class AuthController extends Controller
 
         $this->smsOtpService->consumeVerified('admin_login', $payload['otp_session_token'], $user->phone);
 
+        $this->auditLogger->log($request, 'auth.login', "{$user->name} logged in.", $user, ['otp' => true], $user);
+
         return response()->json([
             'message' => 'Admin login successful.',
             'data' => [
@@ -204,8 +210,19 @@ class AuthController extends Controller
         ]);
     }
 
-    public function logout(): JsonResponse
+    public function logout(Request $request): JsonResponse
     {
+        if ($request->user()?->isAdmin()) {
+            $this->auditLogger->log(
+                $request,
+                'auth.logout',
+                "{$request->user()->name} logged out.",
+                $request->user(),
+                [],
+                $request->user(),
+            );
+        }
+
         return response()->json([
             'message' => 'JWT logout acknowledged. Discard the token client-side.',
         ]);
@@ -230,6 +247,7 @@ class AuthController extends Controller
 
         /** @var User $user */
         $user = $request->user();
+        $before = $user->only(['name', 'email', 'phone', 'address', 'avatar_url']);
 
         if (
             User::query()
@@ -244,10 +262,22 @@ class AuthController extends Controller
         }
 
         $user->update($payload);
+        $updated = $user->fresh();
+
+        if ($updated->isAdmin()) {
+            $this->auditLogger->log(
+                $request,
+                'account.updated',
+                "{$updated->name} updated their admin account.",
+                $updated,
+                ['before' => $before, 'after' => $updated->only(['name', 'email', 'phone', 'address', 'avatar_url'])],
+                $updated,
+            );
+        }
 
         return response()->json([
             'message' => 'Profile updated successfully.',
-            'data' => $user->fresh(),
+            'data' => $updated,
         ]);
     }
 
