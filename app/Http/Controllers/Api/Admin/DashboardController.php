@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\AdminAuditLog;
 use App\Models\Coupon;
 use App\Models\Order;
 use App\Models\Product;
@@ -115,7 +116,7 @@ class DashboardController extends Controller
                         $revenue,
                         $previousRevenue,
                     ),
-                    'activity' => $this->buildActivityChart($startDate, $endDate),
+                    'activity' => $this->buildActivityChart($startDate, $endDate, $request->user()?->id),
                     'order_sources' => $this->buildOrderSources($startDate, $endDate),
                 ],
                 'quick_actions' => [
@@ -358,27 +359,32 @@ class DashboardController extends Controller
     /**
      * @return array<int,array{label:string,value:float}>
      */
-    private function buildActivityChart(?Carbon $startDate, ?Carbon $endDate): array
+    private function buildActivityChart(?Carbon $startDate, ?Carbon $endDate, ?int $actorId): array
     {
         $chartEnd = ($endDate ?? now($this->dashboardTimezone()))->copy()->endOfDay();
         $chartStart = ($startDate ?? $chartEnd->copy()->subDays(6))->copy()->startOfDay();
 
-        if ($chartStart->diffInDays($chartEnd) > 370) {
-            return $this->aggregateOrderActivityByMonth($chartStart, $chartEnd);
+        if (! $actorId) {
+            return $this->emptyActivityPoints($chartStart, $chartEnd);
         }
 
-        return $this->aggregateOrderActivityByDay($chartStart, $chartEnd);
+        if ($chartStart->diffInDays($chartEnd) > 370) {
+            return $this->aggregateAdminActivityByMonth($chartStart, $chartEnd, $actorId);
+        }
+
+        return $this->aggregateAdminActivityByDay($chartStart, $chartEnd, $actorId);
     }
 
     /**
      * @return array<int,array{label:string,value:float}>
      */
-    private function aggregateOrderActivityByDay(Carbon $startDate, Carbon $endDate): array
+    private function aggregateAdminActivityByDay(Carbon $startDate, Carbon $endDate, int $actorId): array
     {
-        $bucketExpression = $this->localDateExpression();
-        $rows = Order::query()
+        $bucketExpression = $this->localDateExpression('created_at');
+        $rows = AdminAuditLog::query()
             ->selectRaw("{$bucketExpression} as bucket, COUNT(*) as total")
-            ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [
+            ->where('actor_id', $actorId)
+            ->whereBetween('created_at', [
                 $this->toDatabaseTimezone($startDate),
                 $this->toDatabaseTimezone($endDate),
             ])
@@ -401,12 +407,13 @@ class DashboardController extends Controller
     /**
      * @return array<int,array{label:string,value:float}>
      */
-    private function aggregateOrderActivityByMonth(Carbon $startDate, Carbon $endDate): array
+    private function aggregateAdminActivityByMonth(Carbon $startDate, Carbon $endDate, int $actorId): array
     {
-        $dateTimeExpression = $this->localDateTimeExpression();
-        $rows = Order::query()
+        $dateTimeExpression = $this->localDateTimeExpression('created_at');
+        $rows = AdminAuditLog::query()
             ->selectRaw("DATE_FORMAT({$dateTimeExpression}, '%Y-%m') as bucket, COUNT(*) as total")
-            ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [
+            ->where('actor_id', $actorId)
+            ->whereBetween('created_at', [
                 $this->toDatabaseTimezone($startDate),
                 $this->toDatabaseTimezone($endDate),
             ])
@@ -424,6 +431,23 @@ class DashboardController extends Controller
                 'value' => (float) ($rows[$key] ?? 0),
             ];
             $cursor->addMonth();
+        }
+
+        return $points;
+    }
+
+    /**
+     * @return array<int,array{label:string,value:float}>
+     */
+    private function emptyActivityPoints(Carbon $startDate, Carbon $endDate): array
+    {
+        $points = [];
+
+        foreach (CarbonPeriod::create($startDate->copy()->startOfDay(), '1 day', $endDate->copy()->startOfDay()) as $date) {
+            $points[] = [
+                'label' => $date->format('M j'),
+                'value' => 0.0,
+            ];
         }
 
         return $points;
@@ -538,15 +562,15 @@ class DashboardController extends Controller
         return $date->copy()->timezone($this->databaseTimezone());
     }
 
-    private function localDateExpression(): string
+    private function localDateExpression(string $column = 'COALESCE(placed_at, created_at)'): string
     {
-        return 'DATE('.$this->localDateTimeExpression().')';
+        return 'DATE('.$this->localDateTimeExpression($column).')';
     }
 
-    private function localDateTimeExpression(): string
+    private function localDateTimeExpression(string $column = 'COALESCE(placed_at, created_at)'): string
     {
         return sprintf(
-            "CONVERT_TZ(COALESCE(placed_at, created_at), '%s', '%s')",
+            "CONVERT_TZ({$column}, '%s', '%s')",
             now($this->databaseTimezone())->format('P'),
             now($this->dashboardTimezone())->format('P'),
         );
