@@ -342,38 +342,26 @@ class DashboardController extends Controller
             return [];
         }
 
-        $sources = [
-            [
-                'label' => 'Customer Account',
-                'value' => (clone $query)->whereNotNull('user_id')->count(),
-                'color' => '#4f46e5',
-            ],
-            [
-                'label' => 'Guest Website',
-                'value' => (clone $query)
-                    ->whereNull('user_id')
-                    ->where(function (Builder $builder): void {
-                        $builder->whereNotNull('client_ip')->orWhereNotNull('device_id');
-                    })
-                    ->count(),
-                'color' => '#14b8a6',
-            ],
-            [
-                'label' => 'Manual/Admin',
-                'value' => (clone $query)
-                    ->whereNull('user_id')
-                    ->whereNull('client_ip')
-                    ->whereNull('device_id')
-                    ->count(),
-                'color' => '#f97316',
-            ],
+        $colors = [
+            'Facebook' => '#1877f2',
+            'Google' => '#ea4335',
+            'Instagram' => '#e1306c',
+            'WhatsApp' => '#22c55e',
+            'YouTube' => '#ff0000',
+            'TikTok' => '#111827',
+            'Direct' => '#4f46e5',
         ];
 
-        return collect($sources)
-            ->filter(fn (array $source): bool => $source['value'] > 0)
-            ->map(fn (array $source): array => [
-                ...$source,
-                'percentage' => round(($source['value'] / $total) * 100, 1),
+        return (clone $query)
+            ->selectRaw("COALESCE(NULLIF(order_source, ''), 'Direct') as source_label, COUNT(*) as total")
+            ->groupBy('source_label')
+            ->orderByDesc('total')
+            ->get()
+            ->map(fn ($row, int $index): array => [
+                'label' => (string) $row->source_label,
+                'value' => (int) $row->total,
+                'percentage' => round(((int) $row->total / $total) * 100, 1),
+                'color' => $colors[(string) $row->source_label] ?? ['#f97316', '#14b8a6', '#8b5cf6', '#0f766e'][$index % 4],
             ])
             ->values()
             ->all();

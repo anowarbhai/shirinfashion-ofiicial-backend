@@ -55,6 +55,10 @@ class OrderController extends Controller
             'coupon_code' => ['nullable', 'string'],
             'otp_session_token' => ['nullable', 'string'],
             'device_id' => ['nullable', 'string', 'max:120'],
+            'order_source' => ['nullable', 'string', 'max:80'],
+            'order_source_detail' => ['nullable', 'string', 'max:255'],
+            'referrer_url' => ['nullable', 'string', 'max:2000'],
+            'utm_source' => ['nullable', 'string', 'max:120'],
             'shipping_address' => ['required', 'array'],
             'shipping_address.address' => ['required', 'string'],
             'shipping_address.city' => ['nullable', 'string'],
@@ -170,6 +174,10 @@ class OrderController extends Controller
                 'phone' => $payload['phone'],
                 'client_ip' => $clientIp,
                 'device_id' => $payload['device_id'] ?? null,
+                'order_source' => $this->normalizeOrderSource($payload['order_source'] ?? null, $payload['utm_source'] ?? null, $payload['referrer_url'] ?? null),
+                'order_source_detail' => $payload['order_source_detail'] ?? null,
+                'referrer_url' => $payload['referrer_url'] ?? null,
+                'utm_source' => $payload['utm_source'] ?? null,
                 'status' => 'processing',
                 'payment_method' => $payload['payment_method'],
                 'payment_status' => $payload['payment_method'] === 'cod' ? 'pending_collection' : 'authorized',
@@ -510,6 +518,42 @@ class OrderController extends Controller
         $normalizedPhone = preg_replace('/[^0-9]/', '', $phone) ?: 'guest';
 
         return sprintf('%s-%s@guest.checkout', $normalizedPhone, strtolower((string) str()->random(6)));
+    }
+
+    protected function normalizeOrderSource(?string $source, ?string $utmSource, ?string $referrerUrl): string
+    {
+        $value = strtolower(trim((string) ($utmSource ?: $source)));
+
+        if ($value !== '') {
+            return match (true) {
+                str_contains($value, 'facebook'), str_contains($value, 'fb') => 'Facebook',
+                str_contains($value, 'google'), str_contains($value, 'gads'), str_contains($value, 'adwords') => 'Google',
+                str_contains($value, 'instagram'), str_contains($value, 'ig') => 'Instagram',
+                str_contains($value, 'whatsapp') => 'WhatsApp',
+                str_contains($value, 'youtube') => 'YouTube',
+                str_contains($value, 'tiktok') => 'TikTok',
+                str_contains($value, 'direct') => 'Direct',
+                default => str($value)->replace(['-', '_'], ' ')->title()->toString(),
+            };
+        }
+
+        $host = parse_url((string) $referrerUrl, PHP_URL_HOST);
+
+        if (! is_string($host) || $host === '') {
+            return 'Direct';
+        }
+
+        $host = strtolower($host);
+
+        return match (true) {
+            str_contains($host, 'facebook.com'), str_contains($host, 'fb.com') => 'Facebook',
+            str_contains($host, 'google.') => 'Google',
+            str_contains($host, 'instagram.com') => 'Instagram',
+            str_contains($host, 'whatsapp.') || str_contains($host, 'wa.me') => 'WhatsApp',
+            str_contains($host, 'youtube.com') || str_contains($host, 'youtu.be') => 'YouTube',
+            str_contains($host, 'tiktok.com') => 'TikTok',
+            default => 'Direct',
+        };
     }
 
     protected function resolveAuthenticatedUser(Request $request): ?User
