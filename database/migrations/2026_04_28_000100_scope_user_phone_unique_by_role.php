@@ -9,6 +9,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         if ($this->indexExists('users', 'users_phone_unique')) {
             DB::statement('ALTER TABLE `users` DROP INDEX `users_phone_unique`');
         }
@@ -22,6 +26,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         if ($this->indexExists('users', 'users_role_phone_unique')) {
             Schema::table('users', function (Blueprint $table): void {
                 $table->dropUnique('users_role_phone_unique');

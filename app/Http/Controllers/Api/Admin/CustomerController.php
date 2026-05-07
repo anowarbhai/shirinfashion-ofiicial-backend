@@ -144,7 +144,7 @@ class CustomerController extends Controller
 
     protected function customerOrderQuery(User $customer)
     {
-        return Order::query()->where(function ($query) use ($customer): void {
+        return Order::query()->where('status', '!=', 'incomplete')->where(function ($query) use ($customer): void {
             $query->where('user_id', $customer->id);
 
             $phones = $this->phoneVariants($customer->phone);

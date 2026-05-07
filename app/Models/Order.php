@@ -17,8 +17,11 @@ class Order extends Model
         'customer_name',
         'email',
         'phone',
+        'normalized_phone',
         'client_ip',
         'device_id',
+        'cart_session_id',
+        'cart_hash',
         'order_source',
         'order_source_detail',
         'referrer_url',
@@ -31,9 +34,12 @@ class Order extends Model
         'shipping_total',
         'grand_total',
         'shipping_address',
+        'normalized_address_hash',
         'fraud_check',
         'tracking_number',
         'placed_at',
+        'last_activity_at',
+        'completed_at',
         'notes',
     ];
 
@@ -47,6 +53,8 @@ class Order extends Model
             'shipping_address' => 'array',
             'fraud_check' => 'array',
             'placed_at' => 'datetime',
+            'last_activity_at' => 'datetime',
+            'completed_at' => 'datetime',
         ];
     }
 

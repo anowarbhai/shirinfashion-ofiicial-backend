@@ -35,6 +35,8 @@ class DashboardController extends Controller
         $productsQuery = Product::query();
         $previousProductsQuery = Product::query();
 
+        $this->excludeIncompleteOrders($ordersQuery);
+        $this->excludeIncompleteOrders($previousOrdersQuery);
         $this->applyOrderDateRange($ordersQuery, $startDate, $endDate);
         $this->applyOrderDateRange($previousOrdersQuery, $previousStartDate, $previousEndDate);
         $this->applyRange($customersQuery, 'created_at', $startDate, $endDate);
@@ -230,6 +232,11 @@ class DashboardController extends Controller
         }
     }
 
+    private function excludeIncompleteOrders(Builder $query): void
+    {
+        $query->where('status', '!=', 'incomplete');
+    }
+
     /**
      * @return array{current:array<int,array{label:string,value:float}>,previous:array<int,array{label:string,value:float}>}
      */
@@ -245,6 +252,7 @@ class DashboardController extends Controller
         $chartEnd = ($endDate ?? now($this->dashboardTimezone()))->copy()->endOfDay();
         $oldestOrderDate = ! $startDate
             ? Order::query()
+                ->where('status', '!=', 'incomplete')
                 ->selectRaw('MIN(COALESCE(placed_at, created_at)) as oldest_order_date')
                 ->value('oldest_order_date')
             : null;
@@ -289,6 +297,7 @@ class DashboardController extends Controller
 
         $rows = Order::query()
             ->selectRaw("{$bucketExpression} as bucket, SUM(grand_total) as total")
+            ->where('status', '!=', 'incomplete')
             ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [
                 $this->toDatabaseTimezone($startDate),
                 $this->toDatabaseTimezone($endDate),
@@ -318,6 +327,7 @@ class DashboardController extends Controller
 
         $rows = Order::query()
             ->selectRaw("DATE_FORMAT({$dateTimeExpression}, '%Y-%m') as bucket, SUM(grand_total) as total")
+            ->where('status', '!=', 'incomplete')
             ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [
                 $this->toDatabaseTimezone($startDate),
                 $this->toDatabaseTimezone($endDate),
@@ -348,6 +358,7 @@ class DashboardController extends Controller
     {
         $today = now($this->dashboardTimezone())->startOfDay();
         $query = Order::query();
+        $this->excludeIncompleteOrders($query);
         $this->applyOrderDateRange($query, $today->copy(), $today->copy()->endOfDay());
 
         return [
@@ -459,6 +470,7 @@ class DashboardController extends Controller
     private function buildOrderSources(?Carbon $startDate, ?Carbon $endDate): array
     {
         $query = Order::query();
+        $this->excludeIncompleteOrders($query);
         $this->applyOrderDateRange($query, $startDate, $endDate);
 
         $total = (clone $query)->count();
@@ -505,6 +517,7 @@ class DashboardController extends Controller
         }
 
         $total = (float) Order::query()
+            ->where('status', '!=', 'incomplete')
             ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [
                 $this->toDatabaseTimezone($startDate),
                 $this->toDatabaseTimezone($endDate),

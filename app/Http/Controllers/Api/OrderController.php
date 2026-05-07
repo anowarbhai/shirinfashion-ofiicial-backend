@@ -36,6 +36,7 @@ class OrderController extends Controller
         $orders = Order::query()
             ->with('items')
             ->where('user_id', $request->user()->id)
+            ->where('status', '!=', 'incomplete')
             ->latest()
             ->get();
 
@@ -46,28 +47,7 @@ class OrderController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $payload = $request->validate([
-            'customer_name' => ['required', 'string', 'max:255'],
-            'email' => ['nullable', 'email'],
-            'phone' => ['required', 'string', 'max:30'],
-            'payment_method' => ['required', 'in:stripe,paypal,cod'],
-            'shipping_method' => ['required', 'in:inside-dhaka,outside-dhaka'],
-            'coupon_code' => ['nullable', 'string'],
-            'otp_session_token' => ['nullable', 'string'],
-            'device_id' => ['nullable', 'string', 'max:120'],
-            'order_source' => ['nullable', 'string', 'max:80'],
-            'order_source_detail' => ['nullable', 'string', 'max:255'],
-            'referrer_url' => ['nullable', 'string', 'max:2000'],
-            'utm_source' => ['nullable', 'string', 'max:120'],
-            'shipping_address' => ['required', 'array'],
-            'shipping_address.address' => ['required', 'string'],
-            'shipping_address.city' => ['nullable', 'string'],
-            'shipping_address.country' => ['nullable', 'string'],
-            'items' => ['required', 'array', 'min:1'],
-            'items.*.product_id' => ['required', 'integer', 'exists:products,id'],
-            'items.*.quantity' => ['required', 'integer', 'min:1'],
-            'items.*.volume_discount_id' => ['nullable', 'integer', 'exists:product_volume_discounts,id'],
-        ]);
+        $payload = $this->validateOrderPayload($request);
 
         $customer = $this->resolveAuthenticatedUser($request);
         $clientIp = $this->resolveClientIp($request);
@@ -99,140 +79,32 @@ class OrderController extends Controller
         }
 
         $order = DB::transaction(function () use ($customer, $payload, $clientIp) {
-            $productIds = collect($payload['items'])->pluck('product_id')->all();
-            $products = Product::whereIn('id', $productIds)->get()->keyBy('id');
-            $tierIds = collect($payload['items'])->pluck('volume_discount_id')->filter()->all();
-            $tiers = ProductVolumeDiscount::with('freeProduct')
-                ->whereIn('id', $tierIds)
-                ->get()
-                ->keyBy('id');
+            $prepared = $this->prepareOrderPayload($payload, true, true);
+            $order = $this->findMatchingIncompleteOrder($customer, $prepared)
+                ?? new Order(['order_number' => $this->generateOrderNumber()]);
 
-            $subtotal = 0;
-            $orderItems = [];
+            $this->fillOrderFromPreparedPayload(
+                $order,
+                $customer,
+                $payload,
+                $prepared,
+                $clientIp,
+                'processing',
+            );
+            $order->payment_status = $payload['payment_method'] === 'cod' ? 'pending_collection' : 'authorized';
+            $order->tracking_number = $order->tracking_number ?: 'TRK-'.random_int(100000, 999999);
+            $order->placed_at = Carbon::now();
+            $order->completed_at = Carbon::now();
+            $order->last_activity_at = Carbon::now();
+            $order->save();
 
-            foreach ($payload['items'] as $item) {
-                $product = $products->get($item['product_id']);
-
-                if (! $product) {
-                    throw ValidationException::withMessages([
-                        'items' => ['One or more products could not be found.'],
-                    ]);
-                }
-
-                $tier = ! empty($item['volume_discount_id'])
-                    ? $tiers->get($item['volume_discount_id'])
-                    : null;
-
-                if ($tier) {
-                    if ($tier->product_id !== $product->id || ! $tier->is_active) {
-                        throw ValidationException::withMessages([
-                            'items' => ["Selected volume discount is not available for {$product->name}."],
-                        ]);
-                    }
-
-                    if ((int) $item['quantity'] !== $tier->quantity) {
-                        throw ValidationException::withMessages([
-                            'items' => ["{$tier->label} requires exactly {$tier->quantity} items."],
-                        ]);
-                    }
-                }
-
-                if ($product->inventory < $item['quantity']) {
-                    throw ValidationException::withMessages([
-                        'items' => ["{$product->name} does not have enough stock."],
-                    ]);
-                }
-
-                $lineTotal = $tier
-                    ? (float) $tier->flat_price
-                    : (float) $product->price * (int) $item['quantity'];
-                $subtotal += $lineTotal;
-                $orderItems[] = [
-                    'product' => $product,
-                    'tier' => $tier,
-                    'quantity' => (int) $item['quantity'],
-                    'line_total' => $lineTotal,
-                ];
-            }
-
-            $discountTotal = $this->resolveDiscount($payload['coupon_code'] ?? null, $subtotal);
-            $shippingAddress = [
-                'address' => $payload['shipping_address']['address'],
-                'city' => $payload['shipping_address']['city']
-                    ?? ($payload['shipping_method'] === 'inside-dhaka' ? 'Dhaka' : 'Outside Dhaka'),
-                'country' => $payload['shipping_address']['country'] ?? 'Bangladesh',
-            ];
-            $shippingTotal = $this->resolveShippingTotal($payload['shipping_method'], $subtotal);
-            $grandTotal = $subtotal + $shippingTotal - $discountTotal;
-            $fraudCheck = $this->resolveFraudCheck($payload['phone']);
-
-            $order = Order::create([
-                'order_number' => 'SBA-'.random_int(1000, 9999),
-                'user_id' => $customer?->id,
-                'customer_name' => $payload['customer_name'],
-                'email' => $payload['email'] ?? $customer?->email ?? $this->buildGuestEmail($payload['phone']),
-                'phone' => $payload['phone'],
-                'client_ip' => $clientIp,
-                'device_id' => $payload['device_id'] ?? null,
-                'order_source' => $this->normalizeOrderSource($payload['order_source'] ?? null, $payload['utm_source'] ?? null, $payload['referrer_url'] ?? null),
-                'order_source_detail' => $payload['order_source_detail'] ?? null,
-                'referrer_url' => $payload['referrer_url'] ?? null,
-                'utm_source' => $payload['utm_source'] ?? null,
-                'status' => 'processing',
-                'payment_method' => $payload['payment_method'],
-                'payment_status' => $payload['payment_method'] === 'cod' ? 'pending_collection' : 'authorized',
-                'subtotal' => $subtotal,
-                'discount_total' => $discountTotal,
-                'shipping_total' => $shippingTotal,
-                'grand_total' => $grandTotal,
-                'shipping_address' => $shippingAddress,
-                'fraud_check' => $fraudCheck,
-                'tracking_number' => 'TRK-'.random_int(100000, 999999),
-                'placed_at' => Carbon::now(),
-            ]);
-
-            foreach ($orderItems as $item) {
-                /** @var Product $product */
-                $product = $item['product'];
-
-                $order->items()->create([
-                    'product_id' => $product->id,
-                    'volume_discount_id' => $item['tier']?->id,
-                    'product_name' => $product->name,
-                    'sku' => $product->sku,
-                    'price' => $item['tier']
-                        ? round($item['line_total'] / max(1, $item['quantity']), 2)
-                        : $product->price,
-                    'quantity' => $item['quantity'],
-                    'line_total' => $item['line_total'],
-                    'is_free_gift' => false,
-                ]);
-
-                $product->decrement('inventory', $item['quantity']);
-
-                if ($item['tier']?->freeProduct) {
-                    $gift = $item['tier']->freeProduct;
-
-                    $order->items()->create([
-                        'product_id' => $gift->id,
-                        'volume_discount_id' => $item['tier']->id,
-                        'product_name' => $gift->name.' (Free Gift)',
-                        'sku' => $gift->sku,
-                        'price' => 0,
-                        'quantity' => 1,
-                        'line_total' => 0,
-                        'is_free_gift' => true,
-                    ]);
-
-                    if ($gift->inventory > 0) {
-                        $gift->decrement('inventory');
-                    }
-                }
-            }
+            $this->replaceOrderItems($order, $prepared['order_items'], true);
 
             if (! empty($payload['coupon_code'])) {
                 Coupon::where('code', strtoupper($payload['coupon_code']))->increment('used_count');
             }
+
+            $this->deleteDuplicateIncompleteOrders($order, $customer, $prepared);
 
             return $order->load('items');
         });
@@ -244,6 +116,49 @@ class OrderController extends Controller
             'data' => $order,
             'checkout_guard' => $this->resolveNextCheckoutGuardState($order),
         ], 201);
+    }
+
+    public function storeIncomplete(Request $request): JsonResponse
+    {
+        $payload = $this->validateOrderPayload($request);
+        $customer = $this->resolveAuthenticatedUser($request);
+        $clientIp = $this->resolveClientIp($request);
+
+        $order = DB::transaction(function () use ($customer, $payload, $clientIp) {
+            $prepared = $this->prepareOrderPayload($payload, false, false);
+            $recentCompletedOrder = $this->findRecentCompletedOrder($customer, $prepared);
+
+            if ($recentCompletedOrder) {
+                return $recentCompletedOrder->load('items');
+            }
+
+            $order = $this->findMatchingIncompleteOrder($customer, $prepared)
+                ?? new Order(['order_number' => $this->generateOrderNumber()]);
+
+            $this->fillOrderFromPreparedPayload(
+                $order,
+                $customer,
+                $payload,
+                $prepared,
+                $clientIp,
+                'incomplete',
+            );
+            $order->payment_status = 'pending';
+            $order->tracking_number = null;
+            $order->placed_at = null;
+            $order->completed_at = null;
+            $order->last_activity_at = Carbon::now();
+            $order->save();
+
+            $this->replaceOrderItems($order, $prepared['order_items'], false);
+
+            return $order->load('items');
+        });
+
+        return response()->json([
+            'message' => 'Incomplete order saved successfully.',
+            'data' => $order,
+        ]);
     }
 
     public function sendOtp(Request $request): JsonResponse
@@ -324,6 +239,317 @@ class OrderController extends Controller
         return response()->json([
             'data' => $order,
         ]);
+    }
+
+    protected function validateOrderPayload(Request $request): array
+    {
+        return $request->validate([
+            'customer_name' => ['required', 'string', 'max:255'],
+            'email' => ['nullable', 'email'],
+            'phone' => ['required', 'string', 'max:30'],
+            'payment_method' => ['required', 'in:stripe,paypal,cod'],
+            'shipping_method' => ['required', 'in:inside-dhaka,outside-dhaka'],
+            'coupon_code' => ['nullable', 'string'],
+            'otp_session_token' => ['nullable', 'string'],
+            'device_id' => ['nullable', 'string', 'max:120'],
+            'cart_session_id' => ['nullable', 'string', 'max:120'],
+            'order_source' => ['nullable', 'string', 'max:80'],
+            'order_source_detail' => ['nullable', 'string', 'max:255'],
+            'referrer_url' => ['nullable', 'string', 'max:2000'],
+            'utm_source' => ['nullable', 'string', 'max:120'],
+            'notes' => ['nullable', 'string'],
+            'shipping_address' => ['required', 'array'],
+            'shipping_address.address' => ['required', 'string'],
+            'shipping_address.city' => ['nullable', 'string'],
+            'shipping_address.country' => ['nullable', 'string'],
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.product_id' => ['required', 'integer', 'exists:products,id'],
+            'items.*.quantity' => ['required', 'integer', 'min:1'],
+            'items.*.volume_discount_id' => ['nullable', 'integer', 'exists:product_volume_discounts,id'],
+        ]);
+    }
+
+    protected function prepareOrderPayload(
+        array $payload,
+        bool $enforceInventory,
+        bool $includeFraudCheck,
+    ): array {
+        $productIds = collect($payload['items'])->pluck('product_id')->all();
+        $products = Product::whereIn('id', $productIds)->get()->keyBy('id');
+        $tierIds = collect($payload['items'])->pluck('volume_discount_id')->filter()->all();
+        $tiers = ProductVolumeDiscount::with('freeProduct')
+            ->whereIn('id', $tierIds)
+            ->get()
+            ->keyBy('id');
+
+        $subtotal = 0;
+        $orderItems = [];
+
+        foreach ($payload['items'] as $item) {
+            $product = $products->get($item['product_id']);
+
+            if (! $product) {
+                throw ValidationException::withMessages([
+                    'items' => ['One or more products could not be found.'],
+                ]);
+            }
+
+            $tier = ! empty($item['volume_discount_id'])
+                ? $tiers->get($item['volume_discount_id'])
+                : null;
+
+            if ($tier) {
+                if ($tier->product_id !== $product->id || ! $tier->is_active) {
+                    throw ValidationException::withMessages([
+                        'items' => ["Selected volume discount is not available for {$product->name}."],
+                    ]);
+                }
+
+                if ((int) $item['quantity'] !== $tier->quantity) {
+                    throw ValidationException::withMessages([
+                        'items' => ["{$tier->label} requires exactly {$tier->quantity} items."],
+                    ]);
+                }
+            }
+
+            if ($enforceInventory && $product->inventory < $item['quantity']) {
+                throw ValidationException::withMessages([
+                    'items' => ["{$product->name} does not have enough stock."],
+                ]);
+            }
+
+            $lineTotal = $tier
+                ? (float) $tier->flat_price
+                : (float) $product->price * (int) $item['quantity'];
+            $subtotal += $lineTotal;
+            $orderItems[] = [
+                'product' => $product,
+                'tier' => $tier,
+                'quantity' => (int) $item['quantity'],
+                'line_total' => $lineTotal,
+            ];
+        }
+
+        $discountTotal = $this->resolveDiscount($payload['coupon_code'] ?? null, $subtotal);
+        $shippingAddress = [
+            'address' => $payload['shipping_address']['address'],
+            'city' => $payload['shipping_address']['city']
+                ?? ($payload['shipping_method'] === 'inside-dhaka' ? 'Dhaka' : 'Outside Dhaka'),
+            'country' => $payload['shipping_address']['country'] ?? 'Bangladesh',
+        ];
+        $shippingTotal = $this->resolveShippingTotal($payload['shipping_method'], $subtotal);
+
+        return [
+            'order_items' => $orderItems,
+            'subtotal' => $subtotal,
+            'discount_total' => $discountTotal,
+            'shipping_total' => $shippingTotal,
+            'grand_total' => $subtotal + $shippingTotal - $discountTotal,
+            'shipping_address' => $shippingAddress,
+            'fraud_check' => $includeFraudCheck ? $this->resolveFraudCheck($payload['phone']) : null,
+            'normalized_phone' => $this->normalizePhoneForMatch($payload['phone']),
+            'normalized_address_hash' => $this->hashAddressForMatch($shippingAddress),
+            'cart_hash' => $this->hashCartForMatch($payload),
+        ];
+    }
+
+    protected function fillOrderFromPreparedPayload(
+        Order $order,
+        ?User $customer,
+        array $payload,
+        array $prepared,
+        ?string $clientIp,
+        string $status,
+    ): void {
+        $order->fill([
+            'user_id' => $customer?->id,
+            'customer_name' => $payload['customer_name'],
+            'email' => $payload['email'] ?? $customer?->email ?? $order->email ?? $this->buildGuestEmail($payload['phone']),
+            'phone' => $payload['phone'],
+            'normalized_phone' => $prepared['normalized_phone'],
+            'client_ip' => $clientIp,
+            'device_id' => $payload['device_id'] ?? null,
+            'cart_session_id' => $payload['cart_session_id'] ?? null,
+            'cart_hash' => $prepared['cart_hash'],
+            'order_source' => $this->normalizeOrderSource($payload['order_source'] ?? null, $payload['utm_source'] ?? null, $payload['referrer_url'] ?? null),
+            'order_source_detail' => $payload['order_source_detail'] ?? null,
+            'referrer_url' => $payload['referrer_url'] ?? null,
+            'utm_source' => $payload['utm_source'] ?? null,
+            'status' => $status,
+            'payment_method' => $payload['payment_method'],
+            'subtotal' => $prepared['subtotal'],
+            'discount_total' => $prepared['discount_total'],
+            'shipping_total' => $prepared['shipping_total'],
+            'grand_total' => $prepared['grand_total'],
+            'shipping_address' => $prepared['shipping_address'],
+            'normalized_address_hash' => $prepared['normalized_address_hash'],
+            'fraud_check' => $prepared['fraud_check'],
+            'notes' => $payload['notes'] ?? null,
+        ]);
+    }
+
+    protected function replaceOrderItems(Order $order, array $orderItems, bool $decrementInventory): void
+    {
+        $order->items()->delete();
+
+        foreach ($orderItems as $item) {
+            /** @var Product $product */
+            $product = $item['product'];
+
+            $order->items()->create([
+                'product_id' => $product->id,
+                'volume_discount_id' => $item['tier']?->id,
+                'product_name' => $product->name,
+                'sku' => $product->sku,
+                'price' => $item['tier']
+                    ? round($item['line_total'] / max(1, $item['quantity']), 2)
+                    : $product->price,
+                'quantity' => $item['quantity'],
+                'line_total' => $item['line_total'],
+                'is_free_gift' => false,
+            ]);
+
+            if ($decrementInventory) {
+                $product->decrement('inventory', $item['quantity']);
+            }
+
+            if ($item['tier']?->freeProduct) {
+                $gift = $item['tier']->freeProduct;
+
+                $order->items()->create([
+                    'product_id' => $gift->id,
+                    'volume_discount_id' => $item['tier']->id,
+                    'product_name' => $gift->name.' (Free Gift)',
+                    'sku' => $gift->sku,
+                    'price' => 0,
+                    'quantity' => 1,
+                    'line_total' => 0,
+                    'is_free_gift' => true,
+                ]);
+
+                if ($decrementInventory && $gift->inventory > 0) {
+                    $gift->decrement('inventory');
+                }
+            }
+        }
+    }
+
+    protected function findMatchingIncompleteOrder(?User $customer, array $prepared): ?Order
+    {
+        $query = Order::query()->where('status', 'incomplete');
+
+        if ($customer) {
+            $query->where('user_id', $customer->id);
+        } elseif ($prepared['normalized_phone']) {
+            $query->where('normalized_phone', $prepared['normalized_phone']);
+        } else {
+            return null;
+        }
+
+        return $query
+            ->latest('last_activity_at')
+            ->latest()
+            ->first();
+    }
+
+    protected function findRecentCompletedOrder(?User $customer, array $prepared): ?Order
+    {
+        $query = Order::query()
+            ->where('status', '!=', 'incomplete')
+            ->where('cart_hash', $prepared['cart_hash'])
+            ->where('completed_at', '>=', Carbon::now()->subMinutes(10));
+
+        if ($customer) {
+            $query->where('user_id', $customer->id);
+        } elseif ($prepared['normalized_phone']) {
+            $query->where('normalized_phone', $prepared['normalized_phone']);
+        } else {
+            return null;
+        }
+
+        return $query->latest('completed_at')->first();
+    }
+
+    protected function deleteDuplicateIncompleteOrders(
+        Order $completedOrder,
+        ?User $customer,
+        array $prepared,
+    ): void {
+        $query = Order::query()
+            ->where('status', 'incomplete')
+            ->whereKeyNot($completedOrder->id);
+
+        if ($customer) {
+            $query->where('user_id', $customer->id);
+        } elseif ($prepared['normalized_phone']) {
+            $query->where('normalized_phone', $prepared['normalized_phone']);
+        } else {
+            return;
+        }
+
+        $query->get()->each(function (Order $order): void {
+            $order->items()->delete();
+            $order->delete();
+        });
+    }
+
+    protected function normalizePhoneForMatch(string $phone): string
+    {
+        $digits = preg_replace('/\D+/', '', trim($phone)) ?? '';
+
+        if (str_starts_with($digits, '880') && strlen($digits) === 13) {
+            return '0'.substr($digits, 3);
+        }
+
+        return $digits;
+    }
+
+    protected function hashAddressForMatch(array $shippingAddress): string
+    {
+        $normalized = collect([
+            $shippingAddress['address'] ?? '',
+            $shippingAddress['city'] ?? '',
+            $shippingAddress['country'] ?? '',
+        ])
+            ->map(fn ($value) => preg_replace('/\s+/', ' ', strtolower(trim((string) $value))))
+            ->filter()
+            ->implode('|');
+
+        return hash('sha256', $normalized);
+    }
+
+    protected function hashCartForMatch(array $payload): string
+    {
+        $items = collect($payload['items'])
+            ->map(fn (array $item) => [
+                'product_id' => (int) $item['product_id'],
+                'quantity' => (int) $item['quantity'],
+                'volume_discount_id' => isset($item['volume_discount_id'])
+                    ? (int) $item['volume_discount_id']
+                    : null,
+            ])
+            ->sortBy([
+                ['product_id', 'asc'],
+                ['volume_discount_id', 'asc'],
+                ['quantity', 'asc'],
+            ])
+            ->values()
+            ->all();
+
+        return hash('sha256', json_encode([
+            'items' => $items,
+            'shipping_method' => $payload['shipping_method'],
+            'coupon_code' => strtoupper((string) ($payload['coupon_code'] ?? '')),
+        ]));
+    }
+
+    protected function generateOrderNumber(): string
+    {
+        do {
+            $orderNumber = 'SBA-'.random_int(1000, 9999);
+        } while (Order::where('order_number', $orderNumber)->exists());
+
+        return $orderNumber;
     }
 
     protected function resolveDiscount(?string $couponCode, float $subtotal): float
@@ -418,7 +644,7 @@ class OrderController extends Controller
 
         $recentOrder = Order::query()
             ->where('placed_at', '>=', $cutoff)
-            ->whereNotIn('status', ['cancelled', 'refunded'])
+            ->whereNotIn('status', ['cancelled', 'refunded', 'incomplete'])
             ->where(function ($query) use ($matches): void {
                 if (isset($matches['phone'])) {
                     $query->orWhere('phone', $matches['phone']);

@@ -82,6 +82,7 @@ Route::post('/reviews', [ReviewController::class, 'store']);
 Route::get('/tags', [TagController::class, 'index']);
 Route::post('/coupons/validate', [CouponController::class, 'validateCode']);
 Route::post('/orders', [OrderController::class, 'store']);
+Route::post('/orders/incomplete', [OrderController::class, 'storeIncomplete']);
 Route::post('/orders/send-otp', [OrderController::class, 'sendOtp']);
 Route::post('/orders/verify-otp', [OrderController::class, 'verifyOtp']);
 Route::post('/orders/track', [OrderController::class, 'track']);
