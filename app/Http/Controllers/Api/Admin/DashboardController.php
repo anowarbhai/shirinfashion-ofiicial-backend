@@ -34,8 +34,8 @@ class DashboardController extends Controller
         $productsQuery = Product::query();
         $previousProductsQuery = Product::query();
 
-        $this->applyRange($ordersQuery, 'placed_at', $startDate, $endDate);
-        $this->applyRange($previousOrdersQuery, 'placed_at', $previousStartDate, $previousEndDate);
+        $this->applyOrderDateRange($ordersQuery, $startDate, $endDate);
+        $this->applyOrderDateRange($previousOrdersQuery, $previousStartDate, $previousEndDate);
         $this->applyRange($customersQuery, 'created_at', $startDate, $endDate);
         $this->applyRange($previousCustomersQuery, 'created_at', $previousStartDate, $previousEndDate);
         $this->applyRange($productsQuery, 'created_at', $startDate, $endDate);
@@ -106,7 +106,14 @@ class DashboardController extends Controller
                 'pending_reviews' => Review::query()->where('status', 'pending')->count(),
                 'active_coupons' => Coupon::query()->where('is_active', true)->count(),
                 'charts' => [
-                    'revenue' => $this->buildRevenueChart($startDate, $endDate, $previousStartDate, $previousEndDate),
+                    'revenue' => $this->buildRevenueChart(
+                        $startDate,
+                        $endDate,
+                        $previousStartDate,
+                        $previousEndDate,
+                        $revenue,
+                        $previousRevenue,
+                    ),
                     'order_sources' => $this->buildOrderSources($startDate, $endDate),
                 ],
                 'quick_actions' => [
@@ -203,10 +210,34 @@ class DashboardController extends Controller
         }
     }
 
+    private function applyOrderDateRange(Builder $query, ?Carbon $startDate, ?Carbon $endDate): void
+    {
+        if (! $startDate && ! $endDate) {
+            return;
+        }
+
+        $dateColumn = DB::raw('COALESCE(placed_at, created_at)');
+
+        if ($startDate) {
+            $query->where($dateColumn, '>=', $startDate);
+        }
+
+        if ($endDate) {
+            $query->where($dateColumn, '<=', $endDate);
+        }
+    }
+
     /**
      * @return array{current:array<int,array{label:string,value:float}>,previous:array<int,array{label:string,value:float}>}
      */
-    private function buildRevenueChart(?Carbon $startDate, ?Carbon $endDate, ?Carbon $previousStartDate, ?Carbon $previousEndDate): array
+    private function buildRevenueChart(
+        ?Carbon $startDate,
+        ?Carbon $endDate,
+        ?Carbon $previousStartDate,
+        ?Carbon $previousEndDate,
+        float $rangeRevenue,
+        float $previousRangeRevenue,
+    ): array
     {
         $chartEnd = ($endDate ?? now(config('app.timezone')))->copy()->endOfDay();
         $oldestOrderDate = ! $startDate
@@ -220,18 +251,28 @@ class DashboardController extends Controller
             ->startOfDay();
 
         if ($chartStart->diffInDays($chartEnd) > 370) {
+            $current = $this->aggregateRevenueByMonth($chartStart, $chartEnd);
+            $previous = $previousStartDate && $previousEndDate
+                ? $this->aggregateRevenueByMonth($previousStartDate, $previousEndDate)
+                : [];
+
             return [
-                'current' => $this->aggregateRevenueByMonth($chartStart, $chartEnd),
+                'current' => $this->ensureRevenuePoints($current, $chartStart, $chartEnd, $rangeRevenue),
                 'previous' => $previousStartDate && $previousEndDate
-                    ? $this->aggregateRevenueByMonth($previousStartDate, $previousEndDate)
+                    ? $this->ensureRevenuePoints($previous, $previousStartDate, $previousEndDate, $previousRangeRevenue)
                     : [],
             ];
         }
 
+        $current = $this->aggregateRevenueByDay($chartStart, $chartEnd);
+        $previous = $previousStartDate && $previousEndDate
+            ? $this->aggregateRevenueByDay($previousStartDate, $previousEndDate)
+            : [];
+
         return [
-            'current' => $this->aggregateRevenueByDay($chartStart, $chartEnd),
+            'current' => $this->ensureRevenuePoints($current, $chartStart, $chartEnd, $rangeRevenue),
             'previous' => $previousStartDate && $previousEndDate
-                ? $this->aggregateRevenueByDay($previousStartDate, $previousEndDate)
+                ? $this->ensureRevenuePoints($previous, $previousStartDate, $previousEndDate, $previousRangeRevenue)
                 : [],
         ];
     }
@@ -293,7 +334,7 @@ class DashboardController extends Controller
     private function buildOrderSources(?Carbon $startDate, ?Carbon $endDate): array
     {
         $query = Order::query();
-        $this->applyRange($query, 'placed_at', $startDate, $endDate);
+        $this->applyOrderDateRange($query, $startDate, $endDate);
 
         $total = (clone $query)->count();
 
@@ -336,6 +377,42 @@ class DashboardController extends Controller
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * @param array<int,array{label:string,value:float}> $points
+     * @return array<int,array{label:string,value:float}>
+     */
+    private function ensureRevenuePoints(array $points, Carbon $startDate, Carbon $endDate, float $fallbackRevenue): array
+    {
+        $hasRevenue = collect($points)->contains(fn (array $point): bool => (float) $point['value'] > 0);
+
+        if ($hasRevenue) {
+            return $points;
+        }
+
+        $total = (float) Order::query()
+            ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [$startDate, $endDate])
+            ->sum('grand_total');
+
+        if ($total <= 0 && $fallbackRevenue > 0) {
+            $total = $fallbackRevenue;
+        }
+
+        if ($total <= 0) {
+            return $points;
+        }
+
+        return [
+            [
+                'label' => $startDate->format('M j'),
+                'value' => 0,
+            ],
+            [
+                'label' => $endDate->format('M j'),
+                'value' => round($total, 2),
+            ],
+        ];
     }
 
     private function formatCurrency(float $value): string
