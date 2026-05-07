@@ -13,6 +13,7 @@ use Carbon\CarbonPeriod;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
@@ -209,7 +210,9 @@ class DashboardController extends Controller
     {
         $chartEnd = ($endDate ?? now(config('app.timezone')))->copy()->endOfDay();
         $oldestOrderDate = ! $startDate
-            ? Order::query()->whereNotNull('placed_at')->min('placed_at')
+            ? Order::query()
+                ->selectRaw('MIN(COALESCE(placed_at, created_at)) as oldest_order_date')
+                ->value('oldest_order_date')
             : null;
         $chartStart = ($startDate
             ?? ($oldestOrderDate ? Carbon::parse($oldestOrderDate, config('app.timezone')) : $chartEnd->copy()->subDays(29)))
@@ -239,9 +242,8 @@ class DashboardController extends Controller
     private function aggregateRevenueByDay(Carbon $startDate, Carbon $endDate): array
     {
         $rows = Order::query()
-            ->selectRaw('DATE(placed_at) as bucket, SUM(grand_total) as total')
-            ->whereNotNull('placed_at')
-            ->whereBetween('placed_at', [$startDate, $endDate])
+            ->selectRaw('DATE(COALESCE(placed_at, created_at)) as bucket, SUM(grand_total) as total')
+            ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [$startDate, $endDate])
             ->groupBy('bucket')
             ->pluck('total', 'bucket');
 
@@ -264,9 +266,8 @@ class DashboardController extends Controller
     private function aggregateRevenueByMonth(Carbon $startDate, Carbon $endDate): array
     {
         $rows = Order::query()
-            ->selectRaw("DATE_FORMAT(placed_at, '%Y-%m') as bucket, SUM(grand_total) as total")
-            ->whereNotNull('placed_at')
-            ->whereBetween('placed_at', [$startDate, $endDate])
+            ->selectRaw("DATE_FORMAT(COALESCE(placed_at, created_at), '%Y-%m') as bucket, SUM(grand_total) as total")
+            ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [$startDate, $endDate])
             ->groupBy('bucket')
             ->pluck('total', 'bucket');
 
