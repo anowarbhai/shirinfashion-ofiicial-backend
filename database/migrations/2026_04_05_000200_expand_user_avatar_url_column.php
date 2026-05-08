@@ -8,17 +8,27 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (! Schema::hasColumn('users', 'role')) {
+            Schema::table('users', function (Blueprint $table): void {
+                $table->string('role')->default('customer')->index()->after('phone');
+            });
+        }
+
         if (! Schema::hasColumn('users', 'avatar_url')) {
             Schema::table('users', function (Blueprint $table): void {
                 $table->longText('avatar_url')->nullable()->after('role');
             });
-
-            return;
+        } else {
+            Schema::table('users', function (Blueprint $table): void {
+                $table->longText('avatar_url')->nullable()->change();
+            });
         }
 
-        Schema::table('users', function (Blueprint $table): void {
-            $table->longText('avatar_url')->nullable()->change();
-        });
+        if (! Schema::hasColumn('users', 'marketing_opt_in')) {
+            Schema::table('users', function (Blueprint $table): void {
+                $table->boolean('marketing_opt_in')->default(false)->after('avatar_url');
+            });
+        }
     }
 
     public function down(): void
