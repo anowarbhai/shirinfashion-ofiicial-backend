@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\MediaAsset;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -57,24 +58,24 @@ class MediaController extends Controller
             ]);
 
             $file = $validated['file'];
+            $disk = (string) config('filesystems.media', 'public');
             $directory = 'media/'.now()->format('Y/m');
             $filename = Str::uuid()->toString().'-'.preg_replace('/[^A-Za-z0-9.\-_]/', '-', $file->getClientOriginalName());
-            $storedPath = $file->storeAs($directory, $filename, 'public');
-            $absolutePath = Storage::disk('public')->path($storedPath);
-            $dimensions = @getimagesize($absolutePath) ?: [null, null];
-            $publicBase = rtrim($request->getSchemeAndHttpHost(), '/').'/storage/';
+            $dimensions = @getimagesize($file->getRealPath()) ?: [null, null];
+            $storedPath = $file->storeAs($directory, $filename, $disk);
 
             $media = MediaAsset::create([
                 'file_name' => $file->getClientOriginalName(),
                 'alt_text' => $validated['alt_text'] ?? null,
-                'url' => $publicBase.$storedPath,
-                'disk' => 'public',
+                'url' => Storage::disk($disk)->url($storedPath),
+                'disk' => $disk,
                 'mime_type' => $file->getMimeType(),
                 'size_bytes' => $file->getSize(),
                 'width' => $dimensions[0],
                 'height' => $dimensions[1],
                 'metadata' => [
                     'folder' => $directory,
+                    'path' => $storedPath,
                     'original_name' => $file->getClientOriginalName(),
                 ],
             ]);
@@ -110,22 +111,33 @@ class MediaController extends Controller
 
     protected function deleteStoredMedia(MediaAsset $mediaAsset): void
     {
+        $disk = $mediaAsset->disk ?: 'public';
+
+        if (! array_key_exists($disk, config('filesystems.disks', []))) {
+            return;
+        }
+
         $url = $mediaAsset->getRawOriginal('url');
+        $storagePath = Arr::get($mediaAsset->metadata ?? [], 'path');
 
-        if (! is_string($url) || $url === '') {
-            return;
+        if (! is_string($storagePath) || $storagePath === '') {
+            if (! is_string($url) || $url === '') {
+                return;
+            }
+
+            $path = parse_url($url, PHP_URL_PATH);
+
+            if (! is_string($path) || $path === '') {
+                return;
+            }
+
+            $storagePath = str_contains($path, '/storage/')
+                ? ltrim(substr($path, strpos($path, '/storage/') + 9), '/')
+                : ltrim($path, '/');
         }
 
-        $path = parse_url($url, PHP_URL_PATH);
-
-        if (! is_string($path) || ! str_contains($path, '/storage/')) {
-            return;
-        }
-
-        $storagePath = ltrim(substr($path, strpos($path, '/storage/') + 9), '/');
-
-        if ($storagePath !== '' && Storage::disk('public')->exists($storagePath)) {
-            Storage::disk('public')->delete($storagePath);
+        if ($storagePath !== '' && Storage::disk($disk)->exists($storagePath)) {
+            Storage::disk($disk)->delete($storagePath);
         }
     }
 }

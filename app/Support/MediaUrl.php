@@ -65,11 +65,11 @@ class MediaUrl
         }
 
         if (str_starts_with($normalized, '/storage/')) {
-            return rtrim((string) config('app.url'), '/').$normalized;
+            return rtrim((string) config('filesystems.disks.public.url'), '/').'/'.ltrim(substr($normalized, 9), '/');
         }
 
         if (str_starts_with($normalized, 'storage/')) {
-            return rtrim((string) config('app.url'), '/').'/'.$normalized;
+            return rtrim((string) config('filesystems.disks.public.url'), '/').'/'.ltrim(substr($normalized, 8), '/');
         }
 
         return $normalized;
