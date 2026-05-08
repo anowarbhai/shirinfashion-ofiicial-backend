@@ -213,6 +213,46 @@ class OrderController extends Controller
         ]);
     }
 
+    public function destroy(Order $order): JsonResponse
+    {
+        DB::transaction(function () use ($order): void {
+            $order->items()->delete();
+            $order->delete();
+        });
+
+        return response()->json([
+            'message' => 'Order deleted successfully.',
+        ]);
+    }
+
+    public function bulkDestroy(Request $request): JsonResponse
+    {
+        $payload = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'exists:orders,id'],
+        ]);
+
+        $ids = collect($payload['ids'])->map(fn ($id) => (int) $id)->unique()->values();
+
+        DB::transaction(function () use ($ids): void {
+            Order::query()
+                ->whereIn('id', $ids)
+                ->with('items')
+                ->get()
+                ->each(function (Order $order): void {
+                    $order->items()->delete();
+                    $order->delete();
+                });
+        });
+
+        return response()->json([
+            'message' => $ids->count() === 1
+                ? 'Order deleted successfully.'
+                : "{$ids->count()} orders deleted successfully.",
+            'deleted_ids' => $ids,
+        ]);
+    }
+
     protected function resolveCouponDiscount(?string $couponCode, float $subtotal): float
     {
         if (! $couponCode) {

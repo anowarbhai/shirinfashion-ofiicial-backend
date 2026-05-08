@@ -117,7 +117,9 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::apiResource('coupons', AdminCouponController::class);
         Route::get('/orders', [AdminOrderController::class, 'index']);
         Route::post('/orders', [AdminOrderController::class, 'store']);
+        Route::delete('/orders', [AdminOrderController::class, 'bulkDestroy']);
         Route::patch('/orders/{order}', [AdminOrderController::class, 'update']);
+        Route::delete('/orders/{order}', [AdminOrderController::class, 'destroy']);
         Route::get('/customers', [AdminCustomerController::class, 'index']);
         Route::post('/customers', [AdminCustomerController::class, 'store']);
         Route::get('/customers/{customer}', [AdminCustomerController::class, 'show']);
