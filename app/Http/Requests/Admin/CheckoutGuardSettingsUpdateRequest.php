@@ -18,6 +18,7 @@ class CheckoutGuardSettingsUpdateRequest extends FormRequest
             'block_by_phone' => ['required', 'boolean'],
             'block_by_ip' => ['required', 'boolean'],
             'block_by_device' => ['required', 'boolean'],
+            'protect_incomplete_orders' => ['required', 'boolean'],
             'cooldown_minutes' => ['required', 'integer', 'min:1', 'max:1440'],
             'message' => ['nullable', 'string', 'max:255'],
         ];

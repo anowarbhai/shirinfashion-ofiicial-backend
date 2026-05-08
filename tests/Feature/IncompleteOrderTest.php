@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Category;
 use App\Models\Order;
 use App\Models\Product;
+use App\Services\AdminSettingsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -66,6 +67,53 @@ class IncompleteOrderTest extends TestCase
         $this->assertSame('01829312186', Order::query()->value('phone'));
     }
 
+    public function test_incomplete_order_is_skipped_during_checkout_guard_cooldown(): void
+    {
+        $product = $this->createProduct();
+        $payload = $this->orderPayload($product);
+
+        $this->postJson('/api/orders', $payload)->assertCreated();
+
+        $this->postJson('/api/orders/incomplete', $this->orderPayload(
+            $product,
+            quantity: 2,
+            address: 'New Road, Dhaka',
+            cartSessionId: 'new-cart-session',
+        ))
+            ->assertOk()
+            ->assertJsonPath('incomplete_order_skipped', true);
+
+        $this->assertDatabaseCount('orders', 1);
+        $this->assertSame('processing', Order::query()->value('status'));
+    }
+
+    public function test_incomplete_order_guard_can_be_disabled(): void
+    {
+        app(AdminSettingsService::class)->saveGroup('checkout_guard', [
+            'enabled' => true,
+            'block_by_phone' => true,
+            'block_by_ip' => true,
+            'block_by_device' => true,
+            'protect_incomplete_orders' => false,
+            'cooldown_minutes' => 180,
+            'message' => 'You can place another order after {{time}}.',
+        ]);
+
+        $product = $this->createProduct();
+
+        $this->postJson('/api/orders', $this->orderPayload($product))->assertCreated();
+        $this->postJson('/api/orders/incomplete', $this->orderPayload(
+            $product,
+            quantity: 2,
+            address: 'New Road, Dhaka',
+            cartSessionId: 'new-cart-session',
+        ))
+            ->assertOk()
+            ->assertJsonPath('data.status', 'incomplete');
+
+        $this->assertDatabaseCount('orders', 2);
+    }
+
     private function createProduct(): Product
     {
         $category = Category::query()->create([
@@ -91,6 +139,7 @@ class IncompleteOrderTest extends TestCase
         int $quantity = 1,
         string $address = 'Road 1, Dhaka',
         string $phone = '01919012186',
+        string $cartSessionId = 'test-cart-session',
     ): array {
         return [
             'customer_name' => 'Test Customer',
@@ -98,7 +147,7 @@ class IncompleteOrderTest extends TestCase
             'payment_method' => 'cod',
             'shipping_method' => 'inside-dhaka',
             'device_id' => 'test-device',
-            'cart_session_id' => 'test-cart-session',
+            'cart_session_id' => $cartSessionId,
             'shipping_address' => [
                 'address' => $address,
             ],

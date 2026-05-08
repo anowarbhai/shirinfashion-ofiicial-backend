@@ -123,6 +123,20 @@ class OrderController extends Controller
         $payload = $this->validateOrderPayload($request);
         $customer = $this->resolveAuthenticatedUser($request);
         $clientIp = $this->resolveClientIp($request);
+        $checkoutGuard = $this->resolveIncompleteOrderGuardBlock(
+            $payload['phone'],
+            $clientIp,
+            $payload['device_id'] ?? null,
+        );
+
+        if ($checkoutGuard) {
+            return response()->json([
+                'message' => 'Incomplete order skipped during checkout cooldown.',
+                'data' => null,
+                'checkout_guard' => $checkoutGuard,
+                'incomplete_order_skipped' => true,
+            ]);
+        }
 
         $order = DB::transaction(function () use ($customer, $payload, $clientIp) {
             $prepared = $this->prepareOrderPayload($payload, false, false);
@@ -702,6 +716,20 @@ class OrderController extends Controller
             'remaining_seconds' => $remainingSeconds,
             'matched_by' => $matchedBy,
         ];
+    }
+
+    protected function resolveIncompleteOrderGuardBlock(
+        string $phone,
+        ?string $clientIp,
+        ?string $deviceId,
+    ): ?array {
+        $settings = $this->settings->getGroup('checkout_guard');
+
+        if (! ($settings['enabled'] ?? false) || ! ($settings['protect_incomplete_orders'] ?? true)) {
+            return null;
+        }
+
+        return $this->resolveCheckoutGuardBlock($phone, $clientIp, $deviceId);
     }
 
     protected function resolveNextCheckoutGuardState(Order $order): ?array

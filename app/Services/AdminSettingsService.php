@@ -119,6 +119,7 @@ class AdminSettingsService
                 'block_by_phone' => true,
                 'block_by_ip' => true,
                 'block_by_device' => true,
+                'protect_incomplete_orders' => true,
                 'cooldown_minutes' => 180,
                 'message' => 'You can place another order after {{time}}.',
             ],
