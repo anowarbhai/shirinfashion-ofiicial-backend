@@ -53,6 +53,19 @@ class IncompleteOrderTest extends TestCase
         $this->assertSame(9, $product->fresh()->inventory);
     }
 
+    public function test_same_guest_session_updates_incomplete_order_when_phone_changes(): void
+    {
+        $product = $this->createProduct();
+
+        $this->postJson('/api/orders/incomplete', $this->orderPayload($product, phone: '01919012186'))
+            ->assertOk();
+        $this->postJson('/api/orders/incomplete', $this->orderPayload($product, phone: '01829312186'))
+            ->assertOk();
+
+        $this->assertDatabaseCount('orders', 1);
+        $this->assertSame('01829312186', Order::query()->value('phone'));
+    }
+
     private function createProduct(): Product
     {
         $category = Category::query()->create([
@@ -73,11 +86,15 @@ class IncompleteOrderTest extends TestCase
         ]);
     }
 
-    private function orderPayload(Product $product, int $quantity = 1, string $address = 'Road 1, Dhaka'): array
-    {
+    private function orderPayload(
+        Product $product,
+        int $quantity = 1,
+        string $address = 'Road 1, Dhaka',
+        string $phone = '01919012186',
+    ): array {
         return [
             'customer_name' => 'Test Customer',
-            'phone' => '01919012186',
+            'phone' => $phone,
             'payment_method' => 'cod',
             'shipping_method' => 'inside-dhaka',
             'device_id' => 'test-device',

@@ -350,6 +350,7 @@ class OrderController extends Controller
             'normalized_phone' => $this->normalizePhoneForMatch($payload['phone']),
             'normalized_address_hash' => $this->hashAddressForMatch($shippingAddress),
             'cart_hash' => $this->hashCartForMatch($payload),
+            'cart_session_id' => $payload['cart_session_id'] ?? null,
         ];
     }
 
@@ -440,6 +441,8 @@ class OrderController extends Controller
 
         if ($customer) {
             $query->where('user_id', $customer->id);
+        } elseif ($prepared['cart_session_id']) {
+            $query->where('cart_session_id', $prepared['cart_session_id']);
         } elseif ($prepared['normalized_phone']) {
             $query->where('normalized_phone', $prepared['normalized_phone']);
         } else {
@@ -461,6 +464,8 @@ class OrderController extends Controller
 
         if ($customer) {
             $query->where('user_id', $customer->id);
+        } elseif ($prepared['cart_session_id']) {
+            $query->where('cart_session_id', $prepared['cart_session_id']);
         } elseif ($prepared['normalized_phone']) {
             $query->where('normalized_phone', $prepared['normalized_phone']);
         } else {
@@ -481,6 +486,8 @@ class OrderController extends Controller
 
         if ($customer) {
             $query->where('user_id', $customer->id);
+        } elseif ($prepared['cart_session_id']) {
+            $query->where('cart_session_id', $prepared['cart_session_id']);
         } elseif ($prepared['normalized_phone']) {
             $query->where('normalized_phone', $prepared['normalized_phone']);
         } else {
