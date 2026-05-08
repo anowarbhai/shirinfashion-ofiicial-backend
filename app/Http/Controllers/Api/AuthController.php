@@ -306,9 +306,16 @@ class AuthController extends Controller
             $disk = (string) config('filesystems.media', 'public');
             $file = $payload['avatar'];
             $filename = Str::uuid()->toString().'-'.preg_replace('/[^A-Za-z0-9.\-_]/', '-', $file->getClientOriginalName());
-            $path = $file->storeAs($directory, $filename, $disk);
+            $path = $directory.'/'.$filename;
+            $stream = fopen($file->getRealPath(), 'rb');
 
-            if (! is_string($path) || $path === '') {
+            $stored = $stream !== false && Storage::disk($disk)->put($path, $stream);
+
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+
+            if (! $stored) {
                 return response()->json([
                     'message' => 'Unable to store profile photo. Please check storage disk permissions or S3 credentials.',
                 ], 422);
