@@ -87,6 +87,49 @@ class IncompleteOrderTest extends TestCase
         $this->assertSame('processing', Order::query()->value('status'));
     }
 
+    public function test_incomplete_order_is_skipped_after_converted_order_completes(): void
+    {
+        $product = $this->createProduct();
+        $payload = $this->orderPayload($product);
+
+        $this->postJson('/api/orders/incomplete', $payload)->assertOk();
+        $this->postJson('/api/orders', $payload)->assertCreated();
+
+        $this->postJson('/api/orders/incomplete', $this->orderPayload(
+            $product,
+            quantity: 2,
+            address: 'New Road, Dhaka',
+            phone: '01829312186',
+            cartSessionId: 'test-cart-session',
+        ))
+            ->assertOk()
+            ->assertJsonPath('incomplete_order_skipped', true);
+
+        $this->assertDatabaseCount('orders', 1);
+        $this->assertSame('processing', Order::query()->value('status'));
+    }
+
+    public function test_order_is_blocked_after_converted_order_completes_for_same_session(): void
+    {
+        $product = $this->createProduct();
+        $payload = $this->orderPayload($product);
+
+        $this->postJson('/api/orders/incomplete', $payload)->assertOk();
+        $this->postJson('/api/orders', $payload)->assertCreated();
+
+        $this->postJson('/api/orders', $this->orderPayload(
+            $product,
+            quantity: 2,
+            address: 'New Road, Dhaka',
+            phone: '01829312186',
+            cartSessionId: 'test-cart-session',
+        ))
+            ->assertStatus(429)
+            ->assertJsonPath('checkout_guard.blocked', true);
+
+        $this->assertDatabaseCount('orders', 1);
+    }
+
     public function test_incomplete_order_guard_can_be_disabled(): void
     {
         app(AdminSettingsService::class)->saveGroup('checkout_guard', [

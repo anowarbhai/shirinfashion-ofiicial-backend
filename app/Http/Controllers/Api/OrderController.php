@@ -55,6 +55,7 @@ class OrderController extends Controller
             $payload['phone'],
             $clientIp,
             $payload['device_id'] ?? null,
+            $payload['cart_session_id'] ?? null,
         );
 
         if ($checkoutGuard) {
@@ -127,6 +128,7 @@ class OrderController extends Controller
             $payload['phone'],
             $clientIp,
             $payload['device_id'] ?? null,
+            $payload['cart_session_id'] ?? null,
         );
 
         if ($checkoutGuard) {
@@ -634,6 +636,7 @@ class OrderController extends Controller
         string $phone,
         ?string $clientIp,
         ?string $deviceId,
+        ?string $cartSessionId = null,
     ): ?array {
         $settings = $this->settings->getGroup('checkout_guard');
 
@@ -645,10 +648,12 @@ class OrderController extends Controller
         $cutoff = Carbon::now()->subMinutes($cooldownMinutes);
         $matches = [];
         $normalizedDeviceId = $deviceId ? trim($deviceId) : null;
+        $normalizedCartSessionId = $cartSessionId ? trim($cartSessionId) : null;
         $normalizedClientIp = $clientIp ? trim($clientIp) : null;
 
         if (($settings['block_by_phone'] ?? true) && trim($phone) !== '') {
             $matches['phone'] = trim($phone);
+            $matches['normalized_phone'] = $this->normalizePhoneForMatch($phone);
         }
 
         if (($settings['block_by_ip'] ?? true) && $normalizedClientIp) {
@@ -659,16 +664,24 @@ class OrderController extends Controller
             $matches['device'] = $normalizedDeviceId;
         }
 
+        if (($settings['block_by_device'] ?? true) && $normalizedCartSessionId) {
+            $matches['cart_session'] = $normalizedCartSessionId;
+        }
+
         if ($matches === []) {
             return null;
         }
 
         $recentOrder = Order::query()
-            ->where('placed_at', '>=', $cutoff)
+            ->where(DB::raw('COALESCE(placed_at, completed_at, created_at)'), '>=', $cutoff)
             ->whereNotIn('status', ['cancelled', 'refunded', 'incomplete'])
             ->where(function ($query) use ($matches): void {
                 if (isset($matches['phone'])) {
                     $query->orWhere('phone', $matches['phone']);
+                }
+
+                if (isset($matches['normalized_phone'])) {
+                    $query->orWhere('normalized_phone', $matches['normalized_phone']);
                 }
 
                 if (isset($matches['ip'])) {
@@ -678,15 +691,21 @@ class OrderController extends Controller
                 if (isset($matches['device'])) {
                     $query->orWhere('device_id', $matches['device']);
                 }
+
+                if (isset($matches['cart_session'])) {
+                    $query->orWhere('cart_session_id', $matches['cart_session']);
+                }
             })
-            ->latest('placed_at')
+            ->orderByDesc(DB::raw('COALESCE(placed_at, completed_at, created_at)'))
             ->first();
 
-        if (! $recentOrder || ! $recentOrder->placed_at) {
+        $recentOrderAt = $recentOrder?->placed_at ?? $recentOrder?->completed_at ?? $recentOrder?->created_at;
+
+        if (! $recentOrder || ! $recentOrderAt) {
             return null;
         }
 
-        $availableAt = $recentOrder->placed_at->copy()->addMinutes($cooldownMinutes);
+        $availableAt = $recentOrderAt->copy()->addMinutes($cooldownMinutes);
 
         if ($availableAt->isPast()) {
             return null;
@@ -697,7 +716,10 @@ class OrderController extends Controller
         $readableTime = $this->formatCheckoutGuardDuration($remainingSeconds);
         $matchedBy = [];
 
-        if (($matches['phone'] ?? null) === $recentOrder->phone) {
+        if (
+            ($matches['phone'] ?? null) === $recentOrder->phone ||
+            (($matches['normalized_phone'] ?? null) && ($matches['normalized_phone'] ?? null) === $recentOrder->normalized_phone)
+        ) {
             $matchedBy[] = 'phone';
         }
 
@@ -705,7 +727,10 @@ class OrderController extends Controller
             $matchedBy[] = 'ip';
         }
 
-        if (($matches['device'] ?? null) === $recentOrder->device_id) {
+        if (
+            ($matches['device'] ?? null) === $recentOrder->device_id ||
+            (($matches['cart_session'] ?? null) && ($matches['cart_session'] ?? null) === $recentOrder->cart_session_id)
+        ) {
             $matchedBy[] = 'device';
         }
 
@@ -722,6 +747,7 @@ class OrderController extends Controller
         string $phone,
         ?string $clientIp,
         ?string $deviceId,
+        ?string $cartSessionId = null,
     ): ?array {
         $settings = $this->settings->getGroup('checkout_guard');
 
@@ -729,19 +755,21 @@ class OrderController extends Controller
             return null;
         }
 
-        return $this->resolveCheckoutGuardBlock($phone, $clientIp, $deviceId);
+        return $this->resolveCheckoutGuardBlock($phone, $clientIp, $deviceId, $cartSessionId);
     }
 
     protected function resolveNextCheckoutGuardState(Order $order): ?array
     {
         $settings = $this->settings->getGroup('checkout_guard');
 
-        if (! ($settings['enabled'] ?? false) || ! $order->placed_at) {
+        $orderPlacedAt = $order->placed_at ?? $order->completed_at ?? $order->created_at;
+
+        if (! ($settings['enabled'] ?? false) || ! $orderPlacedAt) {
             return null;
         }
 
         $cooldownMinutes = max(1, (int) ($settings['cooldown_minutes'] ?? 180));
-        $availableAt = $order->placed_at->copy()->addMinutes($cooldownMinutes);
+        $availableAt = $orderPlacedAt->copy()->addMinutes($cooldownMinutes);
         $remainingSeconds = max(1, Carbon::now()->diffInSeconds($availableAt, false));
 
         return [
