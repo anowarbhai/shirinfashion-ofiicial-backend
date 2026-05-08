@@ -13,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -296,13 +297,17 @@ class AuthController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $this->deleteStoredAvatar($user->avatar_url);
+        $this->deleteStoredAvatar($user->getRawOriginal('avatar_url'));
 
         $directory = $user->isAdmin() ? 'avatars/admins' : 'avatars/customers';
-        $path = $payload['avatar']->store($directory, 'public');
+        $disk = (string) config('filesystems.media', 'public');
+        $file = $payload['avatar'];
+        $filename = Str::uuid()->toString().'-'.preg_replace('/[^A-Za-z0-9.\-_]/', '-', $file->getClientOriginalName());
+        $path = $file->storeAs($directory, $filename, $disk);
+        $avatarUrl = Storage::disk($disk)->url($path);
 
         $user->update([
-            'avatar_url' => url(Storage::url($path)),
+            'avatar_url' => preg_match('#^https?://#i', $avatarUrl) === 1 ? $avatarUrl : url($avatarUrl),
         ]);
 
         return response()->json([
@@ -430,26 +435,39 @@ class AuthController extends Controller
 
     protected function deleteStoredAvatar(?string $avatarUrl): void
     {
-        if (
-            ! $avatarUrl ||
-            (
-                ! str_contains($avatarUrl, '/storage/avatars/customers/') &&
-                ! str_contains($avatarUrl, '/storage/avatars/admins/')
-            )
-        ) {
+        if (! $avatarUrl) {
             return;
         }
 
-        $path = parse_url($avatarUrl, PHP_URL_PATH);
+        $path = preg_match('#^https?://#i', $avatarUrl) === 1
+            ? parse_url($avatarUrl, PHP_URL_PATH)
+            : $avatarUrl;
 
         if (! is_string($path)) {
             return;
         }
 
-        $storagePath = ltrim(str_replace('/storage/', '', $path), '/');
+        $storagePath = str_contains($path, '/storage/')
+            ? ltrim(substr($path, strpos($path, '/storage/') + 9), '/')
+            : ltrim($path, '/');
 
-        if ($storagePath !== '') {
-            Storage::disk('public')->delete($storagePath);
+        if (
+            ! str_starts_with($storagePath, 'avatars/customers/')
+            && ! str_starts_with($storagePath, 'avatars/admins/')
+        ) {
+            return;
+        }
+
+        $disks = array_unique(array_filter([
+            'public',
+            (string) config('filesystems.media', 'public'),
+            's3',
+        ]));
+
+        foreach ($disks as $disk) {
+            if (array_key_exists($disk, config('filesystems.disks', []))) {
+                Storage::disk($disk)->delete($storagePath);
+            }
         }
     }
 
