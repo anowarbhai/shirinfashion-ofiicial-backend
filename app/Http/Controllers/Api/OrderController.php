@@ -637,6 +637,7 @@ class OrderController extends Controller
         ?string $clientIp,
         ?string $deviceId,
         ?string $cartSessionId = null,
+        bool $forceCustomerSignals = false,
     ): ?array {
         $settings = $this->settings->getGroup('checkout_guard');
 
@@ -651,20 +652,20 @@ class OrderController extends Controller
         $normalizedCartSessionId = $cartSessionId ? trim($cartSessionId) : null;
         $normalizedClientIp = $clientIp ? trim($clientIp) : null;
 
-        if (($settings['block_by_phone'] ?? true) && trim($phone) !== '') {
+        if ((($settings['block_by_phone'] ?? true) || $forceCustomerSignals) && trim($phone) !== '') {
             $matches['phone'] = trim($phone);
             $matches['normalized_phone'] = $this->normalizePhoneForMatch($phone);
         }
 
-        if (($settings['block_by_ip'] ?? true) && $normalizedClientIp) {
+        if ((($settings['block_by_ip'] ?? true) || $forceCustomerSignals) && $normalizedClientIp) {
             $matches['ip'] = $normalizedClientIp;
         }
 
-        if (($settings['block_by_device'] ?? true) && $normalizedDeviceId) {
+        if ((($settings['block_by_device'] ?? true) || $forceCustomerSignals) && $normalizedDeviceId) {
             $matches['device'] = $normalizedDeviceId;
         }
 
-        if (($settings['block_by_device'] ?? true) && $normalizedCartSessionId) {
+        if ((($settings['block_by_device'] ?? true) || $forceCustomerSignals) && $normalizedCartSessionId) {
             $matches['cart_session'] = $normalizedCartSessionId;
         }
 
@@ -755,7 +756,7 @@ class OrderController extends Controller
             return null;
         }
 
-        return $this->resolveCheckoutGuardBlock($phone, $clientIp, $deviceId, $cartSessionId);
+        return $this->resolveCheckoutGuardBlock($phone, $clientIp, $deviceId, $cartSessionId, true);
     }
 
     protected function resolveNextCheckoutGuardState(Order $order): ?array

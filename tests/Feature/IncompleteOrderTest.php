@@ -87,6 +87,35 @@ class IncompleteOrderTest extends TestCase
         $this->assertSame('processing', Order::query()->value('status'));
     }
 
+    public function test_incomplete_order_protection_uses_recent_order_even_when_individual_signals_are_disabled(): void
+    {
+        app(AdminSettingsService::class)->saveGroup('checkout_guard', [
+            'enabled' => true,
+            'block_by_phone' => false,
+            'block_by_ip' => false,
+            'block_by_device' => false,
+            'protect_incomplete_orders' => true,
+            'cooldown_minutes' => 180,
+            'message' => 'You can place another order after {{time}}.',
+        ]);
+
+        $product = $this->createProduct();
+
+        $this->postJson('/api/orders', $this->orderPayload($product))->assertCreated();
+
+        $this->postJson('/api/orders/incomplete', $this->orderPayload(
+            $product,
+            quantity: 2,
+            address: 'New Road, Dhaka',
+            cartSessionId: 'another-cart-session',
+        ))
+            ->assertOk()
+            ->assertJsonPath('incomplete_order_skipped', true);
+
+        $this->assertDatabaseCount('orders', 1);
+        $this->assertSame('processing', Order::query()->value('status'));
+    }
+
     public function test_incomplete_order_is_skipped_after_converted_order_completes(): void
     {
         $product = $this->createProduct();
