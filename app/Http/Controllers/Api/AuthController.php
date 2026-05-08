@@ -12,10 +12,12 @@ use App\Services\SmsOtpService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class AuthController extends Controller
 {
@@ -297,18 +299,37 @@ class AuthController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $this->deleteStoredAvatar($user->getRawOriginal('avatar_url'));
+        try {
+            $this->deleteStoredAvatar($user->getRawOriginal('avatar_url'));
 
-        $directory = $user->isAdmin() ? 'avatars/admins' : 'avatars/customers';
-        $disk = (string) config('filesystems.media', 'public');
-        $file = $payload['avatar'];
-        $filename = Str::uuid()->toString().'-'.preg_replace('/[^A-Za-z0-9.\-_]/', '-', $file->getClientOriginalName());
-        $path = $file->storeAs($directory, $filename, $disk);
-        $avatarUrl = Storage::disk($disk)->url($path);
+            $directory = $user->isAdmin() ? 'avatars/admins' : 'avatars/customers';
+            $disk = (string) config('filesystems.media', 'public');
+            $file = $payload['avatar'];
+            $filename = Str::uuid()->toString().'-'.preg_replace('/[^A-Za-z0-9.\-_]/', '-', $file->getClientOriginalName());
+            $path = $file->storeAs($directory, $filename, $disk);
 
-        $user->update([
-            'avatar_url' => preg_match('#^https?://#i', $avatarUrl) === 1 ? $avatarUrl : url($avatarUrl),
-        ]);
+            if (! is_string($path) || $path === '') {
+                return response()->json([
+                    'message' => 'Unable to store profile photo. Please check storage disk permissions or S3 credentials.',
+                ], 422);
+            }
+
+            $avatarUrl = Storage::disk($disk)->url($path);
+
+            $user->update([
+                'avatar_url' => preg_match('#^https?://#i', $avatarUrl) === 1 ? $avatarUrl : url($avatarUrl),
+            ]);
+        } catch (Throwable $exception) {
+            Log::error('Profile avatar upload failed.', [
+                'user_id' => $user->id,
+                'disk' => config('filesystems.media', 'public'),
+                'message' => $exception->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => 'Unable to store profile photo. Please check storage disk permissions or S3 credentials.',
+            ], 500);
+        }
 
         return response()->json([
             'message' => 'Profile photo uploaded successfully.',
