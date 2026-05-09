@@ -16,12 +16,14 @@ class ProductController extends Controller
     {
     }
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $perPage = min(max((int) $request->integer('per_page', 20), 1), 100);
+
         return response()->json([
             'data' => Product::with(['category', 'categories', 'tags', 'attributeTerms.attribute'])
                 ->latest()
-                ->paginate(20),
+                ->paginate($perPage),
         ]);
     }
 
