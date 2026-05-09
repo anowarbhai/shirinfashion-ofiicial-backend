@@ -29,6 +29,9 @@ class FacebookMarketingController extends Controller
             'campaign_pixels.*.id' => ['nullable', 'string', 'max:80'],
             'campaign_pixels.*.name' => ['nullable', 'string', 'max:120'],
             'campaign_pixels.*.pixel_id' => ['nullable', 'string', 'max:64'],
+            'campaign_pixels.*.capi_enabled' => ['sometimes', 'boolean'],
+            'campaign_pixels.*.access_token' => ['nullable', 'string'],
+            'campaign_pixels.*.test_event_code' => ['nullable', 'string', 'max:64'],
             'campaign_pixels.*.enabled' => ['sometimes', 'boolean'],
         ]);
 
@@ -83,6 +86,9 @@ class FacebookMarketingController extends Controller
                     'id' => trim((string) ($pixel['id'] ?? '')) ?: 'fb_'.Str::uuid()->toString(),
                     'name' => trim((string) ($pixel['name'] ?? '')) ?: 'Campaign Pixel',
                     'pixel_id' => $pixelId,
+                    'capi_enabled' => (bool) ($pixel['capi_enabled'] ?? false),
+                    'access_token' => trim((string) ($pixel['access_token'] ?? '')),
+                    'test_event_code' => trim((string) ($pixel['test_event_code'] ?? '')),
                     'enabled' => (bool) ($pixel['enabled'] ?? true),
                 ];
             })
