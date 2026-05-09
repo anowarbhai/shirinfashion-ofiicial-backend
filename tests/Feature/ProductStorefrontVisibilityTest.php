@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Category;
 use App\Models\Product;
+use App\Models\StorefrontSetting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -31,6 +32,43 @@ class ProductStorefrontVisibilityTest extends TestCase
         $this->getJson('/api/products/'.$hiddenProduct->slug)
             ->assertOk()
             ->assertJsonPath('data.slug', $hiddenProduct->slug);
+    }
+
+    public function test_hidden_campaign_product_exposes_selected_campaign_tracking(): void
+    {
+        $category = Category::query()->create([
+            'name' => 'Skincare',
+            'slug' => 'skincare',
+        ]);
+        StorefrontSetting::query()->create([
+            'key' => 'facebook_marketing',
+            'value' => [
+                'campaign_pixels' => [
+                    ['id' => 'fb_marketer_one', 'name' => 'Marketer One', 'pixel_id' => '12345678901', 'enabled' => true],
+                    ['id' => 'fb_disabled', 'name' => 'Disabled', 'pixel_id' => '99999999999', 'enabled' => false],
+                ],
+            ],
+        ]);
+        StorefrontSetting::query()->create([
+            'key' => 'google_marketing',
+            'value' => [
+                'campaign_tags' => [
+                    ['id' => 'gg_marketer_one', 'name' => 'Marketer One GTM', 'type' => 'gtm', 'tracking_id' => 'GTM-ABC123', 'enabled' => true],
+                ],
+            ],
+        ]);
+
+        $product = $this->createProduct($category, 'Campaign Serum', 'campaign-serum', true);
+        $product->update([
+            'campaign_facebook_pixel_ids' => ['fb_marketer_one', 'fb_disabled'],
+            'campaign_google_tag_ids' => ['gg_marketer_one'],
+        ]);
+
+        $this->getJson('/api/products/'.$product->slug)
+            ->assertOk()
+            ->assertJsonPath('data.campaign_tracking.facebook_pixels.0.pixel_id', '12345678901')
+            ->assertJsonPath('data.campaign_tracking.google_tags.0.tracking_id', 'GTM-ABC123')
+            ->assertJsonMissing(['pixel_id' => '99999999999']);
     }
 
     private function createProduct(

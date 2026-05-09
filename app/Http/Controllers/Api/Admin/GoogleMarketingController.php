@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\StorefrontSetting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class GoogleMarketingController extends Controller
 {
@@ -25,6 +26,12 @@ class GoogleMarketingController extends Controller
             'ga4_measurement_id' => ['nullable', 'string', 'max:64'],
             'google_ads_enabled' => ['required', 'boolean'],
             'google_ads_conversion_id' => ['nullable', 'string', 'max:64'],
+            'campaign_tags' => ['nullable', 'array'],
+            'campaign_tags.*.id' => ['nullable', 'string', 'max:80'],
+            'campaign_tags.*.name' => ['nullable', 'string', 'max:120'],
+            'campaign_tags.*.type' => ['nullable', 'in:gtm,ga4,google_ads'],
+            'campaign_tags.*.tracking_id' => ['nullable', 'string', 'max:64'],
+            'campaign_tags.*.enabled' => ['sometimes', 'boolean'],
         ]);
 
         $settings = [
@@ -34,6 +41,7 @@ class GoogleMarketingController extends Controller
             'ga4_measurement_id' => trim((string) ($validated['ga4_measurement_id'] ?? '')),
             'google_ads_enabled' => (bool) $validated['google_ads_enabled'],
             'google_ads_conversion_id' => trim((string) ($validated['google_ads_conversion_id'] ?? '')),
+            'campaign_tags' => $this->normalizeCampaignTags($validated['campaign_tags'] ?? []),
         ];
 
         StorefrontSetting::query()->updateOrCreate(
@@ -65,6 +73,29 @@ class GoogleMarketingController extends Controller
             'ga4_measurement_id' => '',
             'google_ads_enabled' => false,
             'google_ads_conversion_id' => '',
+            'campaign_tags' => [],
         ];
+    }
+
+    private function normalizeCampaignTags(array $tags): array
+    {
+        return collect($tags)
+            ->map(function (array $tag): array {
+                $trackingId = trim((string) ($tag['tracking_id'] ?? ''));
+                $type = in_array($tag['type'] ?? '', ['gtm', 'ga4', 'google_ads'], true)
+                    ? (string) $tag['type']
+                    : 'gtm';
+
+                return [
+                    'id' => trim((string) ($tag['id'] ?? '')) ?: 'gg_'.Str::uuid()->toString(),
+                    'name' => trim((string) ($tag['name'] ?? '')) ?: 'Campaign Tag',
+                    'type' => $type,
+                    'tracking_id' => $trackingId,
+                    'enabled' => (bool) ($tag['enabled'] ?? true),
+                ];
+            })
+            ->filter(fn (array $tag): bool => $tag['tracking_id'] !== '')
+            ->values()
+            ->all();
     }
 }

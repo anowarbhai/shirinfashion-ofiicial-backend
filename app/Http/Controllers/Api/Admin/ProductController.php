@@ -126,6 +126,10 @@ class ProductController extends Controller
             'is_active' => ['sometimes', 'boolean'],
             'is_featured' => ['sometimes', 'boolean'],
             'hide_from_storefront' => ['sometimes', 'boolean'],
+            'campaign_facebook_pixel_ids' => ['nullable', 'array'],
+            'campaign_facebook_pixel_ids.*' => ['string', 'max:80'],
+            'campaign_google_tag_ids' => ['nullable', 'array'],
+            'campaign_google_tag_ids.*' => ['string', 'max:80'],
             'tag_ids' => ['nullable', 'array'],
             'tag_ids.*' => ['integer', 'exists:tags,id'],
             'attribute_term_ids' => ['nullable', 'array'],
@@ -133,6 +137,11 @@ class ProductController extends Controller
         ]);
 
         $this->validateShortDescriptionLength($validated['short_description'] ?? null);
+
+        if (! (bool) ($validated['hide_from_storefront'] ?? false)) {
+            $validated['campaign_facebook_pixel_ids'] = [];
+            $validated['campaign_google_tag_ids'] = [];
+        }
 
         $validated['slug'] = $this->resolveUniqueSlug(
             $validated['slug'] ?? $validated['name'],
