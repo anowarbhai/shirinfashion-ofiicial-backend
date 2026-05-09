@@ -130,7 +130,7 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::get('/orders/{order}/assignment-history', [AdminOrderAssignmentController::class, 'history']);
         Route::apiResource('moderators', AdminModeratorController::class)->only(['index', 'store', 'update']);
         Route::get('/product-moderator-assignments', [AdminProductModeratorAssignmentController::class, 'index']);
-        Route::patch('/product-moderator-assignments/{product}', [AdminProductModeratorAssignmentController::class, 'update']);
+        Route::patch('/product-moderator-assignments/{product:id}', [AdminProductModeratorAssignmentController::class, 'update']);
         Route::get('/customers', [AdminCustomerController::class, 'index']);
         Route::post('/customers', [AdminCustomerController::class, 'store']);
         Route::get('/customers/{customer}', [AdminCustomerController::class, 'show']);
