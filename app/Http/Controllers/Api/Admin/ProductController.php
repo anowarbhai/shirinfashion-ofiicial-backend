@@ -8,6 +8,7 @@ use App\Services\AdminAuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class ProductController extends Controller
 {
@@ -110,7 +111,7 @@ class ProductController extends Controller
             'slug' => ['nullable', 'string', 'max:255'],
             'sku' => ['required', 'string', 'max:255', 'unique:products,sku,'.($productId ?? 'NULL').',id'],
             'brand' => ['required', 'string', 'max:255'],
-            'short_description' => ['nullable', 'string', 'max:500'],
+            'short_description' => ['nullable', 'string'],
             'description' => ['nullable', 'string'],
             'price' => ['required', 'numeric'],
             'compare_price' => ['nullable', 'numeric'],
@@ -130,6 +131,8 @@ class ProductController extends Controller
             'attribute_term_ids.*' => ['integer', 'exists:attribute_terms,id'],
         ]);
 
+        $this->validateShortDescriptionLength($validated['short_description'] ?? null);
+
         $validated['slug'] = $this->resolveUniqueSlug(
             $validated['slug'] ?? $validated['name'],
             $productId,
@@ -144,6 +147,25 @@ class ProductController extends Controller
             'tag_ids' => $validated['tag_ids'] ?? [],
             'attribute_term_ids' => $validated['attribute_term_ids'] ?? [],
         ];
+    }
+
+    protected function validateShortDescriptionLength(?string $value): void
+    {
+        if ($value === null || $value === '') {
+            return;
+        }
+
+        $plainText = trim(preg_replace(
+            '/\s+/u',
+            ' ',
+            html_entity_decode(strip_tags($value), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+        ) ?? '');
+
+        if (Str::length($plainText) > 500) {
+            throw ValidationException::withMessages([
+                'short_description' => ['The short description may not be greater than 500 characters.'],
+            ]);
+        }
     }
 
     protected function resolveUniqueSlug(string $value, ?int $ignoreId = null): string
