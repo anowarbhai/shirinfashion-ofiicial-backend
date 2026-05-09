@@ -110,7 +110,7 @@ class ProductController extends Controller
             'slug' => ['nullable', 'string', 'max:255'],
             'sku' => ['required', 'string', 'max:255', 'unique:products,sku,'.($productId ?? 'NULL').',id'],
             'brand' => ['required', 'string', 'max:255'],
-            'short_description' => ['nullable', 'string', 'max:255'],
+            'short_description' => ['nullable', 'string', 'max:500'],
             'description' => ['nullable', 'string'],
             'price' => ['required', 'numeric'],
             'compare_price' => ['nullable', 'numeric'],
