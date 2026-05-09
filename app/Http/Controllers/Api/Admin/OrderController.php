@@ -15,6 +15,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -172,7 +173,7 @@ class OrderController extends Controller
                 /** @var Product $product */
                 $product = $item['product'];
 
-                $order->items()->create([
+                $order->items()->create($this->orderItemPayload([
                     'product_id' => $product->id,
                     'volume_discount_id' => $item['tier']?->id,
                     'product_name' => $product->name,
@@ -184,14 +185,14 @@ class OrderController extends Controller
                     'quantity' => $item['quantity'],
                     'line_total' => $item['line_total'],
                     'is_free_gift' => false,
-                ]);
+                ]));
 
                 $product->decrement('inventory', $item['quantity']);
 
                 if ($item['tier']?->freeProduct) {
                     $gift = $item['tier']->freeProduct;
 
-                    $order->items()->create([
+                    $order->items()->create($this->orderItemPayload([
                         'product_id' => $gift->id,
                         'volume_discount_id' => $item['tier']->id,
                         'product_name' => $gift->name.' (Free Gift)',
@@ -201,7 +202,7 @@ class OrderController extends Controller
                         'quantity' => 1,
                         'line_total' => 0,
                         'is_free_gift' => true,
-                    ]);
+                    ]));
 
                     if ($gift->inventory > 0) {
                         $gift->decrement('inventory');
@@ -227,6 +228,26 @@ class OrderController extends Controller
     protected function firstProductImage(Product $product): ?string
     {
         return $product->gallery[0] ?? null;
+    }
+
+    protected function orderItemPayload(array $payload): array
+    {
+        if (! $this->orderItemsHaveProductImageColumn()) {
+            unset($payload['product_image']);
+        }
+
+        return $payload;
+    }
+
+    protected function orderItemsHaveProductImageColumn(): bool
+    {
+        static $hasColumn = null;
+
+        if ($hasColumn === null) {
+            $hasColumn = Schema::hasColumn('order_items', 'product_image');
+        }
+
+        return $hasColumn;
     }
 
     public function update(Request $request, Order $order): JsonResponse
