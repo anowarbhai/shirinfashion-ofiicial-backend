@@ -23,6 +23,7 @@ class GeneralSettingsUpdateRequest extends FormRequest
             'timezone' => ['required', 'string', 'max:80'],
             'maintenance_mode' => ['required', 'boolean'],
             'maintenance_message' => ['nullable', 'string', 'max:1000'],
+            'maintenance_until' => ['nullable', 'date'],
             'invoice_note' => ['nullable', 'string', 'max:1000'],
         ];
     }

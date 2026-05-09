@@ -86,6 +86,7 @@ class AdminSettingsService
                 'timezone' => 'Asia/Dhaka',
                 'maintenance_mode' => false,
                 'maintenance_message' => 'We are performing a quick update. Please check back shortly.',
+                'maintenance_until' => null,
                 'invoice_note' => 'Thank you for shopping with Shirin Fashion.',
             ],
             'fraud_checker' => [
