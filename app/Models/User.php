@@ -80,6 +80,16 @@ class User extends Authenticatable
         return $this->hasMany(WishlistItem::class);
     }
 
+    public function moderatorProfile()
+    {
+        return $this->hasOne(Moderator::class);
+    }
+
+    public function managedModerators(): HasMany
+    {
+        return $this->hasMany(Moderator::class, 'digital_marketer_id');
+    }
+
     public function isAdmin(): bool
     {
         return ($this->role === 'admin' || $this->admin_role_id !== null)

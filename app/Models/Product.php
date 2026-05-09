@@ -95,6 +95,11 @@ class Product extends Model
             ->orderBy('quantity');
     }
 
+    public function moderatorAssignment()
+    {
+        return $this->hasOne(ProductModeratorAssignment::class);
+    }
+
     protected function gallery(): Attribute
     {
         return Attribute::make(

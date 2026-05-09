@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Coupon;
+use App\Models\Moderator;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVolumeDiscount;
 use App\Services\AdminSettingsService;
 use App\Services\FraudCheckerService;
+use App\Services\OrderAssignmentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -21,13 +23,34 @@ class OrderController extends Controller
     public function __construct(
         protected AdminSettingsService $settings,
         protected FraudCheckerService $fraudCheckerService,
+        protected OrderAssignmentService $orderAssignmentService,
     ) {
     }
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $query = Order::query()
+            ->with(['items', 'assignments.moderator.user', 'assignedModerator'])
+            ->latest();
+
+        $this->applyAssignmentVisibility($query, $request);
+
+        if ($request->filled('moderator_id')) {
+            $query->whereHas('assignments', fn ($assignmentQuery) => $assignmentQuery
+                ->whereNull('order_item_id')
+                ->where('moderator_id', (int) $request->query('moderator_id')));
+        }
+
+        if ($request->filled('assignment_status_type')) {
+            $query->where('assignment_status_type', $request->query('assignment_status_type'));
+        }
+
+        if ($request->filled('assignment_status')) {
+            $query->where('assignment_status', $request->query('assignment_status'));
+        }
+
         return response()->json([
-            'data' => Order::with('items')->latest()->paginate(20),
+            'data' => $query->paginate(20),
         ]);
     }
 
@@ -188,6 +211,8 @@ class OrderController extends Controller
                 Coupon::where('code', strtoupper($payload['coupon_code']))->increment('used_count');
             }
 
+            $this->orderAssignmentService->assignOrder($order);
+
             return $order->load('items');
         });
 
@@ -199,22 +224,85 @@ class OrderController extends Controller
 
     public function update(Request $request, Order $order): JsonResponse
     {
+        $this->ensureCanAccessOrder($request, $order);
+
         $payload = $request->validate([
             'status' => ['nullable', 'string', 'max:255'],
             'payment_status' => ['nullable', 'string', 'max:255'],
             'tracking_number' => ['nullable', 'string', 'max:255'],
         ]);
 
+        $beforeStatusType = $order->status === 'incomplete' ? 'incomplete' : 'processing';
         $order->update($payload);
+        $afterStatusType = $order->fresh()->status === 'incomplete' ? 'incomplete' : 'processing';
+
+        if ($beforeStatusType !== $afterStatusType) {
+            $this->orderAssignmentService->keepExistingModeratorForStatus($order->fresh(), $afterStatusType)
+                ?? $this->orderAssignmentService->assignOrderByStatus($order->fresh(), $afterStatusType);
+        }
 
         return response()->json([
             'message' => 'Order updated successfully.',
-            'data' => $order->fresh('items'),
+            'data' => $order->fresh(['items', 'assignments.moderator.user', 'assignedModerator']),
+        ]);
+    }
+
+    public function reassign(Request $request, Order $order): JsonResponse
+    {
+        $payload = $request->validate([
+            'moderator_id' => ['required', 'integer', 'exists:moderators,id'],
+            'note' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $this->ensureCanAccessOrder($request, $order);
+        $this->ensureCanReassignToModerator($request, (int) $payload['moderator_id']);
+
+        $assignment = $this->orderAssignmentService->reassignOrder(
+            $order->id,
+            (int) $payload['moderator_id'],
+            $request->user()?->id,
+            $payload['note'] ?? null,
+        );
+
+        return response()->json([
+            'message' => 'Order reassigned successfully.',
+            'data' => $assignment,
+            'order' => $order->fresh(['items', 'assignments.moderator.user', 'assignedModerator']),
+        ]);
+    }
+
+    public function bulkReassign(Request $request): JsonResponse
+    {
+        $payload = $request->validate([
+            'order_ids' => ['required', 'array', 'min:1'],
+            'order_ids.*' => ['integer', 'exists:orders,id'],
+            'moderator_id' => ['required', 'integer', 'exists:moderators,id'],
+            'note' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $allowedQuery = Order::query()->whereIn('id', $payload['order_ids']);
+        $this->applyAssignmentVisibility($allowedQuery, $request);
+        abort_if($allowedQuery->count() !== count(array_unique($payload['order_ids'])), 403, 'You do not have permission to reassign one or more selected orders.');
+
+        $this->ensureCanReassignToModerator($request, (int) $payload['moderator_id'], true);
+
+        $assignments = $this->orderAssignmentService->bulkReassignOrders(
+            $payload['order_ids'],
+            (int) $payload['moderator_id'],
+            $request->user()?->id,
+            $payload['note'] ?? null,
+        );
+
+        return response()->json([
+            'message' => count($assignments).' orders reassigned successfully.',
+            'data' => $assignments,
         ]);
     }
 
     public function destroy(Order $order): JsonResponse
     {
+        $this->ensureCanAccessOrder(request(), $order);
+
         DB::transaction(function () use ($order): void {
             $order->items()->delete();
             $order->delete();
@@ -233,6 +321,11 @@ class OrderController extends Controller
         ]);
 
         $ids = collect($payload['ids'])->map(fn ($id) => (int) $id)->unique()->values();
+        $allowedQuery = Order::query()->whereIn('id', $ids);
+        $this->applyAssignmentVisibility($allowedQuery, $request);
+        $allowedIds = $allowedQuery->pluck('id');
+
+        abort_if($allowedIds->count() !== $ids->count(), 403, 'You do not have permission to delete one or more selected orders.');
 
         DB::transaction(function () use ($ids): void {
             Order::query()
@@ -302,5 +395,64 @@ class OrderController extends Controller
         $normalizedPhone = preg_replace('/[^0-9]/', '', $phone) ?: 'guest';
 
         return sprintf('%s-%s@guest.admin-order', $normalizedPhone, strtolower((string) str()->random(6)));
+    }
+
+    protected function applyAssignmentVisibility($query, Request $request): void
+    {
+        $user = $request->user();
+
+        if (! $user || $user->hasAdminPermission('system.everything') || $user->hasAdminPermission('moderator.view_all_moderator_orders')) {
+            return;
+        }
+
+        $moderator = $user->moderatorProfile()->first();
+
+        if ($moderator && $user->hasAdminPermission('moderator.view_assigned_orders')) {
+            $query->where(function ($orderQuery) use ($user, $moderator): void {
+                $orderQuery
+                    ->where('assigned_moderator_id', $user->id)
+                    ->orWhereHas('assignments', fn ($assignmentQuery) => $assignmentQuery
+                        ->where('moderator_id', $moderator->id));
+            });
+
+            return;
+        }
+
+        if ($user->hasAdminPermission('moderator.manage_moderators')) {
+            $managedIds = $user->managedModerators()->pluck('id');
+            $query->whereHas('assignments', fn ($assignmentQuery) => $assignmentQuery->whereIn('moderator_id', $managedIds));
+            return;
+        }
+
+        if (! $user->hasAdminPermission('orders.view')) {
+            $query->whereRaw('1 = 0');
+        }
+    }
+
+    protected function ensureCanReassignToModerator(Request $request, int $moderatorId, bool $bulk = false): void
+    {
+        $user = $request->user();
+        $permission = $bulk ? 'moderator.bulk_reassign_orders' : 'moderator.reassign_orders';
+
+        abort_unless((bool) $user?->hasAdminPermission($permission), 403, 'You do not have permission to reassign orders.');
+
+        if ($user->hasAdminPermission('system.everything') || $user->hasAdminPermission('moderator.view_all_moderator_orders')) {
+            return;
+        }
+
+        $isManaged = Moderator::query()
+            ->whereKey($moderatorId)
+            ->where('digital_marketer_id', $user->id)
+            ->exists();
+
+        abort_unless($isManaged, 403, 'You can only assign orders to moderators under your team.');
+    }
+
+    protected function ensureCanAccessOrder(Request $request, Order $order): void
+    {
+        $query = Order::query()->whereKey($order->id);
+        $this->applyAssignmentVisibility($query, $request);
+
+        abort_unless($query->exists(), 403, 'You do not have permission to access this order.');
     }
 }

@@ -45,4 +45,9 @@ class OrderItem extends Model
     {
         return $this->belongsTo(ProductVolumeDiscount::class);
     }
+
+    public function assignments()
+    {
+        return $this->hasMany(OrderAssignment::class);
+    }
 }

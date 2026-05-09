@@ -18,9 +18,12 @@ use App\Http\Controllers\Api\Admin\SeoMarketingController as AdminSeoMarketingCo
 use App\Http\Controllers\Api\Admin\SmsIntegrationSettingsController as AdminSmsIntegrationSettingsController;
 use App\Http\Controllers\Api\Admin\AttributeController as AdminAttributeController;
 use App\Http\Controllers\Api\Admin\MediaController as AdminMediaController;
+use App\Http\Controllers\Api\Admin\ModeratorController as AdminModeratorController;
 use App\Http\Controllers\Api\Admin\OrderController as AdminOrderController;
+use App\Http\Controllers\Api\Admin\OrderAssignmentController as AdminOrderAssignmentController;
 use App\Http\Controllers\Api\Admin\PageController as AdminPageController;
 use App\Http\Controllers\Api\Admin\ProductController as AdminProductController;
+use App\Http\Controllers\Api\Admin\ProductModeratorAssignmentController as AdminProductModeratorAssignmentController;
 use App\Http\Controllers\Api\Admin\ProductPageSettingsController as AdminProductPageSettingsController;
 use App\Http\Controllers\Api\Admin\ProductVolumeDiscountController as AdminProductVolumeDiscountController;
 use App\Http\Controllers\Api\Admin\ReviewController as AdminReviewController;
@@ -118,8 +121,15 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::get('/orders', [AdminOrderController::class, 'index']);
         Route::post('/orders', [AdminOrderController::class, 'store']);
         Route::delete('/orders', [AdminOrderController::class, 'bulkDestroy']);
+        Route::post('/orders/bulk-reassign', [AdminOrderController::class, 'bulkReassign']);
+        Route::post('/orders/{order}/reassign', [AdminOrderController::class, 'reassign']);
         Route::patch('/orders/{order}', [AdminOrderController::class, 'update']);
         Route::delete('/orders/{order}', [AdminOrderController::class, 'destroy']);
+        Route::get('/order-assignments', [AdminOrderAssignmentController::class, 'index']);
+        Route::get('/orders/{order}/assignment-history', [AdminOrderAssignmentController::class, 'history']);
+        Route::apiResource('moderators', AdminModeratorController::class)->only(['index', 'store', 'update']);
+        Route::get('/product-moderator-assignments', [AdminProductModeratorAssignmentController::class, 'index']);
+        Route::patch('/product-moderator-assignments/{product}', [AdminProductModeratorAssignmentController::class, 'update']);
         Route::get('/customers', [AdminCustomerController::class, 'index']);
         Route::post('/customers', [AdminCustomerController::class, 'store']);
         Route::get('/customers/{customer}', [AdminCustomerController::class, 'show']);

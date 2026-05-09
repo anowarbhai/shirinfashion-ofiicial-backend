@@ -14,6 +14,7 @@ class Order extends Model
     protected $fillable = [
         'order_number',
         'user_id',
+        'assigned_moderator_id',
         'customer_name',
         'email',
         'phone',
@@ -27,6 +28,9 @@ class Order extends Model
         'referrer_url',
         'utm_source',
         'status',
+        'assignment_status',
+        'assignment_type',
+        'assignment_status_type',
         'payment_method',
         'payment_status',
         'subtotal',
@@ -66,5 +70,20 @@ class Order extends Model
     public function items(): HasMany
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    public function assignedModerator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_moderator_id');
+    }
+
+    public function assignments(): HasMany
+    {
+        return $this->hasMany(OrderAssignment::class);
+    }
+
+    public function currentAssignment(): HasMany
+    {
+        return $this->hasMany(OrderAssignment::class)->whereNull('order_item_id')->latest();
     }
 }

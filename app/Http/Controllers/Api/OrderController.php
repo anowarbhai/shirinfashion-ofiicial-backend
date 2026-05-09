@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\AdminSettingsService;
 use App\Services\FraudCheckerService;
 use App\Services\JwtService;
+use App\Services\OrderAssignmentService;
 use App\Services\SmsGatewayService;
 use App\Services\SmsOtpService;
 use Illuminate\Http\JsonResponse;
@@ -28,6 +29,7 @@ class OrderController extends Controller
         protected SmsGatewayService $smsGatewayService,
         protected AdminSettingsService $settings,
         protected FraudCheckerService $fraudCheckerService,
+        protected OrderAssignmentService $orderAssignmentService,
     ) {
     }
 
@@ -83,6 +85,7 @@ class OrderController extends Controller
             $prepared = $this->prepareOrderPayload($payload, true, true);
             $order = $this->findMatchingIncompleteOrder($customer, $prepared)
                 ?? new Order(['order_number' => $this->generateOrderNumber()]);
+            $hadIncompleteAssignment = $order->exists && $order->status === 'incomplete';
 
             $this->fillOrderFromPreparedPayload(
                 $order,
@@ -100,6 +103,10 @@ class OrderController extends Controller
             $order->save();
 
             $this->replaceOrderItems($order, $prepared['order_items'], true);
+            $keptAssignment = $hadIncompleteAssignment
+                ? $this->orderAssignmentService->keepExistingModeratorForStatus($order, 'processing')
+                : null;
+            $keptAssignment ?? $this->orderAssignmentService->assignProcessingOrder($order);
 
             if (! empty($payload['coupon_code'])) {
                 Coupon::where('code', strtoupper($payload['coupon_code']))->increment('used_count');
@@ -167,6 +174,7 @@ class OrderController extends Controller
             $order->save();
 
             $this->replaceOrderItems($order, $prepared['order_items'], false);
+            $this->orderAssignmentService->assignIncompleteOrder($order);
 
             return $order->load('items');
         });

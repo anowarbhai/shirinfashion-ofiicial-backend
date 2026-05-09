@@ -45,7 +45,15 @@ class EnsureAdminPermission
 
         return match (true) {
             $adminPath === 'dashboard' => 'dashboard.view',
-            str_starts_with($adminPath, 'orders') && $isRead => 'orders.view',
+            str_starts_with($adminPath, 'moderators') && $isRead => ['moderator.manage_moderators', 'moderator.view_all_moderator_orders', 'moderator.view_assigned_orders'],
+            str_starts_with($adminPath, 'moderators') => 'moderator.manage_moderators',
+            str_starts_with($adminPath, 'product-moderator-assignments') && $isRead => ['moderator.assign_product_to_moderator', 'moderator.manage_moderators'],
+            str_starts_with($adminPath, 'product-moderator-assignments') => 'moderator.assign_product_to_moderator',
+            str_starts_with($adminPath, 'order-assignments') => ['moderator.view_all_moderator_orders', 'moderator.view_assigned_orders'],
+            str_contains($adminPath, 'assignment-history') => ['moderator.view_all_moderator_orders', 'moderator.view_assigned_orders'],
+            str_starts_with($adminPath, 'orders/bulk-reassign') => 'moderator.bulk_reassign_orders',
+            str_contains($adminPath, '/reassign') => 'moderator.reassign_orders',
+            str_starts_with($adminPath, 'orders') && $isRead => ['orders.view', 'moderator.view_assigned_orders', 'moderator.view_all_moderator_orders'],
             str_starts_with($adminPath, 'orders') && $method === 'POST' => ['orders.create', 'orders.manage'],
             str_starts_with($adminPath, 'orders') && $method === 'DELETE' => ['orders.delete', 'orders.manage'],
             str_starts_with($adminPath, 'orders') => ['orders.edit', 'orders.manage'],
