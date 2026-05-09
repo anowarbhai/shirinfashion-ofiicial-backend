@@ -122,6 +122,7 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::post('/orders', [AdminOrderController::class, 'store']);
         Route::delete('/orders', [AdminOrderController::class, 'bulkDestroy']);
         Route::post('/orders/bulk-reassign', [AdminOrderController::class, 'bulkReassign']);
+        Route::post('/orders/{order}/fraud-check', [AdminOrderController::class, 'checkFraud']);
         Route::post('/orders/{order}/reassign', [AdminOrderController::class, 'reassign']);
         Route::patch('/orders/{order}', [AdminOrderController::class, 'update']);
         Route::delete('/orders/{order}', [AdminOrderController::class, 'destroy']);

@@ -299,6 +299,33 @@ class OrderController extends Controller
         ]);
     }
 
+    public function checkFraud(Request $request, Order $order): JsonResponse
+    {
+        $this->ensureCanAccessOrder($request, $order);
+
+        if (! trim((string) $order->phone)) {
+            return response()->json([
+                'message' => 'Order phone number is missing.',
+            ], 422);
+        }
+
+        $result = $this->resolveFraudCheck((string) $order->phone);
+
+        if (! $result) {
+            return response()->json([
+                'message' => 'Fraud checker is disabled or API key is missing.',
+            ], 422);
+        }
+
+        $order->update(['fraud_check' => $result]);
+
+        return response()->json([
+            'message' => 'Fraud checker result saved successfully.',
+            'data' => $result,
+            'order' => $order->fresh(['items', 'assignments.moderator.user', 'assignedModerator']),
+        ]);
+    }
+
     public function destroy(Order $order): JsonResponse
     {
         $this->ensureCanAccessOrder(request(), $order);
@@ -368,8 +395,12 @@ class OrderController extends Controller
     protected function resolveFraudCheck(string $phone): ?array
     {
         $fraudSettings = $this->settings->getGroup('fraud_checker');
+        $provider = (string) ($fraudSettings['provider'] ?? 'onesoftcode');
+        $apiKey = $provider === 'bd_courier'
+            ? trim((string) ($fraudSettings['bd_courier_api_key'] ?? ''))
+            : trim((string) ($fraudSettings['onesoftcode_api_key'] ?? $fraudSettings['api_key'] ?? ''));
 
-        if (! ($fraudSettings['enabled'] ?? false) || empty($fraudSettings['api_key'])) {
+        if (! ($fraudSettings['enabled'] ?? false) || $apiKey === '') {
             return null;
         }
 

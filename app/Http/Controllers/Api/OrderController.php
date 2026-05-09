@@ -618,8 +618,12 @@ class OrderController extends Controller
     protected function resolveFraudCheck(string $phone): ?array
     {
         $fraudSettings = $this->settings->getGroup('fraud_checker');
+        $provider = (string) ($fraudSettings['provider'] ?? 'onesoftcode');
+        $apiKey = $provider === 'bd_courier'
+            ? trim((string) ($fraudSettings['bd_courier_api_key'] ?? ''))
+            : trim((string) ($fraudSettings['onesoftcode_api_key'] ?? $fraudSettings['api_key'] ?? ''));
 
-        if (! ($fraudSettings['enabled'] ?? false) || empty($fraudSettings['api_key'])) {
+        if (! ($fraudSettings['enabled'] ?? false) || $apiKey === '') {
             return null;
         }
 
