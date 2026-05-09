@@ -122,6 +122,31 @@ class OrderAssignmentServiceTest extends TestCase
             ->assertJsonPath('data.data.0.id', $ownOrder->id);
     }
 
+    public function test_moderator_with_orders_view_still_cannot_view_other_or_unassigned_orders(): void
+    {
+        [$first, $second] = $this->createModerators(2);
+        $role = $this->roleWithPermissions(['orders.view']);
+        $first->user->update(['role' => 'admin', 'admin_role_id' => $role->id, 'status' => 'active']);
+
+        $ownOrder = $this->createOrder('processing');
+        $otherOrder = $this->createOrder('processing');
+        $unassignedOrder = $this->createOrder('processing');
+        app(OrderAssignmentService::class)->reassignOrder($ownOrder->id, $first->id, null);
+        app(OrderAssignmentService::class)->reassignOrder($otherOrder->id, $second->id, null);
+
+        $token = app(JwtService::class)->issueToken($first->user->fresh());
+
+        $response = $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/admin/orders')
+            ->assertOk()
+            ->assertJsonCount(1, 'data.data')
+            ->assertJsonPath('data.data.0.id', $ownOrder->id);
+
+        $orderIds = collect($response->json('data.data'))->pluck('id');
+        $this->assertFalse($orderIds->contains($otherOrder->id));
+        $this->assertFalse($orderIds->contains($unassignedOrder->id));
+    }
+
     public function test_incomplete_to_processing_conversion_keeps_existing_moderator(): void
     {
         [$first, $second] = $this->createModerators(2);

@@ -432,20 +432,25 @@ class OrderController extends Controller
     {
         $user = $request->user();
 
-        if (! $user || $user->hasAdminPermission('system.everything') || $user->hasAdminPermission('moderator.view_all_moderator_orders')) {
+        if (! $user || $user->hasAdminPermission('system.everything')) {
             return;
         }
 
         $moderator = $user->moderatorProfile()->first();
 
-        if ($moderator && $user->hasAdminPermission('moderator.view_assigned_orders')) {
+        if ($moderator) {
             $query->where(function ($orderQuery) use ($user, $moderator): void {
                 $orderQuery
                     ->where('assigned_moderator_id', $user->id)
                     ->orWhereHas('assignments', fn ($assignmentQuery) => $assignmentQuery
+                        ->whereNull('order_item_id')
                         ->where('moderator_id', $moderator->id));
             });
 
+            return;
+        }
+
+        if ($user->hasAdminPermission('moderator.view_all_moderator_orders')) {
             return;
         }
 
