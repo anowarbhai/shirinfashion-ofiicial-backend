@@ -43,7 +43,8 @@ class ProductController extends Controller
             $query->where('price', '<=', $request->float('price_max'));
         }
 
-        $products = $query->latest()->paginate(12);
+        $perPage = min(max((int) $request->integer('per_page', 12), 1), 100);
+        $products = $query->latest()->paginate($perPage);
         $products->getCollection()->transform(
             fn (Product $product) => $this->applyApprovedReviewMetrics($product)
         );
