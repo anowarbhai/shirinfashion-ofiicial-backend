@@ -15,11 +15,16 @@ class StorefrontController extends Controller
         return response()->json([
             'data' => [
                 'categories' => Category::query()
-                    ->withCount('products')
+                    ->withCount([
+                        'products' => fn ($query) => $query
+                            ->where('is_active', true)
+                            ->visibleInStorefront(),
+                    ])
                     ->where('is_featured', true)
                     ->get(),
                 'featured_products' => Product::query()
                     ->where('is_active', true)
+                    ->visibleInStorefront()
                     ->where('is_featured', true)
                     ->latest()
                     ->take(6)

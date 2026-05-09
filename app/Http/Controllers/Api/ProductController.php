@@ -19,7 +19,8 @@ class ProductController extends Controller
             ->withAvg([
                 'reviews as approved_reviews_avg_rating' => fn ($builder) => $builder->where('status', 'approved'),
             ], 'rating')
-            ->where('is_active', true);
+            ->where('is_active', true)
+            ->visibleInStorefront();
 
         if ($request->filled('brand')) {
             $query->where('brand', $request->string('brand'));

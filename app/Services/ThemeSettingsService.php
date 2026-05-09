@@ -127,6 +127,7 @@ class ThemeSettingsService
                 ->values(),
             'products' => \App\Models\Product::query()
                 ->where('is_active', true)
+                ->visibleInStorefront()
                 ->orderBy('name')
                 ->limit(50)
                 ->get(['id', 'name', 'slug'])

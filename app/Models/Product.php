@@ -36,6 +36,7 @@ class Product extends Model
         'meta_description',
         'is_active',
         'is_featured',
+        'hide_from_storefront',
     ];
 
     protected function casts(): array
@@ -49,7 +50,13 @@ class Product extends Model
             'ingredients' => 'array',
             'is_active' => 'boolean',
             'is_featured' => 'boolean',
+            'hide_from_storefront' => 'boolean',
         ];
+    }
+
+    public function scopeVisibleInStorefront($query)
+    {
+        return $query->where('hide_from_storefront', false);
     }
 
     public function getRouteKeyName(): string

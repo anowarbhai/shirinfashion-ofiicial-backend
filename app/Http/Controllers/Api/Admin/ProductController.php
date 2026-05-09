@@ -57,7 +57,7 @@ class ProductController extends Controller
 
     public function update(Request $request, Product $product): JsonResponse
     {
-        $before = $product->only(['name', 'sku', 'price', 'inventory', 'is_active', 'is_featured']);
+        $before = $product->only(['name', 'sku', 'price', 'inventory', 'is_active', 'is_featured', 'hide_from_storefront']);
         $validated = $this->validated($request, $product->id);
         $product->update($validated['attributes']);
         $product->categories()->sync($validated['category_ids']);
@@ -72,7 +72,7 @@ class ProductController extends Controller
             $updated,
             [
                 'before' => $before,
-                'after' => $updated->only(['name', 'sku', 'price', 'inventory', 'is_active', 'is_featured']),
+                'after' => $updated->only(['name', 'sku', 'price', 'inventory', 'is_active', 'is_featured', 'hide_from_storefront']),
             ],
         );
 
@@ -125,6 +125,7 @@ class ProductController extends Controller
             'meta_description' => ['nullable', 'string'],
             'is_active' => ['sometimes', 'boolean'],
             'is_featured' => ['sometimes', 'boolean'],
+            'hide_from_storefront' => ['sometimes', 'boolean'],
             'tag_ids' => ['nullable', 'array'],
             'tag_ids.*' => ['integer', 'exists:tags,id'],
             'attribute_term_ids' => ['nullable', 'array'],
