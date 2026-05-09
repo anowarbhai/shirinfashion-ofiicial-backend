@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Support\MediaUrl;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -16,10 +18,15 @@ class OrderItem extends Model
         'volume_discount_id',
         'product_name',
         'sku',
+        'product_image',
         'price',
         'quantity',
         'line_total',
         'is_free_gift',
+    ];
+
+    protected $appends = [
+        'image',
     ];
 
     protected function casts(): array
@@ -39,6 +46,13 @@ class OrderItem extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    protected function image(): Attribute
+    {
+        return Attribute::make(
+            get: fn (): ?string => MediaUrl::toPublic($this->product_image)
+        );
     }
 
     public function volumeDiscount(): BelongsTo

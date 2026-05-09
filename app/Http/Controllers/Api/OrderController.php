@@ -426,6 +426,7 @@ class OrderController extends Controller
                 'volume_discount_id' => $item['tier']?->id,
                 'product_name' => $product->name,
                 'sku' => $product->sku,
+                'product_image' => $this->firstProductImage($product),
                 'price' => $item['tier']
                     ? round($item['line_total'] / max(1, $item['quantity']), 2)
                     : $product->price,
@@ -446,6 +447,7 @@ class OrderController extends Controller
                     'volume_discount_id' => $item['tier']->id,
                     'product_name' => $gift->name.' (Free Gift)',
                     'sku' => $gift->sku,
+                    'product_image' => $this->firstProductImage($gift),
                     'price' => 0,
                     'quantity' => 1,
                     'line_total' => 0,
@@ -457,6 +459,11 @@ class OrderController extends Controller
                 }
             }
         }
+    }
+
+    protected function firstProductImage(Product $product): ?string
+    {
+        return $product->gallery[0] ?? null;
     }
 
     protected function findMatchingIncompleteOrder(?User $customer, array $prepared): ?Order
