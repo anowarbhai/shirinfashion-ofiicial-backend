@@ -10,6 +10,14 @@ return new class extends Migration
     {
         Schema::table('product_moderator_assignments', function (Blueprint $table): void {
             try {
+                $table->index('product_id', 'product_moderator_assignments_product_id_lookup');
+            } catch (\Throwable) {
+                // The lookup index may already exist after a failed retry.
+            }
+        });
+
+        Schema::table('product_moderator_assignments', function (Blueprint $table): void {
+            try {
                 $table->dropUnique(['product_id']);
             } catch (\Throwable) {
                 // Older installs may already have the multi-moderator index.
@@ -36,6 +44,12 @@ return new class extends Migration
 
             try {
                 $table->unique('product_id');
+            } catch (\Throwable) {
+                //
+            }
+
+            try {
+                $table->dropIndex('product_moderator_assignments_product_id_lookup');
             } catch (\Throwable) {
                 //
             }
