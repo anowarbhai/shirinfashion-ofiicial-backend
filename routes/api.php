@@ -62,6 +62,8 @@ Route::get('/health', fn () => response()->json([
 
 Route::prefix('auth')->group(function (): void {
     Route::post('/register', [AuthController::class, 'register']);
+    Route::post('/google', [AuthController::class, 'googleAuth']);
+    Route::post('/google/complete-phone', [AuthController::class, 'completeGooglePhone']);
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/login/verify-otp', [AuthController::class, 'verifyCustomerLoginOtp']);
     Route::post('/admin/login', [AuthController::class, 'adminLogin']);

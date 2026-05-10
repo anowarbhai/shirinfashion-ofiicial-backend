@@ -12,11 +12,14 @@ use App\Services\SmsOtpService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
 use Throwable;
 
 class AuthController extends Controller
@@ -32,17 +35,42 @@ class AuthController extends Controller
     {
         $payload = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'phone' => ['required', 'string', 'max:30', 'unique:users,phone'],
+            'phone' => ['required', 'string', 'max:30'],
             'email' => ['nullable', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'otp_session_token' => ['nullable', 'string'],
+            'otp_code' => ['nullable', 'string', 'size:6'],
         ]);
 
         $payload['phone'] = BangladeshPhone::normalizeToLocal($payload['phone']);
 
-        if (User::query()->where('phone', $payload['phone'])->exists()) {
+        if ($this->customerPhoneExists($payload['phone'])) {
             throw ValidationException::withMessages([
                 'phone' => ['This phone number is already registered.'],
             ]);
+        }
+
+        if ($this->smsOtpService->isEnabled('customer_register')) {
+            if (empty($payload['otp_session_token']) || empty($payload['otp_code'])) {
+                $otp = $this->smsOtpService->issue('customer_register', $payload['phone'], null, [
+                    'name' => $payload['name'],
+                ]);
+
+                return response()->json([
+                    'message' => 'OTP sent successfully. Please verify your phone number.',
+                    'data' => [
+                        'requires_otp' => true,
+                        ...$otp,
+                    ],
+                ]);
+            }
+
+            $this->verifyAndConsumeOtp(
+                'customer_register',
+                $payload['otp_session_token'],
+                $payload['otp_code'],
+                $payload['phone'],
+            );
         }
 
         $user = User::create([
@@ -60,6 +88,123 @@ class AuthController extends Controller
                 'user' => $user,
             ],
         ], 201);
+    }
+
+    public function googleAuth(Request $request): JsonResponse
+    {
+        $payload = $request->validate([
+            'id_token' => ['required', 'string'],
+        ]);
+
+        $profile = $this->verifyGoogleIdToken($payload['id_token']);
+        $user = $this->findGoogleCustomer($profile);
+
+        if ($user && $user->phone) {
+            $this->attachGoogleProfile($user, $profile);
+
+            return response()->json([
+                'message' => 'Google login successful.',
+                'data' => [
+                    'requires_phone' => false,
+                    'token' => $this->jwtService->issueToken($user->fresh()),
+                    'user' => $user->fresh(),
+                ],
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Add your phone number to finish Google sign in.',
+            'data' => [
+                'requires_phone' => true,
+                'google_completion_token' => $this->makeGoogleCompletionToken($profile),
+                'profile' => [
+                    'name' => $profile['name'],
+                    'email' => $profile['email'],
+                    'picture' => $profile['picture'] ?? null,
+                ],
+            ],
+        ]);
+    }
+
+    public function completeGooglePhone(Request $request): JsonResponse
+    {
+        $payload = $request->validate([
+            'google_completion_token' => ['required', 'string'],
+            'phone' => ['required', 'string', 'max:30'],
+            'otp_session_token' => ['nullable', 'string'],
+            'otp_code' => ['nullable', 'string', 'size:6'],
+        ]);
+
+        $profile = $this->readGoogleCompletionToken($payload['google_completion_token']);
+        $phone = BangladeshPhone::normalizeToLocal($payload['phone']);
+        $user = $this->findGoogleCustomer($profile);
+
+        if ($user && $user->phone && ! in_array($user->phone, $this->phoneLookupVariants($phone), true)) {
+            throw ValidationException::withMessages([
+                'phone' => ['This Google account is already connected to another phone number.'],
+            ]);
+        }
+
+        if ($this->customerPhoneExists($phone, $user?->id)) {
+            throw ValidationException::withMessages([
+                'phone' => ['This phone number is already registered.'],
+            ]);
+        }
+
+        if ($this->smsOtpService->isEnabled('customer_register')) {
+            if (empty($payload['otp_session_token']) || empty($payload['otp_code'])) {
+                $otp = $this->smsOtpService->issue('customer_register', $phone, $user, [
+                    'name' => $profile['name'],
+                ]);
+
+                return response()->json([
+                    'message' => 'OTP sent successfully. Please verify your phone number.',
+                    'data' => [
+                        'requires_otp' => true,
+                        'requires_phone' => true,
+                        'google_completion_token' => $payload['google_completion_token'],
+                        ...$otp,
+                    ],
+                ]);
+            }
+
+            $this->verifyAndConsumeOtp(
+                'customer_register',
+                $payload['otp_session_token'],
+                $payload['otp_code'],
+                $phone,
+            );
+        }
+
+        $user = $user ?: User::create([
+            'name' => $profile['name'],
+            'email' => $profile['email'],
+            'google_id' => $profile['google_id'],
+            'phone' => $phone,
+            'avatar_url' => $profile['picture'] ?? null,
+            'email_verified_at' => now(),
+            'password' => Str::random(48),
+            'role' => 'customer',
+        ]);
+
+        $user->forceFill([
+            'name' => $user->name ?: $profile['name'],
+            'email' => $user->email ?: $profile['email'],
+            'google_id' => $profile['google_id'],
+            'phone' => $phone,
+            'avatar_url' => $user->avatar_url ?: ($profile['picture'] ?? null),
+            'email_verified_at' => $user->email_verified_at ?: now(),
+        ])->save();
+
+        return response()->json([
+            'message' => 'Google login successful.',
+            'data' => [
+                'requires_phone' => false,
+                'requires_otp' => false,
+                'token' => $this->jwtService->issueToken($user->fresh()),
+                'user' => $user->fresh(),
+            ],
+        ]);
     }
 
     public function login(Request $request): JsonResponse
@@ -497,6 +642,153 @@ class AuthController extends Controller
                 Storage::disk($disk)->delete($storagePath);
             }
         }
+    }
+
+    /**
+     * @return array{google_id: string, email: string, name: string, picture?: string|null}
+     */
+    protected function verifyGoogleIdToken(string $idToken): array
+    {
+        $clientId = (string) config('services.google.client_id');
+
+        if ($clientId === '') {
+            throw ValidationException::withMessages([
+                'id_token' => ['Google login is not configured.'],
+            ]);
+        }
+
+        $response = Http::timeout(8)->acceptJson()->get(
+            'https://oauth2.googleapis.com/tokeninfo',
+            ['id_token' => $idToken],
+        );
+
+        if (! $response->ok()) {
+            throw ValidationException::withMessages([
+                'id_token' => ['Google sign in could not be verified.'],
+            ]);
+        }
+
+        $data = $response->json();
+
+        if (($data['aud'] ?? null) !== $clientId || empty($data['sub']) || empty($data['email'])) {
+            throw ValidationException::withMessages([
+                'id_token' => ['Google sign in token is not valid for this website.'],
+            ]);
+        }
+
+        if (($data['email_verified'] ?? 'false') !== 'true' && ($data['email_verified'] ?? false) !== true) {
+            throw ValidationException::withMessages([
+                'id_token' => ['Please verify your Google email before signing in.'],
+            ]);
+        }
+
+        return [
+            'google_id' => (string) $data['sub'],
+            'email' => Str::lower((string) $data['email']),
+            'name' => trim((string) ($data['name'] ?? $data['email'])),
+            'picture' => isset($data['picture']) ? (string) $data['picture'] : null,
+        ];
+    }
+
+    /**
+     * @param  array{google_id: string, email: string, name: string, picture?: string|null}  $profile
+     */
+    protected function findGoogleCustomer(array $profile): ?User
+    {
+        $user = User::query()
+            ->where('google_id', $profile['google_id'])
+            ->orWhere('email', $profile['email'])
+            ->first();
+
+        if (! $user) {
+            return null;
+        }
+
+        if ($user->role !== 'customer') {
+            throw ValidationException::withMessages([
+                'id_token' => ['This Google account is already used for an admin account.'],
+            ]);
+        }
+
+        return $user;
+    }
+
+    /**
+     * @param  array{google_id: string, email: string, name: string, picture?: string|null}  $profile
+     */
+    protected function attachGoogleProfile(User $user, array $profile): void
+    {
+        $user->forceFill([
+            'google_id' => $user->google_id ?: $profile['google_id'],
+            'email' => $user->email ?: $profile['email'],
+            'avatar_url' => $user->avatar_url ?: ($profile['picture'] ?? null),
+            'email_verified_at' => $user->email_verified_at ?: now(),
+        ])->save();
+    }
+
+    /**
+     * @param  array{google_id: string, email: string, name: string, picture?: string|null}  $profile
+     */
+    protected function makeGoogleCompletionToken(array $profile): string
+    {
+        return Crypt::encryptString(json_encode([
+            ...$profile,
+            'expires_at' => now()->addMinutes(15)->timestamp,
+        ], JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * @return array{google_id: string, email: string, name: string, picture?: string|null}
+     */
+    protected function readGoogleCompletionToken(string $token): array
+    {
+        try {
+            $payload = json_decode(Crypt::decryptString($token), true, 512, JSON_THROW_ON_ERROR);
+        } catch (Throwable) {
+            throw ValidationException::withMessages([
+                'google_completion_token' => ['Google sign in session has expired. Please try again.'],
+            ]);
+        }
+
+        if (! is_array($payload) || ($payload['expires_at'] ?? 0) < now()->timestamp) {
+            throw ValidationException::withMessages([
+                'google_completion_token' => ['Google sign in session has expired. Please try again.'],
+            ]);
+        }
+
+        if (empty($payload['google_id']) || empty($payload['email']) || empty($payload['name'])) {
+            throw ValidationException::withMessages([
+                'google_completion_token' => ['Google sign in session is invalid. Please try again.'],
+            ]);
+        }
+
+        return [
+            'google_id' => (string) $payload['google_id'],
+            'email' => Str::lower((string) $payload['email']),
+            'name' => (string) $payload['name'],
+            'picture' => isset($payload['picture']) ? (string) $payload['picture'] : null,
+        ];
+    }
+
+    protected function verifyAndConsumeOtp(string $purpose, string $sessionToken, string $code, string $phone): void
+    {
+        try {
+            $this->smsOtpService->verify($purpose, $sessionToken, $code, $phone);
+            $this->smsOtpService->consumeVerified($purpose, $sessionToken, $phone);
+        } catch (RuntimeException $exception) {
+            throw ValidationException::withMessages([
+                'otp_code' => [$exception->getMessage()],
+            ]);
+        }
+    }
+
+    protected function customerPhoneExists(string $phone, ?int $ignoreUserId = null): bool
+    {
+        return User::query()
+            ->where('role', 'customer')
+            ->whereIn('phone', $this->phoneLookupVariants($phone))
+            ->when($ignoreUserId, fn ($query) => $query->whereKeyNot($ignoreUserId))
+            ->exists();
     }
 
     protected function resolveOtpUser(string $sessionToken, string $purpose): ?User

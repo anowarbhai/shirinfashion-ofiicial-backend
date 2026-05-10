@@ -120,6 +120,7 @@ class SmsOtpService
 
         return match ($purpose) {
             'customer_login' => (bool) ($settings['enable_customer_login_otp'] ?? false),
+            'customer_register' => (bool) ($settings['enable_customer_login_otp'] ?? false),
             'admin_login' => (bool) ($settings['enable_admin_login_otp'] ?? false),
             'order' => (bool) ($settings['enable_order_otp'] ?? false),
             default => false,
@@ -177,6 +178,7 @@ class SmsOtpService
 
         $template = match ($purpose) {
             'customer_login' => (string) ($settings['customer_otp_template'] ?? 'Your {{brand}} OTP is {{code}}.'),
+            'customer_register' => (string) ($settings['customer_otp_template'] ?? 'Your {{brand}} OTP is {{code}}.'),
             'admin_login' => (string) ($settings['admin_otp_template'] ?? 'Admin login OTP for {{brand}}: {{code}}.'),
             'order' => (string) ($settings['order_otp_template'] ?? 'Your {{brand}} order OTP is {{code}}.'),
             default => 'Your OTP is {{code}}.',
