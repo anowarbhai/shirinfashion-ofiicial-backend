@@ -111,6 +111,11 @@ class Product extends Model
         return $this->hasOne(ProductModeratorAssignment::class);
     }
 
+    public function moderatorAssignments(): HasMany
+    {
+        return $this->hasMany(ProductModeratorAssignment::class);
+    }
+
     protected function gallery(): Attribute
     {
         return Attribute::make(

@@ -124,11 +124,49 @@ class OrderAssignmentService
             return null;
         }
 
-        $activeModerators = $productAssignments
-            ->map(fn (ProductModeratorAssignment $assignment) => $assignment->moderator)
-            ->filter(fn (?Moderator $moderator): bool => $this->moderatorCanReceive($moderator))
-            ->unique('id')
-            ->values();
+        $moderatorSetsByProduct = $productAssignments
+            ->groupBy('product_id')
+            ->map(function ($assignments) {
+                return $assignments
+                    ->map(fn (ProductModeratorAssignment $assignment) => $assignment->moderator)
+                    ->filter(fn (?Moderator $moderator): bool => $this->moderatorCanReceive($moderator))
+                    ->unique('id')
+                    ->values();
+            });
+
+        if ($moderatorSetsByProduct->contains(fn ($moderators): bool => $moderators->isEmpty())) {
+            return $this->markPendingManualReview(
+                $order,
+                'Product-specific moderator is inactive or unavailable.',
+                $statusType,
+                'moderator_inactive',
+            );
+        }
+
+        $assignedProductIds = $moderatorSetsByProduct->keys()->values();
+        $candidateIds = $moderatorSetsByProduct->first()->pluck('id')->all();
+
+        foreach ($moderatorSetsByProduct->slice(1) as $moderators) {
+            $candidateIds = array_values(array_intersect($candidateIds, $moderators->pluck('id')->all()));
+        }
+
+        if (empty($candidateIds)) {
+            return $this->markPendingManualReview(
+                $order,
+                'Order contains products assigned to different moderators.',
+                $statusType,
+            );
+        }
+
+        $activeModerators = new EloquentCollection(
+            $moderatorSetsByProduct
+                ->flatten(1)
+                ->filter(fn (Moderator $moderator): bool => in_array($moderator->id, $candidateIds, true))
+                ->unique('id')
+                ->sortBy(fn (Moderator $moderator): string => str_pad((string) $moderator->assignment_order, 10, '0', STR_PAD_LEFT).'-'.str_pad((string) $moderator->id, 10, '0', STR_PAD_LEFT))
+                ->values()
+                ->all()
+        );
 
         if ($activeModerators->count() === 1) {
             return $this->writeAssignment(
@@ -143,10 +181,21 @@ class OrderAssignmentService
         }
 
         if ($activeModerators->count() > 1) {
-            return $this->markPendingManualReview(
-                $order,
-                'Order contains products assigned to different moderators.',
+            $moderator = $this->getNextScopedModerator(
                 $statusType,
+                $activeModerators,
+                'product',
+                (int) $assignedProductIds->first(),
+            );
+
+            return $this->writeAssignment(
+                $order,
+                $statusType,
+                $moderator,
+                'product_specific',
+                'assigned',
+                null,
+                'Product-specific moderator assignment.',
             );
         }
 
@@ -156,6 +205,37 @@ class OrderAssignmentService
             $statusType,
             'moderator_inactive',
         );
+    }
+
+    /**
+     * @param EloquentCollection<int, Moderator> $moderators
+     */
+    protected function getNextScopedModerator(
+        string $statusType,
+        EloquentCollection $moderators,
+        string $scopeType,
+        int $scopeId,
+    ): Moderator {
+        $counter = AssignmentCounter::query()
+            ->where('order_status_type', $statusType)
+            ->where('scope_type', $scopeType)
+            ->where('scope_id', $scopeId)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $counter) {
+            $counter = AssignmentCounter::query()->create([
+                'order_status_type' => $statusType,
+                'scope_type' => $scopeType,
+                'scope_id' => $scopeId,
+            ]);
+            $counter->refresh();
+        }
+
+        $nextModerator = $this->getNextActiveModerator($statusType, $moderators, $counter->last_moderator_id);
+        $counter->update(['last_moderator_id' => $nextModerator->id]);
+
+        return $nextModerator;
     }
 
     public function assignByRoundRobin(Order $order, string $statusType): OrderAssignment
