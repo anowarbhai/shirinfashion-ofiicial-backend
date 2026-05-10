@@ -175,6 +175,7 @@ class AdminSettingsService
                     'value' => '0',
                 ],
                 'cartDrawerStyle' => 'style-1',
+                'mobileStickyProductActions' => true,
             ],
             'mail_setup' => [
                 'enabled' => false,

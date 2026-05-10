@@ -51,6 +51,7 @@ class ProductPageSettingsController extends Controller
             'taxSettings.type' => ['required', Rule::in(['percentage', 'fixed'])],
             'taxSettings.value' => ['required', 'string', 'max:40'],
             'cartDrawerStyle' => ['required', Rule::in(['style-1', 'style-2'])],
+            'mobileStickyProductActions' => ['required', 'boolean'],
         ]);
 
         $saved = $this->settings->saveGroup('product_page', $data, true);
