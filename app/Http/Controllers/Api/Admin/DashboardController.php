@@ -96,6 +96,7 @@ class DashboardController extends Controller
                     ])
                     ->values(),
                 'inventory_alerts' => Product::query()
+                    ->where('manage_stock', true)
                     ->where('inventory', '<=', 25)
                     ->orderBy('inventory')
                     ->take(5)

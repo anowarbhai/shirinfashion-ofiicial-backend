@@ -59,7 +59,7 @@ class ProductController extends Controller
 
     public function update(Request $request, Product $product): JsonResponse
     {
-        $before = $product->only(['name', 'sku', 'price', 'inventory', 'is_active', 'is_featured', 'hide_from_storefront']);
+        $before = $product->only(['name', 'sku', 'price', 'inventory', 'manage_stock', 'stock_status', 'is_active', 'is_featured', 'hide_from_storefront']);
         $validated = $this->validated($request, $product->id);
         $product->update($validated['attributes']);
         $product->categories()->sync($validated['category_ids']);
@@ -74,7 +74,7 @@ class ProductController extends Controller
             $updated,
             [
                 'before' => $before,
-                'after' => $updated->only(['name', 'sku', 'price', 'inventory', 'is_active', 'is_featured', 'hide_from_storefront']),
+                'after' => $updated->only(['name', 'sku', 'price', 'inventory', 'manage_stock', 'stock_status', 'is_active', 'is_featured', 'hide_from_storefront']),
             ],
         );
 
@@ -118,6 +118,8 @@ class ProductController extends Controller
             'price' => ['required', 'numeric'],
             'compare_price' => ['nullable', 'numeric'],
             'inventory' => ['required', 'integer', 'min:0'],
+            'manage_stock' => ['sometimes', 'boolean'],
+            'stock_status' => ['nullable', 'string', 'in:in_stock,out_of_stock'],
             'badge' => ['nullable', 'string', 'max:255'],
             'skin_types' => ['nullable', 'array'],
             'gallery' => ['nullable', 'array'],
@@ -150,6 +152,10 @@ class ProductController extends Controller
             $productId,
         );
         $validated['category_id'] = $validated['category_ids'][0];
+        $validated['manage_stock'] = (bool) ($validated['manage_stock'] ?? true);
+        $validated['stock_status'] = $validated['stock_status'] ?? (
+            ((int) $validated['inventory']) > 0 ? 'in_stock' : 'out_of_stock'
+        );
 
         return [
             'attributes' => collect($validated)

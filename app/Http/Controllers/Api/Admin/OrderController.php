@@ -118,7 +118,7 @@ class OrderController extends Controller
                     }
                 }
 
-                if ($product->inventory < $item['quantity']) {
+                if ($product->manage_stock && $product->inventory < $item['quantity']) {
                     throw ValidationException::withMessages([
                         'items' => ["{$product->name} does not have enough stock."],
                     ]);
@@ -187,7 +187,9 @@ class OrderController extends Controller
                     'is_free_gift' => false,
                 ]));
 
-                $product->decrement('inventory', $item['quantity']);
+                if ($product->manage_stock) {
+                    $product->decrement('inventory', $item['quantity']);
+                }
 
                 if ($item['tier']?->freeProduct) {
                     $gift = $item['tier']->freeProduct;
@@ -204,7 +206,7 @@ class OrderController extends Controller
                         'is_free_gift' => true,
                     ]));
 
-                    if ($gift->inventory > 0) {
+                    if ($gift->manage_stock && $gift->inventory > 0) {
                         $gift->decrement('inventory');
                     }
                 }
