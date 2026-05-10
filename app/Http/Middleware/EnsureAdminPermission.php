@@ -84,6 +84,7 @@ class EnsureAdminPermission
             str_starts_with($adminPath, 'marketing/seo') => 'marketing.seo.manage',
             str_starts_with($adminPath, 'themes') => 'themes.manage',
             str_starts_with($adminPath, 'settings/general') => 'settings.general.manage',
+            str_starts_with($adminPath, 'settings/customer-auth') => 'settings.general.manage',
             str_starts_with($adminPath, 'settings/fraud-checker/test') => ['orders.fraud', 'settings.fraud.manage'],
             str_starts_with($adminPath, 'settings/fraud-checker') => 'settings.fraud.manage',
             str_starts_with($adminPath, 'settings/sms-integration') => 'settings.sms.manage',

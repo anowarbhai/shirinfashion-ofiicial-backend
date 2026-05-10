@@ -8,6 +8,7 @@ use App\Models\SmsOtp;
 use App\Support\BangladeshPhone;
 use App\Services\JwtService;
 use App\Services\AdminAuditLogger;
+use App\Services\AdminSettingsService;
 use App\Services\SmsOtpService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -28,6 +29,7 @@ class AuthController extends Controller
         protected JwtService $jwtService,
         protected SmsOtpService $smsOtpService,
         protected AdminAuditLogger $auditLogger,
+        protected AdminSettingsService $settings,
     ) {
     }
 
@@ -92,6 +94,8 @@ class AuthController extends Controller
 
     public function googleAuth(Request $request): JsonResponse
     {
+        $this->ensureGoogleAuthEnabled();
+
         $payload = $request->validate([
             'id_token' => ['required', 'string'],
         ]);
@@ -128,6 +132,8 @@ class AuthController extends Controller
 
     public function completeGooglePhone(Request $request): JsonResponse
     {
+        $this->ensureGoogleAuthEnabled();
+
         $payload = $request->validate([
             'google_completion_token' => ['required', 'string'],
             'phone' => ['required', 'string', 'max:30'],
@@ -649,7 +655,7 @@ class AuthController extends Controller
      */
     protected function verifyGoogleIdToken(string $idToken): array
     {
-        $clientId = (string) config('services.google.client_id');
+        $clientId = $this->googleClientId();
 
         if ($clientId === '') {
             throw ValidationException::withMessages([
@@ -688,6 +694,24 @@ class AuthController extends Controller
             'name' => trim((string) ($data['name'] ?? $data['email'])),
             'picture' => isset($data['picture']) ? (string) $data['picture'] : null,
         ];
+    }
+
+    protected function ensureGoogleAuthEnabled(): void
+    {
+        $settings = $this->settings->getGroup('customer_auth');
+
+        if (! (bool) ($settings['google_login_enabled'] ?? false) || $this->googleClientId() === '') {
+            throw ValidationException::withMessages([
+                'id_token' => ['Google login is disabled.'],
+            ]);
+        }
+    }
+
+    protected function googleClientId(): string
+    {
+        $settings = $this->settings->getGroup('customer_auth');
+
+        return trim((string) ($settings['google_client_id'] ?? ''));
     }
 
     /**

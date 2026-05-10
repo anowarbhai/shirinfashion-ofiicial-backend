@@ -124,6 +124,10 @@ class AdminSettingsService
                 'cooldown_minutes' => 180,
                 'message' => 'You can place another order after {{time}}.',
             ],
+            'customer_auth' => [
+                'google_login_enabled' => false,
+                'google_client_id' => '',
+            ],
             'product_page' => [
                 'reviewSettings' => [
                     'enableReviews' => true,
