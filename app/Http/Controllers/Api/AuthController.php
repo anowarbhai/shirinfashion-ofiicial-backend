@@ -289,6 +289,58 @@ class AuthController extends Controller
         ]);
     }
 
+    public function adminGoogleAuth(Request $request): JsonResponse
+    {
+        $this->ensureGoogleAuthEnabled();
+
+        $payload = $request->validate([
+            'id_token' => ['required', 'string'],
+        ]);
+
+        $profile = $this->verifyGoogleIdToken($payload['id_token']);
+        $user = $this->findGoogleAdmin($profile);
+        $this->attachGoogleProfile($user, $profile);
+        $user = $user->fresh();
+
+        if (! $user || ! $user->isAdmin()) {
+            return response()->json([
+                'message' => 'This Google account does not have admin access.',
+            ], 403);
+        }
+
+        if ($this->smsOtpService->isEnabled('admin_login')) {
+            if (! $user->phone) {
+                return response()->json([
+                    'message' => 'This admin account does not have a phone number for OTP verification.',
+                ], 422);
+            }
+
+            $otp = $this->smsOtpService->issue('admin_login', $user->phone, $user, [
+                'name' => $user->name,
+                'google' => true,
+            ]);
+
+            return response()->json([
+                'message' => 'Admin OTP sent successfully. Please verify to continue.',
+                'data' => [
+                    'requires_otp' => true,
+                    ...$otp,
+                ],
+            ]);
+        }
+
+        $this->auditLogger->log($request, 'auth.login', "{$user->name} logged in with Google.", $user, ['google' => true], $user);
+
+        return response()->json([
+            'message' => 'Admin Google login successful.',
+            'data' => [
+                'requires_otp' => false,
+                'token' => $this->jwtService->issueToken($user),
+                'user' => $this->adminUserPayload($user),
+            ],
+        ]);
+    }
+
     public function verifyCustomerLoginOtp(Request $request): JsonResponse
     {
         $payload = $request->validate([
@@ -731,6 +783,31 @@ class AuthController extends Controller
         if ($user->role !== 'customer') {
             throw ValidationException::withMessages([
                 'id_token' => ['This Google account is already used for an admin account.'],
+            ]);
+        }
+
+        return $user;
+    }
+
+    /**
+     * @param  array{google_id: string, email: string, name: string, picture?: string|null}  $profile
+     */
+    protected function findGoogleAdmin(array $profile): User
+    {
+        $user = User::query()
+            ->where(function ($query) use ($profile): void {
+                $query->where('google_id', $profile['google_id'])
+                    ->orWhere('email', $profile['email']);
+            })
+            ->where(function ($query): void {
+                $query->where('role', 'admin')
+                    ->orWhereNotNull('admin_role_id');
+            })
+            ->first();
+
+        if (! $user || ! $user->isAdmin()) {
+            throw ValidationException::withMessages([
+                'id_token' => ['This Google account is not connected to an active admin account.'],
             ]);
         }
 

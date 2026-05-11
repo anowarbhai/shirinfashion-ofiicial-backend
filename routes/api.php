@@ -69,6 +69,7 @@ Route::prefix('auth')->group(function (): void {
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/login/verify-otp', [AuthController::class, 'verifyCustomerLoginOtp']);
     Route::post('/admin/login', [AuthController::class, 'adminLogin']);
+    Route::post('/admin/google', [AuthController::class, 'adminGoogleAuth']);
     Route::post('/admin/login/verify-otp', [AuthController::class, 'verifyAdminLoginOtp']);
 });
 
