@@ -14,6 +14,8 @@ use App\Services\JwtService;
 use App\Services\OrderAssignmentService;
 use App\Services\SmsGatewayService;
 use App\Services\SmsOtpService;
+use App\Support\BangladeshPhone;
+use InvalidArgumentException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -268,7 +270,7 @@ class OrderController extends Controller
 
     protected function validateOrderPayload(Request $request): array
     {
-        return $request->validate([
+        $payload = $request->validate([
             'customer_name' => ['required', 'string', 'max:255'],
             'email' => ['nullable', 'email'],
             'phone' => ['required', 'string', 'max:30'],
@@ -292,6 +294,16 @@ class OrderController extends Controller
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             'items.*.volume_discount_id' => ['nullable', 'integer', 'exists:product_volume_discounts,id'],
         ]);
+
+        try {
+            $payload['phone'] = BangladeshPhone::normalizeToLocal($payload['phone']);
+        } catch (InvalidArgumentException $exception) {
+            throw ValidationException::withMessages([
+                'phone' => [$exception->getMessage()],
+            ]);
+        }
+
+        return $payload;
     }
 
     protected function prepareOrderPayload(
