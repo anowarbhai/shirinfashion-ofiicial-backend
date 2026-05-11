@@ -16,7 +16,7 @@ class StorefrontController extends Controller
             'data' => [
                 'categories' => Category::query()
                     ->withCount([
-                        'products' => fn ($query) => $query
+                        'relatedProducts as products_count' => fn ($query) => $query
                             ->where('is_active', true)
                             ->visibleInStorefront(),
                     ])

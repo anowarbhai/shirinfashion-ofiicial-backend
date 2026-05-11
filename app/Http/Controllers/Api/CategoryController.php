@@ -13,7 +13,7 @@ class CategoryController extends Controller
         $categories = Category::query()
             ->with('parent')
             ->withCount([
-                'products' => fn ($query) => $query
+                'relatedProducts as products_count' => fn ($query) => $query
                     ->where('is_active', true)
                     ->visibleInStorefront(),
             ])

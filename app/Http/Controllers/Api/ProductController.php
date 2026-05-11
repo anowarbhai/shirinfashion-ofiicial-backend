@@ -13,7 +13,7 @@ class ProductController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = Product::query()
-            ->with(['category', 'activeVolumeDiscounts.freeProduct'])
+            ->with(['category', 'categories', 'activeVolumeDiscounts.freeProduct'])
             ->withCount([
                 'reviews as approved_reviews_count' => fn ($builder) => $builder->where('status', 'approved'),
             ])
@@ -28,9 +28,18 @@ class ProductController extends Controller
         }
 
         if ($request->filled('category')) {
-            $query->whereHas('category', function ($builder) use ($request): void {
-                $builder->where('slug', $request->string('category'))
-                    ->orWhere('name', $request->string('category'));
+            $category = $request->string('category');
+
+            $query->where(function ($builder) use ($category): void {
+                $builder
+                    ->whereHas('categories', function ($categoryQuery) use ($category): void {
+                        $categoryQuery->where('slug', $category)
+                            ->orWhere('name', $category);
+                    })
+                    ->orWhereHas('category', function ($categoryQuery) use ($category): void {
+                        $categoryQuery->where('slug', $category)
+                            ->orWhere('name', $category);
+                    });
             });
         }
 
@@ -56,6 +65,7 @@ class ProductController extends Controller
     {
         $product->load([
             'category',
+            'categories',
             'attributeTerms.attribute',
             'activeVolumeDiscounts.freeProduct',
             'reviews' => fn ($query) => $query
