@@ -17,7 +17,15 @@ class ProductModeratorAssignmentController extends Controller
             'data' => Product::query()
                 ->with(['moderatorAssignments.moderator.user:id,name,email,phone,status'])
                 ->orderBy('name')
-                ->get(['id', 'name', 'sku', 'is_active']),
+                ->get([
+                    'id',
+                    'name',
+                    'sku',
+                    'is_active',
+                    'hide_from_storefront',
+                    'campaign_facebook_pixel_ids',
+                    'campaign_google_tag_ids',
+                ]),
             'moderators' => Moderator::query()
                 ->active()
                 ->with('user:id,name,email,phone,status')

@@ -13,7 +13,7 @@ class OrderAssignmentController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = OrderAssignment::query()
-            ->with(['order.items', 'moderator.user', 'assignedBy'])
+            ->with(['order.items', 'moderator.user', 'moderator.digitalMarketer', 'assignedBy'])
             ->whereNull('order_item_id')
             ->latest();
         $user = $request->user();
