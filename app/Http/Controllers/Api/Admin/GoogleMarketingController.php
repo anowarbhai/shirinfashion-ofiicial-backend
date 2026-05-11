@@ -36,11 +36,11 @@ class GoogleMarketingController extends Controller
 
         $settings = [
             'gtm_enabled' => (bool) $validated['gtm_enabled'],
-            'gtm_container_id' => trim((string) ($validated['gtm_container_id'] ?? '')),
+            'gtm_container_id' => $this->normalizeTrackingId((string) ($validated['gtm_container_id'] ?? ''), 'gtm'),
             'ga4_enabled' => (bool) $validated['ga4_enabled'],
-            'ga4_measurement_id' => trim((string) ($validated['ga4_measurement_id'] ?? '')),
+            'ga4_measurement_id' => $this->normalizeTrackingId((string) ($validated['ga4_measurement_id'] ?? ''), 'ga4'),
             'google_ads_enabled' => (bool) $validated['google_ads_enabled'],
-            'google_ads_conversion_id' => trim((string) ($validated['google_ads_conversion_id'] ?? '')),
+            'google_ads_conversion_id' => $this->normalizeTrackingId((string) ($validated['google_ads_conversion_id'] ?? ''), 'google_ads'),
             'campaign_tags' => $this->normalizeCampaignTags($validated['campaign_tags'] ?? []),
         ];
 
@@ -85,6 +85,7 @@ class GoogleMarketingController extends Controller
                 $type = in_array($tag['type'] ?? '', ['gtm', 'ga4', 'google_ads'], true)
                     ? (string) $tag['type']
                     : 'gtm';
+                $trackingId = $this->normalizeTrackingId($trackingId, $type);
 
                 return [
                     'id' => trim((string) ($tag['id'] ?? '')) ?: 'gg_'.Str::uuid()->toString(),
@@ -97,5 +98,28 @@ class GoogleMarketingController extends Controller
             ->filter(fn (array $tag): bool => $tag['tracking_id'] !== '')
             ->values()
             ->all();
+    }
+
+    private function normalizeTrackingId(string $value, string $type): string
+    {
+        $value = trim($value);
+
+        if ($value === '') {
+            return '';
+        }
+
+        $patterns = [
+            'gtm' => '/GTM-[A-Z0-9]+/i',
+            'ga4' => '/G-[A-Z0-9]+/i',
+            'google_ads' => '/AW-[A-Z0-9]+/i',
+        ];
+
+        $pattern = $patterns[$type] ?? null;
+
+        if ($pattern && preg_match($pattern, $value, $matches)) {
+            return strtoupper($matches[0]);
+        }
+
+        return strtoupper($value);
     }
 }
