@@ -3,15 +3,36 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Category;
 use App\Models\Product;
 use App\Services\AdminAuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ProductController extends Controller
 {
+    private const CSV_HEADERS = [
+        'sku',
+        'name',
+        'slug',
+        'brand',
+        'category_slugs',
+        'price',
+        'compare_price',
+        'inventory',
+        'manage_stock',
+        'stock_status',
+        'is_active',
+        'is_featured',
+        'hide_from_storefront',
+        'short_description',
+        'description',
+        'gallery',
+    ];
+
     public function __construct(protected AdminAuditLogger $auditLogger)
     {
     }
@@ -48,6 +69,203 @@ class ProductController extends Controller
             'message' => 'Product created successfully.',
             'data' => $product->load(['category', 'categories', 'tags', 'attributeTerms.attribute']),
         ], 201);
+    }
+
+    public function export(): StreamedResponse
+    {
+        $fileName = 'products-export-'.now()->format('Y-m-d-His').'.csv';
+
+        return response()->streamDownload(function (): void {
+            $handle = fopen('php://output', 'w');
+            fwrite($handle, "\xEF\xBB\xBF");
+            fputcsv($handle, self::CSV_HEADERS);
+
+            Product::with(['category', 'categories'])
+                ->orderBy('id')
+                ->chunk(200, function ($products) use ($handle): void {
+                    foreach ($products as $product) {
+                        $categories = $product->categories->isNotEmpty()
+                            ? $product->categories
+                            : collect([$product->category])->filter();
+
+                        fputcsv($handle, [
+                            $product->sku,
+                            $product->name,
+                            $product->slug,
+                            $product->brand,
+                            $categories->pluck('slug')->filter()->implode(';'),
+                            $product->price,
+                            $product->compare_price,
+                            $product->inventory,
+                            $product->manage_stock ? '1' : '0',
+                            $product->stock_status,
+                            $product->is_active ? '1' : '0',
+                            $product->is_featured ? '1' : '0',
+                            $product->hide_from_storefront ? '1' : '0',
+                            $product->short_description,
+                            $product->description,
+                            collect($product->gallery)->filter()->implode(';'),
+                        ]);
+                    }
+                });
+
+            fclose($handle);
+        }, $fileName, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    public function sampleImport(): StreamedResponse
+    {
+        return response()->streamDownload(function (): void {
+            $handle = fopen('php://output', 'w');
+            fwrite($handle, "\xEF\xBB\xBF");
+            fputcsv($handle, self::CSV_HEADERS);
+            fputcsv($handle, [
+                'SKU-00001',
+                'Sample Beauty Product',
+                'sample-beauty-product',
+                'Shirin Fashion',
+                'skincare;new-arrivals',
+                '600',
+                '700',
+                '25',
+                '1',
+                'in_stock',
+                '1',
+                '0',
+                '0',
+                'Short product summary within 500 characters.',
+                '<p>Full product description can include HTML.</p>',
+                'https://example.com/product-1.jpg;https://example.com/product-2.jpg',
+            ]);
+            fclose($handle);
+        }, 'product-import-sample.csv', [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    public function import(Request $request): JsonResponse
+    {
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:csv,txt', 'max:10240'],
+        ]);
+
+        $file = $request->file('file');
+        $handle = fopen($file->getRealPath(), 'r');
+
+        if (! $handle) {
+            return response()->json([
+                'message' => 'Unable to read import file.',
+            ], 422);
+        }
+
+        $headers = fgetcsv($handle);
+
+        if (! is_array($headers) || count($headers) === 0) {
+            fclose($handle);
+
+            return response()->json([
+                'message' => 'CSV header row is missing.',
+            ], 422);
+        }
+
+        $headers = array_map(fn ($header) => $this->normalizeCsvHeader((string) $header), $headers);
+        $created = 0;
+        $updated = 0;
+        $skipped = 0;
+        $errors = [];
+        $rowNumber = 1;
+
+        while (($row = fgetcsv($handle)) !== false) {
+            $rowNumber++;
+
+            if ($this->isEmptyCsvRow($row)) {
+                continue;
+            }
+
+            $row = $this->combineCsvRow($headers, $row);
+
+            try {
+                $name = trim((string) ($row['name'] ?? ''));
+                $sku = trim((string) ($row['sku'] ?? ''));
+                $price = trim((string) ($row['price'] ?? ''));
+                $categoryInput = trim((string) ($row['category_slugs'] ?? $row['categories'] ?? ''));
+
+                if ($name === '' || $sku === '' || $price === '' || $categoryInput === '') {
+                    throw ValidationException::withMessages([
+                        'row' => ['SKU, name, category_slugs, and price are required.'],
+                    ]);
+                }
+
+                $categoryIds = $this->resolveImportCategoryIds($categoryInput);
+                $product = Product::query()->where('sku', $sku)->first();
+                $isNewProduct = ! $product;
+
+                if (! $product && ! empty($row['slug'])) {
+                    $product = Product::query()->where('slug', trim((string) $row['slug']))->first();
+                    $isNewProduct = ! $product;
+                }
+
+                $inventory = (int) ($row['inventory'] ?? 0);
+                $manageStock = $this->parseCsvBoolean($row['manage_stock'] ?? null, true);
+                $stockStatus = trim((string) ($row['stock_status'] ?? ''));
+                $stockStatus = in_array($stockStatus, ['in_stock', 'out_of_stock'], true)
+                    ? $stockStatus
+                    : ($manageStock && $inventory <= 0 ? 'out_of_stock' : 'in_stock');
+                $shortDescription = (string) ($row['short_description'] ?? '');
+                $this->validateShortDescriptionLength($shortDescription);
+
+                $attributes = [
+                    'category_id' => $categoryIds[0],
+                    'name' => $name,
+                    'slug' => $this->resolveUniqueSlug((string) ($row['slug'] ?? $name), $product?->id),
+                    'sku' => $sku,
+                    'brand' => trim((string) ($row['brand'] ?? '')) ?: 'Shirin Fashion',
+                    'short_description' => $shortDescription,
+                    'description' => (string) ($row['description'] ?? ''),
+                    'price' => (float) $price,
+                    'compare_price' => $this->nullableFloat($row['compare_price'] ?? null),
+                    'inventory' => $inventory,
+                    'manage_stock' => $manageStock,
+                    'stock_status' => $stockStatus,
+                    'is_active' => $this->parseCsvBoolean($row['is_active'] ?? null, true),
+                    'is_featured' => $this->parseCsvBoolean($row['is_featured'] ?? null, false),
+                    'hide_from_storefront' => $this->parseCsvBoolean($row['hide_from_storefront'] ?? null, false),
+                    'gallery' => $this->splitCsvList((string) ($row['gallery'] ?? '')),
+                ];
+
+                $product = $product ?: new Product();
+                $product->fill($attributes);
+                $product->save();
+                $product->categories()->sync($categoryIds);
+
+                $isNewProduct ? $created++ : $updated++;
+            } catch (\Throwable $exception) {
+                $skipped++;
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'message' => $exception instanceof ValidationException
+                        ? collect($exception->errors())->flatten()->first()
+                        : $exception->getMessage(),
+                ];
+            }
+        }
+
+        fclose($handle);
+
+        $this->auditLogger->log(
+            $request,
+            'product.imported',
+            "Imported products from CSV. Created {$created}, updated {$updated}, skipped {$skipped}.",
+            null,
+            ['created' => $created, 'updated' => $updated, 'skipped' => $skipped],
+        );
+
+        return response()->json([
+            'message' => "Import finished. Created {$created}, updated {$updated}, skipped {$skipped}.",
+            'data' => compact('created', 'updated', 'skipped', 'errors'),
+        ]);
     }
 
     public function show(Product $product): JsonResponse
@@ -101,6 +319,110 @@ class ProductController extends Controller
         return response()->json([
             'message' => 'Product deleted successfully.',
         ]);
+    }
+
+    protected function normalizeCsvHeader(string $header): string
+    {
+        return Str::of($header)
+            ->trim()
+            ->lower()
+            ->replace([' ', '-'], '_')
+            ->replaceMatches('/[^a-z0-9_]/', '')
+            ->toString();
+    }
+
+    protected function combineCsvRow(array $headers, array $row): array
+    {
+        $row = array_pad($row, count($headers), '');
+        $row = array_slice($row, 0, count($headers));
+
+        return array_combine($headers, $row) ?: [];
+    }
+
+    protected function isEmptyCsvRow(array $row): bool
+    {
+        return collect($row)->every(fn ($value) => trim((string) $value) === '');
+    }
+
+    protected function splitCsvList(string $value): array
+    {
+        if (trim($value) === '') {
+            return [];
+        }
+
+        return collect(preg_split('/[;,]/', $value) ?: [])
+            ->map(fn ($item) => trim((string) $item))
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    protected function parseCsvBoolean(mixed $value, bool $default): bool
+    {
+        if ($value === null || trim((string) $value) === '') {
+            return $default;
+        }
+
+        return in_array(Str::lower(trim((string) $value)), ['1', 'true', 'yes', 'y', 'active', 'published', 'on'], true);
+    }
+
+    protected function nullableFloat(mixed $value): ?float
+    {
+        if ($value === null || trim((string) $value) === '') {
+            return null;
+        }
+
+        return (float) $value;
+    }
+
+    protected function resolveImportCategoryIds(string $value): array
+    {
+        $categoryIds = collect($this->splitCsvList($value))
+            ->map(function (string $categoryNameOrSlug): int {
+                $slug = Str::slug($categoryNameOrSlug);
+                $slug = $slug !== '' ? $slug : Str::random(8);
+
+                $category = Category::query()
+                    ->where('slug', $slug)
+                    ->orWhere('name', $categoryNameOrSlug)
+                    ->first();
+
+                if (! $category) {
+                    $category = Category::create([
+                        'name' => Str::of(str_replace(['-', '_'], ' ', $categoryNameOrSlug))->title()->toString(),
+                        'slug' => $this->resolveUniqueCategorySlug($slug),
+                        'is_featured' => false,
+                    ]);
+                }
+
+                return (int) $category->id;
+            })
+            ->unique()
+            ->values()
+            ->all();
+
+        if (count($categoryIds) === 0) {
+            throw ValidationException::withMessages([
+                'category_slugs' => ['At least one category slug or name is required.'],
+            ]);
+        }
+
+        return $categoryIds;
+    }
+
+    protected function resolveUniqueCategorySlug(string $value): string
+    {
+        $base = Str::slug($value);
+        $base = $base !== '' ? $base : 'category';
+        $candidate = $base;
+        $suffix = 2;
+
+        while (Category::query()->where('slug', $candidate)->exists()) {
+            $candidate = $base.'-'.$suffix;
+            $suffix++;
+        }
+
+        return $candidate;
     }
 
     protected function validated(Request $request, ?int $productId = null): array

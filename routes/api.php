@@ -112,6 +112,9 @@ Route::middleware('jwt.auth')->group(function (): void {
 
     Route::prefix('admin')->middleware(['admin', 'admin.permission'])->group(function (): void {
         Route::get('/dashboard', AdminDashboardController::class);
+        Route::get('/products/export', [AdminProductController::class, 'export']);
+        Route::get('/products/import/sample', [AdminProductController::class, 'sampleImport']);
+        Route::post('/products/import', [AdminProductController::class, 'import']);
         Route::apiResource('products', AdminProductController::class);
         Route::get('/product-page-settings', [AdminProductPageSettingsController::class, 'show']);
         Route::patch('/product-page-settings', [AdminProductPageSettingsController::class, 'update']);
