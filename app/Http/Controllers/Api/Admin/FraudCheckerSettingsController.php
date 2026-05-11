@@ -49,4 +49,18 @@ class FraudCheckerSettingsController extends Controller
             ], 422);
         }
     }
+
+    public function bdCourierPlan(): JsonResponse
+    {
+        try {
+            return response()->json([
+                'message' => 'BD Courier plan loaded successfully.',
+                'data' => $this->fraudChecker->bdCourierPlan(),
+            ]);
+        } catch (RuntimeException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+    }
 }

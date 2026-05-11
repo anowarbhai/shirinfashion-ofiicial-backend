@@ -35,6 +35,36 @@ class FraudCheckerService
         return $this->checkOneSoftCode($normalizedPhone, $apiKey, $config);
     }
 
+    public function bdCourierPlan(): array
+    {
+        $config = $this->settings->getGroup('fraud_checker');
+        $apiKey = trim((string) ($config['bd_courier_api_key'] ?? ''));
+
+        if ($apiKey === '') {
+            throw new RuntimeException('BD Courier API key is not configured.');
+        }
+
+        $apiUrl = rtrim(trim((string) ($config['bd_courier_api_url'] ?? 'https://api.bdcourier.com')), '/');
+
+        $response = Http::acceptJson()
+            ->withToken($apiKey)
+            ->timeout(15)
+            ->retry(1, 300)
+            ->get($apiUrl.'/my-plan');
+
+        if (! $response->successful()) {
+            throw new RuntimeException($this->errorMessage($response->status()));
+        }
+
+        $payload = $response->json();
+
+        if (! is_array($payload)) {
+            throw new RuntimeException('BD Courier returned an invalid plan response.');
+        }
+
+        return is_array($payload['data'] ?? null) ? $payload['data'] : [];
+    }
+
     private function checkOneSoftCode(string $normalizedPhone, string $apiKey, array $config): array
     {
         $apiUrl = trim((string) ($config['api_url'] ?? 'https://fraudchecker.ocs-api.top/api/v3'));

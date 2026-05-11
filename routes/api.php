@@ -173,6 +173,7 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::get('/settings/fraud-checker', [AdminFraudCheckerSettingsController::class, 'show']);
         Route::patch('/settings/fraud-checker', [AdminFraudCheckerSettingsController::class, 'update']);
         Route::post('/settings/fraud-checker/test', [AdminFraudCheckerSettingsController::class, 'test']);
+        Route::get('/settings/fraud-checker/bd-courier-plan', [AdminFraudCheckerSettingsController::class, 'bdCourierPlan']);
         Route::get('/settings/checkout-guard', [AdminCheckoutGuardSettingsController::class, 'show']);
         Route::patch('/settings/checkout-guard', [AdminCheckoutGuardSettingsController::class, 'update']);
         Route::get('/settings/mail-setup', [AdminMailSetupSettingsController::class, 'show']);
