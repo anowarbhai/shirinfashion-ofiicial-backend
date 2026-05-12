@@ -18,9 +18,15 @@ class BangladeshPhone
             $digits = '0'.substr($digits, 3);
         }
 
-        if (strlen($digits) !== 11 || ! preg_match('/^01[3-9][0-9]{8}$/', $digits)) {
+        if (! str_starts_with($digits, '01') || ! preg_match('/^01[3-9]/', $digits)) {
             throw new InvalidArgumentException(
-                'Please use a valid Bangladeshi phone number in 11-digit format, for example 01919012186.',
+                'Number format error. Bangladeshi mobile numbers must start with 013, 014, 015, 016, 017, 018, or 019.',
+            );
+        }
+
+        if (strlen($digits) !== 11) {
+            throw new InvalidArgumentException(
+                'Phone number must be exactly 11 digits.',
             );
         }
 
