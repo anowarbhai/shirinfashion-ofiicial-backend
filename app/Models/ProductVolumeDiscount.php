@@ -15,6 +15,7 @@ class ProductVolumeDiscount extends Model
         'free_product_id',
         'quantity',
         'flat_price',
+        'extra_unit_price',
         'label',
         'sort_order',
         'is_active',
@@ -25,6 +26,7 @@ class ProductVolumeDiscount extends Model
         return [
             'quantity' => 'integer',
             'flat_price' => 'decimal:2',
+            'extra_unit_price' => 'decimal:2',
             'sort_order' => 'integer',
             'is_active' => 'boolean',
         ];

@@ -342,9 +342,9 @@ class OrderController extends Controller
                     ]);
                 }
 
-                if ((int) $item['quantity'] !== $tier->quantity) {
+                if (! $this->tierSupportsQuantity($tier, (int) $item['quantity'])) {
                     throw ValidationException::withMessages([
-                        'items' => ["{$tier->label} requires exactly {$tier->quantity} items."],
+                        'items' => [$this->tierQuantityMessage($tier)],
                     ]);
                 }
             }
@@ -356,7 +356,7 @@ class OrderController extends Controller
             }
 
             $lineTotal = $tier
-                ? (float) $tier->flat_price
+                ? $this->calculateVolumeDiscountLineTotal($tier, (int) $item['quantity'])
                 : (float) $product->price * (int) $item['quantity'];
             $subtotal += $lineTotal;
             $orderItems[] = [
@@ -477,6 +477,32 @@ class OrderController extends Controller
     protected function firstProductImage(Product $product): ?string
     {
         return $product->gallery[0] ?? null;
+    }
+
+    protected function tierSupportsQuantity(ProductVolumeDiscount $tier, int $quantity): bool
+    {
+        if ($quantity === (int) $tier->quantity) {
+            return true;
+        }
+
+        return $quantity > (int) $tier->quantity && $tier->extra_unit_price !== null;
+    }
+
+    protected function tierQuantityMessage(ProductVolumeDiscount $tier): string
+    {
+        if ($tier->extra_unit_price !== null) {
+            return "{$tier->label} requires at least {$tier->quantity} items.";
+        }
+
+        return "{$tier->label} requires exactly {$tier->quantity} items.";
+    }
+
+    protected function calculateVolumeDiscountLineTotal(ProductVolumeDiscount $tier, int $quantity): float
+    {
+        $baseQuantity = max(1, (int) $tier->quantity);
+        $extraQuantity = max(0, $quantity - $baseQuantity);
+
+        return (float) $tier->flat_price + ($extraQuantity * (float) ($tier->extra_unit_price ?? 0));
     }
 
     protected function orderItemPayload(array $payload): array

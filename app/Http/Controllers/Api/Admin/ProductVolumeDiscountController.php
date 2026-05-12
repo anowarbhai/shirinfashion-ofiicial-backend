@@ -44,6 +44,7 @@ class ProductVolumeDiscountController extends Controller
             'tiers.*.id' => ['nullable', 'integer', 'exists:product_volume_discounts,id'],
             'tiers.*.quantity' => ['required', 'integer', 'min:1', 'distinct'],
             'tiers.*.flat_price' => ['required', 'numeric', 'min:0'],
+            'tiers.*.extra_unit_price' => ['nullable', 'numeric', 'min:0'],
             'tiers.*.label' => ['nullable', 'string', 'max:255'],
             'tiers.*.free_product_id' => ['nullable', 'integer', 'exists:products,id'],
             'tiers.*.sort_order' => ['nullable', 'integer', 'min:0'],
@@ -57,6 +58,7 @@ class ProductVolumeDiscountController extends Controller
                 $attributes = [
                     'quantity' => $tier['quantity'],
                     'flat_price' => $tier['flat_price'],
+                    'extra_unit_price' => $tier['extra_unit_price'] ?? null,
                     'label' => $tier['label'] ?: 'Buy '.$tier['quantity'].' PCS',
                     'free_product_id' => $tier['free_product_id'] ?? null,
                     'sort_order' => $tier['sort_order'] ?? $index,
