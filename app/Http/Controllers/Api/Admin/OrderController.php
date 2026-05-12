@@ -32,7 +32,8 @@ class OrderController extends Controller
     {
         $query = Order::query()
             ->with(['items', 'assignments.moderator.user', 'assignedModerator'])
-            ->latest();
+            ->orderByDesc('placed_at')
+            ->orderByDesc('id');
 
         $this->applyAssignmentVisibility($query, $request);
 
