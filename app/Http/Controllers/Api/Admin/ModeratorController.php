@@ -44,6 +44,11 @@ class ModeratorController extends Controller
                 })
                 ->orderBy('name')
                 ->get(['id', 'name', 'email', 'phone', 'status', 'admin_role_id']),
+            'permissions' => [
+                'can_add_moderator' => (bool) $user?->hasAdminPermission('moderator.add_moderator'),
+                'can_manage_moderators' => (bool) $user?->hasAdminPermission('moderator.manage_moderators'),
+                'can_toggle_moderators' => (bool) $user?->hasAdminPermission('moderator.activate_deactivate_moderator'),
+            ],
         ]);
     }
 
