@@ -112,18 +112,26 @@ class OrderController extends Controller
             ->selectRaw("SUM(CASE WHEN status IN ('confirmed', 'shipped', 'delivered') THEN 1 ELSE 0 END) as confirmed_delivery_orders")
             ->selectRaw("SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_orders")
             ->first();
+        $totalOrders = (int) ($summaryOrders->total_orders ?? 0);
+        $processingOrders = (int) ($summaryOrders->processing_orders ?? 0);
+        $incompleteOrders = (int) ($summaryOrders->incomplete_orders ?? 0);
+        $confirmedDeliveryOrders = (int) ($summaryOrders->confirmed_delivery_orders ?? 0);
+        $cancelledOrders = (int) ($summaryOrders->cancelled_orders ?? 0);
 
         $perPage = min(max((int) $request->integer('per_page', 20), 1), 100);
 
         return response()->json([
             'data' => $query->paginate($perPage),
             'summary' => [
-                'total' => (int) ($summaryOrders->total_orders ?? 0),
+                'total' => $totalOrders,
                 'revenue' => (float) ($summaryOrders->total_revenue ?? 0),
-                'processing' => (int) ($summaryOrders->processing_orders ?? 0),
-                'incomplete' => (int) ($summaryOrders->incomplete_orders ?? 0),
-                'confirmedDelivery' => (int) ($summaryOrders->confirmed_delivery_orders ?? 0),
-                'cancelled' => (int) ($summaryOrders->cancelled_orders ?? 0),
+                'processing' => $processingOrders,
+                'incomplete' => $incompleteOrders,
+                'confirmedDelivery' => $confirmedDeliveryOrders,
+                'cancelled' => $cancelledOrders,
+                'processingIncompleteRate' => $this->percentage($processingOrders + $incompleteOrders, $totalOrders),
+                'confirmedDeliveryRate' => $this->percentage($confirmedDeliveryOrders, $totalOrders),
+                'cancelledRate' => $this->percentage($cancelledOrders, $totalOrders),
             ],
         ]);
     }
@@ -555,6 +563,11 @@ class OrderController extends Controller
         $normalizedPhone = preg_replace('/[^0-9]/', '', $phone) ?: 'guest';
 
         return sprintf('%s-%s@guest.admin-order', $normalizedPhone, strtolower((string) str()->random(6)));
+    }
+
+    protected function percentage(int $count, int $total): float
+    {
+        return $total > 0 ? round(($count / $total) * 100, 1) : 0.0;
     }
 
     protected function applyAssignmentVisibility($query, Request $request): void
