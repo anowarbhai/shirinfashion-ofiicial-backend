@@ -52,6 +52,15 @@ class ProductPageSettingsController extends Controller
             'taxSettings.value' => ['required', 'string', 'max:40'],
             'cartDrawerStyle' => ['required', Rule::in(['style-1', 'style-2'])],
             'mobileStickyProductActions' => ['required', 'boolean'],
+            'abandonedCheckoutCoupon' => ['required', 'array'],
+            'abandonedCheckoutCoupon.enabled' => ['required', 'boolean'],
+            'abandonedCheckoutCoupon.couponCode' => ['nullable', 'string', 'max:80'],
+            'abandonedCheckoutCoupon.eyebrow' => ['required', 'string', 'max:120'],
+            'abandonedCheckoutCoupon.title' => ['required', 'string', 'max:160'],
+            'abandonedCheckoutCoupon.message' => ['required', 'string', 'max:500'],
+            'abandonedCheckoutCoupon.buttonLabel' => ['required', 'string', 'max:80'],
+            'abandonedCheckoutCoupon.closeLabel' => ['required', 'string', 'max:80'],
+            'abandonedCheckoutCoupon.countdownMinutes' => ['required', 'integer', 'min:1', 'max:1440'],
         ]);
 
         $saved = $this->settings->saveGroup('product_page', $data, true);

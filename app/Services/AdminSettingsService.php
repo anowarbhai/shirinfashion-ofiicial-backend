@@ -180,6 +180,16 @@ class AdminSettingsService
                 ],
                 'cartDrawerStyle' => 'style-1',
                 'mobileStickyProductActions' => true,
+                'abandonedCheckoutCoupon' => [
+                    'enabled' => false,
+                    'couponCode' => '',
+                    'eyebrow' => 'Private checkout offer',
+                    'title' => 'Wait, your order is almost ready',
+                    'message' => 'Use this coupon now and enjoy a special saving before you leave.',
+                    'buttonLabel' => 'Copy Coupon',
+                    'closeLabel' => 'No thanks',
+                    'countdownMinutes' => 15,
+                ],
             ],
             'mail_setup' => [
                 'enabled' => false,
