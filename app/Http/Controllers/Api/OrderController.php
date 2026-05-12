@@ -485,24 +485,24 @@ class OrderController extends Controller
             return true;
         }
 
-        return $quantity > (int) $tier->quantity && $tier->extra_unit_price !== null;
+        return $quantity > (int) $tier->quantity;
     }
 
     protected function tierQuantityMessage(ProductVolumeDiscount $tier): string
     {
-        if ($tier->extra_unit_price !== null) {
-            return "{$tier->label} requires at least {$tier->quantity} items.";
-        }
-
-        return "{$tier->label} requires exactly {$tier->quantity} items.";
+        return "{$tier->label} requires at least {$tier->quantity} items.";
     }
 
     protected function calculateVolumeDiscountLineTotal(ProductVolumeDiscount $tier, int $quantity): float
     {
         $baseQuantity = max(1, (int) $tier->quantity);
         $extraQuantity = max(0, $quantity - $baseQuantity);
+        $fallbackExtraUnitPrice = (float) $tier->flat_price / $baseQuantity;
+        $extraUnitPrice = $tier->extra_unit_price !== null
+            ? (float) $tier->extra_unit_price
+            : $fallbackExtraUnitPrice;
 
-        return (float) $tier->flat_price + ($extraQuantity * (float) ($tier->extra_unit_price ?? 0));
+        return (float) $tier->flat_price + ($extraQuantity * $extraUnitPrice);
     }
 
     protected function orderItemPayload(array $payload): array
