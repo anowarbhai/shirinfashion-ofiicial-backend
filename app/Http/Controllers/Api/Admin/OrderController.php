@@ -102,10 +102,25 @@ class OrderController extends Controller
             }
         }
 
+        $summaryQuery = (clone $query)->reorder();
+        $summaryOrders = $summaryQuery
+            ->toBase()
+            ->selectRaw('COUNT(*) as total_orders')
+            ->selectRaw('COALESCE(SUM(grand_total), 0) as total_revenue')
+            ->selectRaw("SUM(CASE WHEN status IN ('pending', 'processing') THEN 1 ELSE 0 END) as pending_orders")
+            ->selectRaw("SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_orders")
+            ->first();
+
         $perPage = min(max((int) $request->integer('per_page', 20), 1), 100);
 
         return response()->json([
             'data' => $query->paginate($perPage),
+            'summary' => [
+                'total' => (int) ($summaryOrders->total_orders ?? 0),
+                'revenue' => (float) ($summaryOrders->total_revenue ?? 0),
+                'pending' => (int) ($summaryOrders->pending_orders ?? 0),
+                'cancelled' => (int) ($summaryOrders->cancelled_orders ?? 0),
+            ],
         ]);
     }
 
