@@ -32,7 +32,7 @@ class OrderController extends Controller
     {
         $query = Order::query()
             ->with(['items', 'assignments.moderator.user', 'assignedModerator'])
-            ->orderByDesc('placed_at')
+            ->orderByDesc(DB::raw('COALESCE(placed_at, completed_at, last_activity_at, created_at)'))
             ->orderByDesc('id');
 
         $this->applyAssignmentVisibility($query, $request);
@@ -60,16 +60,7 @@ class OrderController extends Controller
         }
 
         if ($request->filled('time') && $request->query('time') !== 'all') {
-            $now = Carbon::now();
-
-            match ($request->query('time')) {
-                'today' => $query->whereDate('placed_at', $now->toDateString()),
-                'week' => $query->where('placed_at', '>=', $now->copy()->startOfWeek()),
-                'month' => $query->where('placed_at', '>=', $now->copy()->startOfMonth()),
-                'quarter' => $query->where('placed_at', '>=', $now->copy()->startOfQuarter()),
-                'year' => $query->where('placed_at', '>=', $now->copy()->startOfYear()),
-                default => null,
-            };
+            $this->applyTimeFilter($query, (string) $request->query('time'));
         }
 
         if ($request->filled('amount') && $request->query('amount') !== 'all') {
@@ -569,6 +560,44 @@ class OrderController extends Controller
     protected function percentage(int $count, int $total): float
     {
         return $total > 0 ? round(($count / $total) * 100, 1) : 0.0;
+    }
+
+    protected function applyTimeFilter($query, string $time): void
+    {
+        $now = Carbon::now($this->orderTimezone());
+
+        [$start, $end] = match ($time) {
+            'today' => [$now->copy()->startOfDay(), $now->copy()->endOfDay()],
+            'week' => [$now->copy()->startOfWeek(), $now->copy()->endOfDay()],
+            'month' => [$now->copy()->startOfMonth(), $now->copy()->endOfDay()],
+            'quarter' => [$now->copy()->startOfQuarter(), $now->copy()->endOfDay()],
+            'year' => [$now->copy()->startOfYear(), $now->copy()->endOfDay()],
+            default => [null, null],
+        };
+
+        if (! $start || ! $end) {
+            return;
+        }
+
+        $query->whereBetween(DB::raw('COALESCE(placed_at, completed_at, last_activity_at, created_at)'), [
+            $this->toDatabaseTimezone($start),
+            $this->toDatabaseTimezone($end),
+        ]);
+    }
+
+    protected function orderTimezone(): string
+    {
+        return (string) config('app.dashboard_timezone', 'Asia/Dhaka');
+    }
+
+    protected function databaseTimezone(): string
+    {
+        return (string) config('app.timezone', 'UTC');
+    }
+
+    protected function toDatabaseTimezone(Carbon $date): Carbon
+    {
+        return $date->copy()->timezone($this->databaseTimezone());
     }
 
     protected function applyAssignmentVisibility($query, Request $request): void
