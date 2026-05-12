@@ -13,7 +13,8 @@ return new class extends Migration
         return [
             ['name' => 'View assigned orders', 'slug' => 'moderator.view_assigned_orders', 'group' => 'moderator', 'description' => 'View orders assigned to the current moderator.'],
             ['name' => 'View all moderator orders', 'slug' => 'moderator.view_all_moderator_orders', 'group' => 'moderator', 'description' => 'View all moderator assignment queues and orders.'],
-            ['name' => 'Manage moderators', 'slug' => 'moderator.manage_moderators', 'group' => 'moderator', 'description' => 'Create and update moderator profiles and manager mapping.'],
+            ['name' => 'Add moderators', 'slug' => 'moderator.add_moderator', 'group' => 'moderator', 'description' => 'Create new moderator profiles.'],
+            ['name' => 'Manage moderators', 'slug' => 'moderator.manage_moderators', 'group' => 'moderator', 'description' => 'Update moderator profiles and manager mapping.'],
             ['name' => 'Assign products to moderators', 'slug' => 'moderator.assign_product_to_moderator', 'group' => 'moderator', 'description' => 'Set product-specific moderator assignment rules.'],
             ['name' => 'Reassign orders', 'slug' => 'moderator.reassign_orders', 'group' => 'moderator', 'description' => 'Reassign one order to an active moderator.'],
             ['name' => 'Bulk reassign orders', 'slug' => 'moderator.bulk_reassign_orders', 'group' => 'moderator', 'description' => 'Bulk reassign selected orders to an active moderator.'],

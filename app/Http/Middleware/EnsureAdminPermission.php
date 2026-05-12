@@ -45,7 +45,8 @@ class EnsureAdminPermission
 
         return match (true) {
             $adminPath === 'dashboard' => 'dashboard.view',
-            str_starts_with($adminPath, 'moderators') && $isRead => ['moderator.manage_moderators', 'moderator.view_all_moderator_orders', 'moderator.assign_product_to_moderator', 'moderator.reassign_orders', 'moderator.bulk_reassign_orders', 'moderator.activate_deactivate_moderator'],
+            str_starts_with($adminPath, 'moderators') && $isRead => ['moderator.add_moderator', 'moderator.manage_moderators', 'moderator.view_all_moderator_orders', 'moderator.assign_product_to_moderator', 'moderator.reassign_orders', 'moderator.bulk_reassign_orders', 'moderator.activate_deactivate_moderator'],
+            str_starts_with($adminPath, 'moderators') && $method === 'POST' => 'moderator.add_moderator',
             str_starts_with($adminPath, 'moderators') => 'moderator.manage_moderators',
             str_starts_with($adminPath, 'product-moderator-assignments') && $isRead => ['moderator.assign_product_to_moderator', 'moderator.manage_moderators'],
             str_starts_with($adminPath, 'product-moderator-assignments') => 'moderator.assign_product_to_moderator',

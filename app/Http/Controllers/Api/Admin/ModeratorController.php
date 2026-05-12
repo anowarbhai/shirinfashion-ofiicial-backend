@@ -56,7 +56,7 @@ class ModeratorController extends Controller
             'assignment_order' => ['required', 'integer', 'min:1', 'max:999999'],
         ]);
 
-        $this->authorizeManager($request, $payload['digital_marketer_id'] ?? null);
+        $this->authorizeManager($request, $payload['digital_marketer_id'] ?? null, 'moderator.add_moderator');
 
         $moderator = Moderator::query()->create($payload);
 
@@ -74,7 +74,7 @@ class ModeratorController extends Controller
             'assignment_order' => ['required', 'integer', 'min:1', 'max:999999'],
         ]);
 
-        $this->authorizeManager($request, $payload['digital_marketer_id'] ?? null);
+        $this->authorizeManager($request, $payload['digital_marketer_id'] ?? null, 'moderator.manage_moderators');
 
         if (
             $moderator->status !== $payload['status']
@@ -91,11 +91,11 @@ class ModeratorController extends Controller
         ]);
     }
 
-    protected function authorizeManager(Request $request, ?int $digitalMarketerId): void
+    protected function authorizeManager(Request $request, ?int $digitalMarketerId, string $permission = 'moderator.manage_moderators'): void
     {
         $user = $request->user();
 
-        abort_unless((bool) $user?->hasAdminPermission('moderator.manage_moderators'), 403);
+        abort_unless((bool) $user?->hasAdminPermission($permission), 403);
 
         if ($user->hasAdminPermission('system.everything') || $user->hasAdminPermission('moderator.view_all_moderator_orders')) {
             return;
