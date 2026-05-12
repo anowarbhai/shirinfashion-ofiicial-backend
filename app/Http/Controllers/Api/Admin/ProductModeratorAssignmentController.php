@@ -11,11 +11,22 @@ use Illuminate\Http\Request;
 
 class ProductModeratorAssignmentController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $user = $request->user();
+        $canViewAll = (bool) ($user?->hasAdminPermission('system.everything') || $user?->hasAdminPermission('moderator.view_all_moderator_orders'));
+        $visibleModeratorIds = $canViewAll ? collect() : $this->visibleModeratorIds($request);
+
         return response()->json([
             'data' => Product::query()
                 ->with(['moderatorAssignments.moderator.user:id,name,email,phone,status'])
+                ->when(
+                    ! $canViewAll,
+                    fn ($query) => $query->whereHas(
+                        'moderatorAssignments',
+                        fn ($assignmentQuery) => $assignmentQuery->whereIn('moderator_id', $visibleModeratorIds),
+                    ),
+                )
                 ->orderBy('name')
                 ->get([
                     'id',
@@ -29,6 +40,7 @@ class ProductModeratorAssignmentController extends Controller
             'moderators' => Moderator::query()
                 ->active()
                 ->with('user:id,name,email,phone,status')
+                ->when(! $canViewAll, fn ($query) => $query->whereIn('id', $visibleModeratorIds))
                 ->orderBy('assignment_order')
                 ->orderBy('id')
                 ->get(),
@@ -37,6 +49,8 @@ class ProductModeratorAssignmentController extends Controller
 
     public function update(Request $request, Product $product): JsonResponse
     {
+        $this->authorizeProductAccess($request, $product);
+
         $payload = $request->validate([
             'moderator_id' => ['nullable', 'integer', 'exists:moderators,id'],
             'moderator_ids' => ['nullable', 'array'],
@@ -52,6 +66,8 @@ class ProductModeratorAssignmentController extends Controller
             ->map(fn ($id): int => (int) $id)
             ->unique()
             ->values();
+
+        $this->authorizeModeratorIds($request, $moderatorIds->all());
 
         if ($moderatorIds->isEmpty()) {
             ProductModeratorAssignment::query()->where('product_id', $product->id)->delete();
@@ -82,5 +98,62 @@ class ProductModeratorAssignmentController extends Controller
             'message' => 'Product moderator assignments saved successfully.',
             'data' => $product->fresh('moderatorAssignments.moderator.user'),
         ]);
+    }
+
+    protected function visibleModeratorIds(Request $request)
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return collect([-1]);
+        }
+
+        return collect()
+            ->when($user->moderatorProfile()->exists(), fn ($ids) => $ids->push($user->moderatorProfile()->value('id')))
+            ->merge($user->managedModerators()->pluck('id'))
+            ->filter()
+            ->unique()
+            ->values();
+    }
+
+    protected function authorizeProductAccess(Request $request, Product $product): void
+    {
+        $user = $request->user();
+
+        if ($user?->hasAdminPermission('system.everything') || $user?->hasAdminPermission('moderator.view_all_moderator_orders')) {
+            return;
+        }
+
+        $visibleModeratorIds = $this->visibleModeratorIds($request);
+
+        abort_unless(
+            $product->moderatorAssignments()->whereIn('moderator_id', $visibleModeratorIds)->exists(),
+            403,
+            'You can only manage products assigned to your moderator queue.',
+        );
+    }
+
+    /**
+     * @param array<int, int> $moderatorIds
+     */
+    protected function authorizeModeratorIds(Request $request, array $moderatorIds): void
+    {
+        if ($moderatorIds === []) {
+            return;
+        }
+
+        $user = $request->user();
+
+        if ($user?->hasAdminPermission('system.everything') || $user?->hasAdminPermission('moderator.view_all_moderator_orders')) {
+            return;
+        }
+
+        $visibleModeratorIds = $this->visibleModeratorIds($request)->all();
+
+        abort_unless(
+            collect($moderatorIds)->every(fn (int $moderatorId): bool => in_array($moderatorId, $visibleModeratorIds, true)),
+            403,
+            'You can only assign products to moderators in your queue.',
+        );
     }
 }
