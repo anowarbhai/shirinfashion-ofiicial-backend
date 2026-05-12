@@ -107,7 +107,8 @@ class OrderController extends Controller
             ->toBase()
             ->selectRaw('COUNT(*) as total_orders')
             ->selectRaw('COALESCE(SUM(grand_total), 0) as total_revenue')
-            ->selectRaw("SUM(CASE WHEN status IN ('pending', 'processing') THEN 1 ELSE 0 END) as pending_orders")
+            ->selectRaw("SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as processing_orders")
+            ->selectRaw("SUM(CASE WHEN status = 'incomplete' THEN 1 ELSE 0 END) as incomplete_orders")
             ->selectRaw("SUM(CASE WHEN status IN ('confirmed', 'shipped', 'delivered') THEN 1 ELSE 0 END) as confirmed_delivery_orders")
             ->selectRaw("SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_orders")
             ->first();
@@ -119,7 +120,8 @@ class OrderController extends Controller
             'summary' => [
                 'total' => (int) ($summaryOrders->total_orders ?? 0),
                 'revenue' => (float) ($summaryOrders->total_revenue ?? 0),
-                'pending' => (int) ($summaryOrders->pending_orders ?? 0),
+                'processing' => (int) ($summaryOrders->processing_orders ?? 0),
+                'incomplete' => (int) ($summaryOrders->incomplete_orders ?? 0),
                 'confirmedDelivery' => (int) ($summaryOrders->confirmed_delivery_orders ?? 0),
                 'cancelled' => (int) ($summaryOrders->cancelled_orders ?? 0),
             ],
