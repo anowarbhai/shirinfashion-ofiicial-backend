@@ -50,8 +50,62 @@ class OrderController extends Controller
             $query->where('assignment_status', $request->query('assignment_status'));
         }
 
+        if ($request->filled('status') && $request->query('status') !== 'all') {
+            $query->where('status', $request->query('status'));
+        }
+
+        if ($request->filled('payment_status') && $request->query('payment_status') !== 'all') {
+            $query->where('payment_status', $request->query('payment_status'));
+        }
+
+        if ($request->filled('time') && $request->query('time') !== 'all') {
+            $now = Carbon::now();
+
+            match ($request->query('time')) {
+                'today' => $query->whereDate('placed_at', $now->toDateString()),
+                'week' => $query->where('placed_at', '>=', $now->copy()->startOfWeek()),
+                'month' => $query->where('placed_at', '>=', $now->copy()->startOfMonth()),
+                'quarter' => $query->where('placed_at', '>=', $now->copy()->startOfQuarter()),
+                'year' => $query->where('placed_at', '>=', $now->copy()->startOfYear()),
+                default => null,
+            };
+        }
+
+        if ($request->filled('amount') && $request->query('amount') !== 'all') {
+            match ($request->query('amount')) {
+                '0-50' => $query->whereBetween('grand_total', [0, 50]),
+                '50-100' => $query->where('grand_total', '>', 50)->where('grand_total', '<=', 100),
+                '100-500' => $query->where('grand_total', '>', 100)->where('grand_total', '<=', 500),
+                '500+' => $query->where('grand_total', '>', 500),
+                default => null,
+            };
+        }
+
+        if ($request->filled('q')) {
+            $search = trim((string) $request->query('q'));
+
+            if ($search !== '') {
+                $query->where(function ($searchQuery) use ($search) {
+                    $searchQuery
+                        ->where('order_number', 'like', "%{$search}%")
+                        ->orWhere('customer_name', 'like', "%{$search}%")
+                        ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('status', 'like', "%{$search}%")
+                        ->orWhere('payment_status', 'like', "%{$search}%")
+                        ->orWhereHas('items', function ($itemQuery) use ($search) {
+                            $itemQuery
+                                ->where('product_name', 'like', "%{$search}%")
+                                ->orWhere('sku', 'like', "%{$search}%");
+                        });
+                });
+            }
+        }
+
+        $perPage = min(max((int) $request->integer('per_page', 20), 1), 100);
+
         return response()->json([
-            'data' => $query->paginate(20),
+            'data' => $query->paginate($perPage),
         ]);
     }
 
