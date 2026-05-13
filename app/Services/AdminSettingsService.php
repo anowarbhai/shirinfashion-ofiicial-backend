@@ -88,6 +88,14 @@ class AdminSettingsService
                 'maintenance_message' => 'We are performing a quick update. Please check back shortly.',
                 'maintenance_until' => null,
                 'invoice_note' => 'Thank you for shopping with Shirin Fashion.',
+                'cookie_consent' => [
+                    'enabled' => false,
+                    'message' => 'We use cookies to improve your shopping experience, keep your cart working, and understand website performance.',
+                    'accept_label' => 'Accept Cookies',
+                    'close_label' => 'Close',
+                    'policy_label' => 'Cookies Policy',
+                    'policy_url' => '/cookies',
+                ],
             ],
             'fraud_checker' => [
                 'enabled' => false,

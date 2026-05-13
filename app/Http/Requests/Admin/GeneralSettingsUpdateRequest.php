@@ -25,6 +25,13 @@ class GeneralSettingsUpdateRequest extends FormRequest
             'maintenance_message' => ['nullable', 'string', 'max:1000'],
             'maintenance_until' => ['nullable', 'date'],
             'invoice_note' => ['nullable', 'string', 'max:1000'],
+            'cookie_consent' => ['nullable', 'array'],
+            'cookie_consent.enabled' => ['nullable', 'boolean'],
+            'cookie_consent.message' => ['nullable', 'string', 'max:500'],
+            'cookie_consent.accept_label' => ['nullable', 'string', 'max:80'],
+            'cookie_consent.close_label' => ['nullable', 'string', 'max:80'],
+            'cookie_consent.policy_label' => ['nullable', 'string', 'max:80'],
+            'cookie_consent.policy_url' => ['nullable', 'string', 'max:255'],
         ];
     }
 }
