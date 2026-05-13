@@ -17,7 +17,7 @@ class ThemeMenuStoreRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:120'],
             'slug' => ['required', 'string', 'max:120', 'alpha_dash', 'unique:storefront_menus,slug'],
-            'location' => ['nullable', Rule::in(['header_menu', 'footer_menu_1', 'footer_menu_2'])],
+            'location' => ['nullable', Rule::in(['header_menu', 'footer_menu_1', 'footer_menu_2', 'footer_bottom_policy'])],
             'is_active' => ['required', 'boolean'],
             'items' => ['nullable', 'array'],
             'items.*.id' => ['nullable'],

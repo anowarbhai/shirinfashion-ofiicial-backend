@@ -97,6 +97,7 @@ class ThemeSettingsService
             ['id' => 'header_menu', 'label' => 'Header Menu'],
             ['id' => 'footer_menu_1', 'label' => 'Footer Menu 1'],
             ['id' => 'footer_menu_2', 'label' => 'Footer Menu 2'],
+            ['id' => 'footer_bottom_policy', 'label' => 'Footer Bottom Policy'],
         ];
     }
 
