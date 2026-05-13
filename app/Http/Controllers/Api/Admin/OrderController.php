@@ -51,6 +51,10 @@ class OrderController extends Controller
             $query->where('assignment_status', $request->query('assignment_status'));
         }
 
+        if ($request->filled('campaign_tracking') && $request->query('campaign_tracking') !== 'all') {
+            $this->applyCampaignTrackingFilter($query, (string) $request->query('campaign_tracking'));
+        }
+
         if ($request->filled('status') && $request->query('status') !== 'all') {
             $query->where('status', $request->query('status'));
         }
@@ -661,6 +665,41 @@ class OrderController extends Controller
             $this->toDatabaseTimezone($start),
             $this->toDatabaseTimezone($end),
         ]);
+    }
+
+    protected function applyCampaignTrackingFilter($query, string $campaignTracking): void
+    {
+        if ($campaignTracking === 'none') {
+            $query->whereDoesntHave('items.product', function ($productQuery): void {
+                $productQuery->where(function ($trackingQuery): void {
+                    $trackingQuery
+                        ->whereJsonLength('campaign_facebook_pixel_ids', '>', 0)
+                        ->orWhereJsonLength('campaign_google_tag_ids', '>', 0);
+                });
+            });
+
+            return;
+        }
+
+        if (str_starts_with($campaignTracking, 'facebook:')) {
+            $pixelId = trim(substr($campaignTracking, strlen('facebook:')));
+
+            if ($pixelId !== '') {
+                $query->whereHas('items.product', fn ($productQuery) => $productQuery
+                    ->whereJsonContains('campaign_facebook_pixel_ids', $pixelId));
+            }
+
+            return;
+        }
+
+        if (str_starts_with($campaignTracking, 'google:')) {
+            $tagId = trim(substr($campaignTracking, strlen('google:')));
+
+            if ($tagId !== '') {
+                $query->whereHas('items.product', fn ($productQuery) => $productQuery
+                    ->whereJsonContains('campaign_google_tag_ids', $tagId));
+            }
+        }
     }
 
     protected function orderTimezone(): string
