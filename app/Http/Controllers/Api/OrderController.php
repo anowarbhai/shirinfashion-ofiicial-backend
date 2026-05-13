@@ -85,7 +85,7 @@ class OrderController extends Controller
         }
 
         $order = DB::transaction(function () use ($customer, $payload, $clientIp) {
-            $prepared = $this->prepareOrderPayload($payload, true, true);
+            $prepared = $this->prepareOrderPayload($payload, true, true, $customer);
             $order = $this->findMatchingIncompleteOrder($customer, $prepared)
                 ?? new Order(['order_number' => $this->generateOrderNumber()]);
             $hadIncompleteAssignment = $order->exists && $order->status === 'incomplete';
@@ -111,8 +111,8 @@ class OrderController extends Controller
                 : null;
             $keptAssignment ?? $this->orderAssignmentService->assignProcessingOrder($order);
 
-            if (! empty($payload['coupon_code'])) {
-                Coupon::where('code', strtoupper($payload['coupon_code']))->increment('used_count');
+            if (! empty($prepared['coupon_code'])) {
+                Coupon::where('code', $prepared['coupon_code'])->increment('used_count');
             }
 
             $this->deleteDuplicateIncompleteOrders($order, $customer, $prepared);
@@ -151,7 +151,7 @@ class OrderController extends Controller
         }
 
         $order = DB::transaction(function () use ($customer, $payload, $clientIp) {
-            $prepared = $this->prepareOrderPayload($payload, false, false);
+            $prepared = $this->prepareOrderPayload($payload, false, false, $customer, false);
             $recentCompletedOrder = $this->findRecentCompletedOrder($customer, $prepared);
 
             if ($recentCompletedOrder) {
@@ -310,6 +310,8 @@ class OrderController extends Controller
         array $payload,
         bool $enforceInventory,
         bool $includeFraudCheck,
+        ?User $customer = null,
+        bool $enforceCouponUsageLimit = true,
     ): array {
         $productIds = collect($payload['items'])->pluck('product_id')->all();
         $products = Product::whereIn('id', $productIds)->get()->keyBy('id');
@@ -367,7 +369,13 @@ class OrderController extends Controller
             ];
         }
 
-        $discountTotal = $this->resolveDiscount($payload['coupon_code'] ?? null, $subtotal);
+        $coupon = $this->resolveCoupon($payload['coupon_code'] ?? null, $subtotal);
+
+        if ($coupon && $enforceCouponUsageLimit) {
+            $this->ensureCouponPerUserLimit($coupon, $payload, $customer);
+        }
+
+        $discountTotal = $coupon ? $this->calculateCouponDiscount($coupon, $subtotal) : 0;
         $shippingAddress = [
             'address' => $payload['shipping_address']['address'],
             'city' => $payload['shipping_address']['city']
@@ -380,6 +388,7 @@ class OrderController extends Controller
             'order_items' => $orderItems,
             'subtotal' => $subtotal,
             'discount_total' => $discountTotal,
+            'coupon_code' => $coupon?->code,
             'shipping_total' => $shippingTotal,
             'grand_total' => $subtotal + $shippingTotal - $discountTotal,
             'shipping_address' => $shippingAddress,
@@ -417,6 +426,7 @@ class OrderController extends Controller
             'payment_method' => $payload['payment_method'],
             'subtotal' => $prepared['subtotal'],
             'discount_total' => $prepared['discount_total'],
+            'coupon_code' => $prepared['coupon_code'],
             'shipping_total' => $prepared['shipping_total'],
             'grand_total' => $prepared['grand_total'],
             'shipping_address' => $prepared['shipping_address'],
@@ -649,10 +659,10 @@ class OrderController extends Controller
         return $orderNumber;
     }
 
-    protected function resolveDiscount(?string $couponCode, float $subtotal): float
+    protected function resolveCoupon(?string $couponCode, float $subtotal): ?Coupon
     {
         if (! $couponCode) {
-            return 0;
+            return null;
         }
 
         $coupon = Coupon::where('code', strtoupper($couponCode))
@@ -660,16 +670,81 @@ class OrderController extends Controller
             ->first();
 
         if (! $coupon) {
-            return 0;
+            return null;
+        }
+
+        if (($coupon->starts_at && $coupon->starts_at->isFuture()) ||
+            ($coupon->ends_at && $coupon->ends_at->isPast())) {
+            return null;
+        }
+
+        if ($coupon->usage_limit && $coupon->used_count >= $coupon->usage_limit) {
+            return null;
         }
 
         if ($subtotal < (float) $coupon->minimum_order_amount) {
-            return 0;
+            return null;
         }
 
+        if ($coupon->maximum_order_amount !== null && $subtotal > (float) $coupon->maximum_order_amount) {
+            return null;
+        }
+
+        return $coupon;
+    }
+
+    protected function calculateCouponDiscount(Coupon $coupon, float $subtotal): float
+    {
         return $coupon->type === 'fixed'
             ? min((float) $coupon->value, $subtotal)
             : round($subtotal * ((float) $coupon->value / 100), 2);
+    }
+
+    protected function ensureCouponPerUserLimit(Coupon $coupon, array $payload, ?User $customer): void
+    {
+        $limit = (int) ($coupon->per_user_limit ?? 0);
+
+        if ($limit < 1) {
+            return;
+        }
+
+        $count = $this->couponUsageCount($coupon, $payload, $customer);
+
+        if ($count >= $limit) {
+            throw ValidationException::withMessages([
+                'coupon_code' => ["This coupon can only be used {$limit} time(s) per customer."],
+            ]);
+        }
+    }
+
+    protected function couponUsageCount(Coupon $coupon, array $payload, ?User $customer): int
+    {
+        $normalizedPhone = $this->normalizePhoneForMatch((string) ($payload['phone'] ?? ''));
+        $normalizedEmail = strtolower(trim((string) ($payload['email'] ?? $customer?->email ?? '')));
+
+        if (! $customer && $normalizedPhone === '' && $normalizedEmail === '') {
+            return 0;
+        }
+
+        return Order::query()
+            ->where('coupon_code', $coupon->code)
+            ->whereNotIn('status', ['incomplete', 'cancelled', 'refunded'])
+            ->where(function ($query) use ($customer, $normalizedPhone, $normalizedEmail): void {
+                if ($customer) {
+                    $query->orWhere('user_id', $customer->id);
+                }
+
+                if ($normalizedPhone !== '') {
+                    $query
+                        ->orWhere('normalized_phone', $normalizedPhone)
+                        ->orWhere('phone', $normalizedPhone);
+                }
+
+                if ($normalizedEmail !== '') {
+                    $query->orWhereRaw('LOWER(email) = ?', [$normalizedEmail]);
+                }
+            })
+            ->count();
     }
 
     protected function resolveShippingTotal(string $shippingMethod, float $subtotal): float

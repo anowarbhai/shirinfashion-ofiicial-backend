@@ -62,6 +62,7 @@ class CouponController extends Controller
             'minimum_order_amount' => ['nullable', 'numeric', 'min:0'],
             'maximum_order_amount' => ['nullable', 'numeric', 'min:0'],
             'usage_limit' => ['nullable', 'integer', 'min:1'],
+            'per_user_limit' => ['nullable', 'integer', 'min:1'],
             'starts_at' => ['nullable', 'date'],
             'ends_at' => ['nullable', 'date'],
             'free_shipping' => ['sometimes', 'boolean'],

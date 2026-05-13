@@ -35,6 +35,7 @@ class Order extends Model
         'payment_status',
         'subtotal',
         'discount_total',
+        'coupon_code',
         'shipping_total',
         'grand_total',
         'shipping_address',
