@@ -99,20 +99,47 @@ class OrderController extends Controller
         }
 
         $summaryQuery = (clone $query)->reorder();
+        $incompleteOriginSql = "(
+            orders.assignment_status_type = 'incomplete'
+            OR EXISTS (
+                SELECT 1
+                FROM order_assignments oa
+                WHERE oa.order_id = orders.id
+                    AND oa.order_item_id IS NULL
+                    AND oa.order_status_type = 'incomplete'
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM order_assignment_histories oah
+                WHERE oah.order_id = orders.id
+                    AND oah.order_item_id IS NULL
+                    AND oah.order_status_type = 'incomplete'
+            )
+        )";
+        $completedStatusSql = "status IN ('confirmed', 'shipped', 'delivered')";
+        $cancelledStatusSql = "status = 'cancelled'";
         $summaryOrders = $summaryQuery
             ->toBase()
             ->selectRaw('COUNT(*) as total_orders')
             ->selectRaw('COALESCE(SUM(grand_total), 0) as total_revenue')
             ->selectRaw("SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as processing_orders")
             ->selectRaw("SUM(CASE WHEN status = 'incomplete' THEN 1 ELSE 0 END) as incomplete_orders")
-            ->selectRaw("SUM(CASE WHEN status IN ('confirmed', 'shipped', 'delivered') THEN 1 ELSE 0 END) as confirmed_delivery_orders")
-            ->selectRaw("SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_orders")
+            ->selectRaw("SUM(CASE WHEN {$completedStatusSql} THEN 1 ELSE 0 END) as confirmed_delivery_orders")
+            ->selectRaw("SUM(CASE WHEN {$completedStatusSql} AND NOT {$incompleteOriginSql} THEN 1 ELSE 0 END) as completed_from_processing")
+            ->selectRaw("SUM(CASE WHEN {$completedStatusSql} AND {$incompleteOriginSql} THEN 1 ELSE 0 END) as completed_from_incomplete")
+            ->selectRaw("SUM(CASE WHEN {$cancelledStatusSql} THEN 1 ELSE 0 END) as cancelled_orders")
+            ->selectRaw("SUM(CASE WHEN {$cancelledStatusSql} AND NOT {$incompleteOriginSql} THEN 1 ELSE 0 END) as cancelled_from_processing")
+            ->selectRaw("SUM(CASE WHEN {$cancelledStatusSql} AND {$incompleteOriginSql} THEN 1 ELSE 0 END) as cancelled_from_incomplete")
             ->first();
         $totalOrders = (int) ($summaryOrders->total_orders ?? 0);
         $processingOrders = (int) ($summaryOrders->processing_orders ?? 0);
         $incompleteOrders = (int) ($summaryOrders->incomplete_orders ?? 0);
         $confirmedDeliveryOrders = (int) ($summaryOrders->confirmed_delivery_orders ?? 0);
         $cancelledOrders = (int) ($summaryOrders->cancelled_orders ?? 0);
+        $completedFromProcessing = (int) ($summaryOrders->completed_from_processing ?? 0);
+        $completedFromIncomplete = (int) ($summaryOrders->completed_from_incomplete ?? 0);
+        $cancelledFromProcessing = (int) ($summaryOrders->cancelled_from_processing ?? 0);
+        $cancelledFromIncomplete = (int) ($summaryOrders->cancelled_from_incomplete ?? 0);
 
         $perPage = min(max((int) $request->integer('per_page', 20), 1), 100);
 
@@ -124,9 +151,19 @@ class OrderController extends Controller
                 'processing' => $processingOrders,
                 'incomplete' => $incompleteOrders,
                 'confirmedDelivery' => $confirmedDeliveryOrders,
+                'completedFromProcessing' => $completedFromProcessing,
+                'completedFromIncomplete' => $completedFromIncomplete,
                 'cancelled' => $cancelledOrders,
+                'cancelledFromProcessing' => $cancelledFromProcessing,
+                'cancelledFromIncomplete' => $cancelledFromIncomplete,
+                'processingRate' => $this->percentage($processingOrders, $totalOrders),
+                'incompleteRate' => $this->percentage($incompleteOrders, $totalOrders),
                 'processingIncompleteRate' => $this->percentage($processingOrders + $incompleteOrders, $totalOrders),
+                'completedFromProcessingRate' => $this->percentage($completedFromProcessing, $totalOrders),
+                'completedFromIncompleteRate' => $this->percentage($completedFromIncomplete, $totalOrders),
                 'confirmedDeliveryRate' => $this->percentage($confirmedDeliveryOrders, $totalOrders),
+                'cancelledFromProcessingRate' => $this->percentage($cancelledFromProcessing, $totalOrders),
+                'cancelledFromIncompleteRate' => $this->percentage($cancelledFromIncomplete, $totalOrders),
                 'cancelledRate' => $this->percentage($cancelledOrders, $totalOrders),
             ],
         ]);
