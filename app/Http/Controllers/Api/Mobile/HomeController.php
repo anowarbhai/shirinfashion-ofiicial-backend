@@ -57,14 +57,10 @@ class HomeController extends Controller
 
         $categories = Category::query()
             ->with('parent')
-            ->withCount([
-                'relatedProducts as products_count' => fn ($query) => $query
-                    ->where('is_active', true)
-                    ->visibleInStorefront(),
-            ])
-            ->where('is_featured', true)
+            ->select('categories.*')
+            ->selectSub($this->categoryProductsCountQuery(), 'products_count')
+            ->orderByDesc('is_featured')
             ->orderBy('name')
-            ->limit(12)
             ->get();
 
         $sliders = Slider::query()
@@ -132,5 +128,18 @@ class HomeController extends Controller
         return rtrim($request->getSchemeAndHttpHost(), '/')
             .'/api/v1/mobile/media?url='
             .rawurlencode($url);
+    }
+
+    protected function categoryProductsCountQuery()
+    {
+        return Product::query()
+            ->selectRaw('COUNT(DISTINCT products.id)')
+            ->leftJoin('category_product', 'category_product.product_id', '=', 'products.id')
+            ->where('products.is_active', true)
+            ->visibleInStorefront()
+            ->where(function ($query): void {
+                $query->whereColumn('products.category_id', 'categories.id')
+                    ->orWhereColumn('category_product.category_id', 'categories.id');
+            });
     }
 }
