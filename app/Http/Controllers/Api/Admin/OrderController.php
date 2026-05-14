@@ -99,23 +99,7 @@ class OrderController extends Controller
         }
 
         $summaryQuery = (clone $query)->reorder();
-        $incompleteOriginSql = "(
-            orders.assignment_status_type = 'incomplete'
-            OR EXISTS (
-                SELECT 1
-                FROM order_assignments oa
-                WHERE oa.order_id = orders.id
-                    AND oa.order_item_id IS NULL
-                    AND oa.order_status_type = 'incomplete'
-            )
-            OR EXISTS (
-                SELECT 1
-                FROM order_assignment_histories oah
-                WHERE oah.order_id = orders.id
-                    AND oah.order_item_id IS NULL
-                    AND oah.order_status_type = 'incomplete'
-            )
-        )";
+        $incompleteQueueSql = "orders.assignment_status_type = 'incomplete'";
         $completedStatusSql = "status IN ('confirmed', 'shipped', 'delivered')";
         $cancelledStatusSql = "status = 'cancelled'";
         $summaryOrders = $summaryQuery
@@ -125,11 +109,11 @@ class OrderController extends Controller
             ->selectRaw("SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as processing_orders")
             ->selectRaw("SUM(CASE WHEN status = 'incomplete' THEN 1 ELSE 0 END) as incomplete_orders")
             ->selectRaw("SUM(CASE WHEN {$completedStatusSql} THEN 1 ELSE 0 END) as confirmed_delivery_orders")
-            ->selectRaw("SUM(CASE WHEN {$completedStatusSql} AND NOT {$incompleteOriginSql} THEN 1 ELSE 0 END) as completed_from_processing")
-            ->selectRaw("SUM(CASE WHEN {$completedStatusSql} AND {$incompleteOriginSql} THEN 1 ELSE 0 END) as completed_from_incomplete")
+            ->selectRaw("SUM(CASE WHEN {$completedStatusSql} AND NOT {$incompleteQueueSql} THEN 1 ELSE 0 END) as completed_from_processing")
+            ->selectRaw("SUM(CASE WHEN {$completedStatusSql} AND {$incompleteQueueSql} THEN 1 ELSE 0 END) as completed_from_incomplete")
             ->selectRaw("SUM(CASE WHEN {$cancelledStatusSql} THEN 1 ELSE 0 END) as cancelled_orders")
-            ->selectRaw("SUM(CASE WHEN {$cancelledStatusSql} AND NOT {$incompleteOriginSql} THEN 1 ELSE 0 END) as cancelled_from_processing")
-            ->selectRaw("SUM(CASE WHEN {$cancelledStatusSql} AND {$incompleteOriginSql} THEN 1 ELSE 0 END) as cancelled_from_incomplete")
+            ->selectRaw("SUM(CASE WHEN {$cancelledStatusSql} AND NOT {$incompleteQueueSql} THEN 1 ELSE 0 END) as cancelled_from_processing")
+            ->selectRaw("SUM(CASE WHEN {$cancelledStatusSql} AND {$incompleteQueueSql} THEN 1 ELSE 0 END) as cancelled_from_incomplete")
             ->first();
         $totalOrders = (int) ($summaryOrders->total_orders ?? 0);
         $processingOrders = (int) ($summaryOrders->processing_orders ?? 0);
