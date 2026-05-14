@@ -191,6 +191,7 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::post('/database-backups/restore-upload', [AdminDatabaseBackupController::class, 'restoreUpload']);
         Route::get('/database-backups/{databaseBackup}/download', [AdminDatabaseBackupController::class, 'download']);
         Route::post('/database-backups/{databaseBackup}/restore', [AdminDatabaseBackupController::class, 'restore']);
+        Route::delete('/database-backups/{databaseBackup}', [AdminDatabaseBackupController::class, 'destroy']);
         Route::get('/settings/sms-integration', [AdminSmsIntegrationSettingsController::class, 'show']);
         Route::patch('/settings/sms-integration', [AdminSmsIntegrationSettingsController::class, 'update']);
         Route::get('/settings/sms-integration/balance', [AdminSmsIntegrationSettingsController::class, 'balance']);

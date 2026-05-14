@@ -137,6 +137,25 @@ class DatabaseBackupController extends Controller
         return $this->downloadBackup($databaseBackup);
     }
 
+    public function destroy(DatabaseBackup $databaseBackup): JsonResponse
+    {
+        try {
+            if (Storage::disk($databaseBackup->disk)->exists($databaseBackup->path)) {
+                Storage::disk($databaseBackup->disk)->delete($databaseBackup->path);
+            }
+
+            $databaseBackup->delete();
+
+            return response()->json([
+                'message' => 'Database backup deleted successfully.',
+            ]);
+        } catch (Throwable $exception) {
+            return response()->json([
+                'message' => $exception->getMessage() ?: 'Unable to delete database backup.',
+            ], 422);
+        }
+    }
+
     public function downloadByToken(string $token): StreamedResponse|JsonResponse
     {
         try {
