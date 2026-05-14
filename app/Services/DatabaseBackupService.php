@@ -224,7 +224,7 @@ class DatabaseBackupService
 
     public function downloadUrl(DatabaseBackup $backup): string
     {
-        return rtrim((string) config('app.url'), '/').'/api/database-backups/download/'.$backup->download_token;
+        return $this->publicDownloadBaseUrl().'/api/database-backups/download/'.$backup->download_token;
     }
 
     public function shouldRunMonthlyBackup(CarbonInterface $now): bool
@@ -448,6 +448,46 @@ class DatabaseBackupService
     private function downloadTtlDays(): int
     {
         return max(1, min(30, (int) ($this->settings()['download_link_ttl_days'] ?? 7)));
+    }
+
+    private function publicDownloadBaseUrl(): string
+    {
+        $settings = $this->settings();
+        $candidates = [
+            $settings['public_download_base_url'] ?? null,
+            env('BACKUP_DOWNLOAD_BASE_URL'),
+            env('PUBLIC_API_URL'),
+            env('API_URL'),
+            config('app.url'),
+            request()?->getSchemeAndHttpHost(),
+            'https://api.shirinfashion.app',
+        ];
+
+        foreach ($candidates as $candidate) {
+            $baseUrl = trim((string) $candidate);
+
+            if ($this->isPublicHttpUrl($baseUrl)) {
+                return rtrim($baseUrl, '/');
+            }
+        }
+
+        return 'https://api.shirinfashion.app';
+    }
+
+    private function isPublicHttpUrl(string $url): bool
+    {
+        if ($url === '') {
+            return false;
+        }
+
+        $host = parse_url($url, PHP_URL_HOST);
+        $scheme = parse_url($url, PHP_URL_SCHEME);
+
+        if (! in_array($scheme, ['http', 'https'], true) || ! is_string($host)) {
+            return false;
+        }
+
+        return ! in_array(strtolower($host), ['localhost', '127.0.0.1', '::1'], true);
     }
 
     /**

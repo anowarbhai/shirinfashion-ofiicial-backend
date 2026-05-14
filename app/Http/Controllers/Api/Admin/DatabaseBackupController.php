@@ -51,6 +51,7 @@ class DatabaseBackupController extends Controller
             'compress' => ['required', 'boolean'],
             'restore_enabled' => ['required', 'boolean'],
             'download_link_ttl_days' => ['required', 'integer', 'min:1', 'max:30'],
+            'public_download_base_url' => ['nullable', 'url', 'max:255'],
         ]);
 
         $data = $this->settings->saveGroup('database_backup', $payload);

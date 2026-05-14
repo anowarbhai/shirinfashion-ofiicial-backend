@@ -223,6 +223,7 @@ class AdminSettingsService
                 'compress' => true,
                 'restore_enabled' => true,
                 'download_link_ttl_days' => 7,
+                'public_download_base_url' => '',
             ],
             'sms_integration' => [
                 'enabled' => false,
