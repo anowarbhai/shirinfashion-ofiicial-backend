@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Category;
+use App\Models\Product;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -15,7 +16,17 @@ class CategoryController extends Controller
     {
         return response()->json([
             'data' => Category::with('parent')
-                ->withCount('products')
+                ->select('categories.*')
+                ->selectSub(
+                    Product::query()
+                        ->selectRaw('COUNT(DISTINCT products.id)')
+                        ->leftJoin('category_product', 'category_product.product_id', '=', 'products.id')
+                        ->where(function ($query): void {
+                            $query->whereColumn('products.category_id', 'categories.id')
+                                ->orWhereColumn('category_product.category_id', 'categories.id');
+                        }),
+                    'products_count',
+                )
                 ->orderByRaw('CASE WHEN parent_id IS NULL THEN 0 ELSE 1 END')
                 ->orderBy('name')
                 ->get(),
