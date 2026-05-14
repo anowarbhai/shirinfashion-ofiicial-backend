@@ -99,7 +99,28 @@ class OrderController extends Controller
         }
 
         $summaryQuery = (clone $query)->reorder();
-        $incompleteQueueSql = "orders.assignment_status_type = 'incomplete'";
+        $incompleteQueueSql = "(
+            orders.assignment_status_type = 'incomplete'
+            OR (
+                orders.completed_at IS NULL
+                AND (
+                    EXISTS (
+                        SELECT 1
+                        FROM order_assignments oa
+                        WHERE oa.order_id = orders.id
+                            AND oa.order_item_id IS NULL
+                            AND oa.order_status_type = 'incomplete'
+                    )
+                    OR EXISTS (
+                        SELECT 1
+                        FROM order_assignment_histories oah
+                        WHERE oah.order_id = orders.id
+                            AND oah.order_item_id IS NULL
+                            AND oah.order_status_type = 'incomplete'
+                    )
+                )
+            )
+        )";
         $completedStatusSql = "status IN ('confirmed', 'shipped', 'delivered')";
         $cancelledStatusSql = "status = 'cancelled'";
         $summaryOrders = $summaryQuery
@@ -394,9 +415,13 @@ class OrderController extends Controller
             'tracking_number' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $beforeStatusType = $order->status === 'incomplete' ? 'incomplete' : 'processing';
+        $beforeStatusType = $order->assignment_status_type
+            ?: ($order->status === 'incomplete' ? 'incomplete' : 'processing');
         $order->update($payload);
-        $afterStatusType = $order->fresh()->status === 'incomplete' ? 'incomplete' : 'processing';
+        $afterStatusType = $this->assignmentStatusTypeForStatusChange(
+            (string) $order->fresh()->status,
+            $beforeStatusType,
+        );
 
         if ($beforeStatusType !== $afterStatusType) {
             $this->orderAssignmentService->keepExistingModeratorForStatus($order->fresh(), $afterStatusType)
@@ -663,6 +688,23 @@ class OrderController extends Controller
     protected function percentage(int $count, int $total): float
     {
         return $total > 0 ? round(($count / $total) * 100, 1) : 0.0;
+    }
+
+    protected function assignmentStatusTypeForStatusChange(string $status, string $currentStatusType): string
+    {
+        if ($status === 'incomplete') {
+            return 'incomplete';
+        }
+
+        if ($status === 'processing') {
+            return 'processing';
+        }
+
+        if (in_array($status, ['confirmed', 'shipped', 'delivered', 'cancelled'], true)) {
+            return $currentStatusType === 'incomplete' ? 'incomplete' : 'processing';
+        }
+
+        return 'processing';
     }
 
     protected function applyTimeFilter($query, string $time): void
