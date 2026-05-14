@@ -33,6 +33,10 @@ class MediaController extends Controller
                 ?? $this->remoteImageResponse($url);
         }
 
+        if ($host === 'shirin-fashion-cdn.s3.us-east-1.amazonaws.com' && str_starts_with($path, '/media/')) {
+            return $this->remoteImageResponse($url);
+        }
+
         abort(404);
     }
 
@@ -88,4 +92,3 @@ class MediaController extends Controller
         ];
     }
 }
-

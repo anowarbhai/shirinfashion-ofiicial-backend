@@ -118,6 +118,10 @@ class HomeController extends Controller
             if ($host === 'cdn.shirinfashionbd.com' && str_starts_with($path, '/products/')) {
                 return $this->mobileMediaProxyUrl($url, $request);
             }
+
+            if ($host === 'shirin-fashion-cdn.s3.us-east-1.amazonaws.com' && str_starts_with($path, '/media/')) {
+                return $this->mobileMediaProxyUrl($url, $request);
+            }
         }
 
         return $url;
