@@ -20,6 +20,13 @@ class ProductController extends Controller
             ->withAvg([
                 'reviews as approved_reviews_avg_rating' => fn ($builder) => $builder->where('status', 'approved'),
             ], 'rating')
+            ->withSum([
+                'orderItems as sold_quantity' => fn ($builder) => $builder
+                    ->where('is_free_gift', false)
+                    ->whereHas('order', fn ($orderQuery) => $orderQuery
+                        ->whereNotIn('status', ['incomplete', 'cancelled'])
+                    ),
+            ], 'quantity')
             ->where('is_active', true)
             ->visibleInStorefront();
 
@@ -78,6 +85,13 @@ class ProductController extends Controller
         $product->loadAvg([
             'reviews as approved_reviews_avg_rating' => fn ($builder) => $builder->where('status', 'approved'),
         ], 'rating');
+        $product->loadSum([
+            'orderItems as sold_quantity' => fn ($builder) => $builder
+                ->where('is_free_gift', false)
+                ->whereHas('order', fn ($orderQuery) => $orderQuery
+                    ->whereNotIn('status', ['incomplete', 'cancelled'])
+                ),
+        ], 'quantity');
 
         $product = $this->applyApprovedReviewMetrics($product);
 
@@ -99,6 +113,7 @@ class ProductController extends Controller
 
         $product->setAttribute('review_count', $approvedReviewCount);
         $product->setAttribute('rating', $approvedReviewAverage);
+        $product->setAttribute('sold_quantity', (int) ($product->sold_quantity ?? 0));
 
         return $product;
     }
