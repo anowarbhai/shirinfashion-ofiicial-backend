@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Admin\CouponController as AdminCouponController;
 use App\Http\Controllers\Api\Admin\ContactMessageController as AdminContactMessageController;
 use App\Http\Controllers\Api\Admin\CustomerController as AdminCustomerController;
 use App\Http\Controllers\Api\Admin\CustomerAuthSettingsController as AdminCustomerAuthSettingsController;
+use App\Http\Controllers\Api\Admin\DatabaseBackupController as AdminDatabaseBackupController;
 use App\Http\Controllers\Api\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Api\Admin\FraudCheckerSettingsController as AdminFraudCheckerSettingsController;
 use App\Http\Controllers\Api\Admin\FacebookMarketingController as AdminFacebookMarketingController;
@@ -97,6 +98,7 @@ Route::post('/orders/incomplete', [OrderController::class, 'storeIncomplete']);
 Route::post('/orders/send-otp', [OrderController::class, 'sendOtp']);
 Route::post('/orders/verify-otp', [OrderController::class, 'verifyOtp']);
 Route::post('/orders/track', [OrderController::class, 'track']);
+Route::get('/database-backups/download/{token}', [AdminDatabaseBackupController::class, 'downloadByToken']);
 
 Route::middleware('jwt.auth')->group(function (): void {
     Route::get('/auth/me', [AuthController::class, 'me']);
@@ -183,6 +185,12 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::get('/settings/mail-setup', [AdminMailSetupSettingsController::class, 'show']);
         Route::patch('/settings/mail-setup', [AdminMailSetupSettingsController::class, 'update']);
         Route::post('/settings/mail-setup/test', [AdminMailSetupSettingsController::class, 'test']);
+        Route::get('/settings/database-backups', [AdminDatabaseBackupController::class, 'index']);
+        Route::patch('/settings/database-backups', [AdminDatabaseBackupController::class, 'updateSettings']);
+        Route::post('/database-backups', [AdminDatabaseBackupController::class, 'store']);
+        Route::post('/database-backups/restore-upload', [AdminDatabaseBackupController::class, 'restoreUpload']);
+        Route::get('/database-backups/{databaseBackup}/download', [AdminDatabaseBackupController::class, 'download']);
+        Route::post('/database-backups/{databaseBackup}/restore', [AdminDatabaseBackupController::class, 'restore']);
         Route::get('/settings/sms-integration', [AdminSmsIntegrationSettingsController::class, 'show']);
         Route::patch('/settings/sms-integration', [AdminSmsIntegrationSettingsController::class, 'update']);
         Route::get('/settings/sms-integration/balance', [AdminSmsIntegrationSettingsController::class, 'balance']);

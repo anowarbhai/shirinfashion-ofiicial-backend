@@ -212,6 +212,18 @@ class AdminSettingsService
                 'smtp_password' => '',
                 'smtp_timeout' => 30,
             ],
+            'database_backup' => [
+                'enabled' => true,
+                'monthly_backup_enabled' => true,
+                'monthly_day' => 1,
+                'monthly_time' => '03:00',
+                'retention_months' => 6,
+                'notification_email' => '',
+                'backup_disk' => 'local',
+                'compress' => true,
+                'restore_enabled' => true,
+                'download_link_ttl_days' => 7,
+            ],
             'sms_integration' => [
                 'enabled' => false,
                 'provider' => 'custom',

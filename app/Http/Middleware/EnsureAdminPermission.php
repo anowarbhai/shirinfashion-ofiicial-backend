@@ -91,6 +91,8 @@ class EnsureAdminPermission
             str_starts_with($adminPath, 'settings/sms-integration') => 'settings.sms.manage',
             str_starts_with($adminPath, 'settings/checkout-guard') => 'settings.checkout-guard.manage',
             str_starts_with($adminPath, 'settings/mail-setup') => 'settings.mail.manage',
+            str_starts_with($adminPath, 'settings/database-backups') => 'settings.database-backup.manage',
+            str_starts_with($adminPath, 'database-backups') => 'settings.database-backup.manage',
             str_starts_with($adminPath, 'settings/roles') => 'roles.manage',
             str_starts_with($adminPath, 'settings/permissions') => 'permissions.manage',
             default => null,
