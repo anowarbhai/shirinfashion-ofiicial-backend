@@ -135,6 +135,7 @@ class AdminSettingsService
             'customer_auth' => [
                 'google_login_enabled' => false,
                 'google_client_id' => '',
+                'google_android_client_id' => '',
             ],
             'product_page' => [
                 'reviewSettings' => [

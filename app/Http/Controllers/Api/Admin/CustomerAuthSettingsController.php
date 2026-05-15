@@ -25,9 +25,11 @@ class CustomerAuthSettingsController extends Controller
         $payload = $request->validate([
             'google_login_enabled' => ['required', 'boolean'],
             'google_client_id' => ['nullable', 'string', 'max:255'],
+            'google_android_client_id' => ['nullable', 'string', 'max:255'],
         ]);
 
         $payload['google_client_id'] = trim((string) ($payload['google_client_id'] ?? ''));
+        $payload['google_android_client_id'] = trim((string) ($payload['google_android_client_id'] ?? ''));
 
         $settings = $this->settings->saveGroup('customer_auth', $payload, true);
 

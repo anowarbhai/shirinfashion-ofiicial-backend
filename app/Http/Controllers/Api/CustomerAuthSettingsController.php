@@ -17,11 +17,13 @@ class CustomerAuthSettingsController extends Controller
         $settings = $this->settings->getGroup('customer_auth');
         $enabled = (bool) ($settings['google_login_enabled'] ?? false);
         $clientId = trim((string) ($settings['google_client_id'] ?? ''));
+        $androidClientId = trim((string) ($settings['google_android_client_id'] ?? ''));
 
         return response()->json([
             'data' => [
                 'google_login_enabled' => $enabled && $clientId !== '',
                 'google_client_id' => $enabled ? $clientId : '',
+                'google_android_client_id' => $enabled ? $androidClientId : '',
             ],
         ]);
     }
