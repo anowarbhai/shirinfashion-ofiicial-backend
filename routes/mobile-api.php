@@ -4,11 +4,13 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CouponController;
 use App\Http\Controllers\Api\CustomerAuthSettingsController;
 use App\Http\Controllers\Api\OrderController as StorefrontOrderController;
+use App\Http\Controllers\Api\ProductPageSettingsController;
 use App\Http\Controllers\Api\WishlistController;
 use App\Http\Controllers\Api\Mobile\CategoryController;
 use App\Http\Controllers\Api\Mobile\HealthController;
 use App\Http\Controllers\Api\Mobile\HomeController;
 use App\Http\Controllers\Api\Mobile\MediaController;
+use App\Http\Controllers\Api\Mobile\NotificationController;
 use App\Http\Controllers\Api\Mobile\ProductController;
 use Illuminate\Support\Facades\Route;
 
@@ -17,6 +19,7 @@ Route::get('/media', MediaController::class);
 
 Route::get('/home', HomeController::class);
 Route::get('/settings/customer-auth', [CustomerAuthSettingsController::class, 'show']);
+Route::get('/settings/product-page', [ProductPageSettingsController::class, 'show']);
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/{slug}', [ProductController::class, 'show']);
@@ -48,4 +51,9 @@ Route::middleware('jwt.auth')->group(function (): void {
     Route::patch('/account/profile', [AuthController::class, 'updateProfile']);
     Route::post('/account/avatar', [AuthController::class, 'uploadAvatar']);
     Route::patch('/account/password', [AuthController::class, 'updatePassword']);
+
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead']);
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead']);
 });

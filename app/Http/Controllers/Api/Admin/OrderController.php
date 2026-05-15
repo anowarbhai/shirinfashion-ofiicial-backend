@@ -9,6 +9,7 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVolumeDiscount;
 use App\Services\AdminSettingsService;
+use App\Services\CustomerNotificationService;
 use App\Services\FraudCheckerService;
 use App\Services\OrderAssignmentService;
 use Illuminate\Http\JsonResponse;
@@ -25,6 +26,7 @@ class OrderController extends Controller
         protected AdminSettingsService $settings,
         protected FraudCheckerService $fraudCheckerService,
         protected OrderAssignmentService $orderAssignmentService,
+        protected CustomerNotificationService $customerNotificationService,
     ) {
     }
 
@@ -415,17 +417,24 @@ class OrderController extends Controller
             'tracking_number' => ['nullable', 'string', 'max:255'],
         ]);
 
+        $oldStatus = (string) $order->status;
         $beforeStatusType = $order->assignment_status_type
             ?: ($order->status === 'incomplete' ? 'incomplete' : 'processing');
         $order->update($payload);
+        $freshOrder = $order->fresh();
+        $newStatus = (string) $freshOrder->status;
         $afterStatusType = $this->assignmentStatusTypeForStatusChange(
-            (string) $order->fresh()->status,
+            $newStatus,
             $beforeStatusType,
         );
 
         if ($beforeStatusType !== $afterStatusType) {
-            $this->orderAssignmentService->keepExistingModeratorForStatus($order->fresh(), $afterStatusType)
-                ?? $this->orderAssignmentService->assignOrderByStatus($order->fresh(), $afterStatusType);
+            $this->orderAssignmentService->keepExistingModeratorForStatus($freshOrder, $afterStatusType)
+                ?? $this->orderAssignmentService->assignOrderByStatus($freshOrder, $afterStatusType);
+        }
+
+        if (array_key_exists('status', $payload)) {
+            $this->customerNotificationService->notifyOrderStatusChanged($freshOrder, $oldStatus, $newStatus);
         }
 
         return response()->json([

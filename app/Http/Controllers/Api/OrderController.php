@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Models\ProductVolumeDiscount;
 use App\Models\User;
 use App\Services\AdminSettingsService;
+use App\Services\CustomerNotificationService;
 use App\Services\FraudCheckerService;
 use App\Services\JwtService;
 use App\Services\OrderAssignmentService;
@@ -33,6 +34,7 @@ class OrderController extends Controller
         protected AdminSettingsService $settings,
         protected FraudCheckerService $fraudCheckerService,
         protected OrderAssignmentService $orderAssignmentService,
+        protected CustomerNotificationService $customerNotificationService,
     ) {
     }
 
@@ -121,6 +123,19 @@ class OrderController extends Controller
         });
 
         $this->sendOrderNotification($order);
+        if ($order->user_id) {
+            $this->customerNotificationService->sendToUser(
+                (int) $order->user_id,
+                'Order placed successfully',
+                'Your order '.($order->order_number ?: '#'.$order->id).' has been placed.',
+                'order_status',
+                [
+                    'order_id' => $order->id,
+                    'order_number' => $order->order_number,
+                    'new_status' => $order->status,
+                ],
+            );
+        }
 
         return response()->json([
             'message' => 'Order created successfully.',

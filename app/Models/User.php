@@ -81,6 +81,11 @@ class User extends Authenticatable
         return $this->hasMany(WishlistItem::class);
     }
 
+    public function customerNotifications(): HasMany
+    {
+        return $this->hasMany(CustomerNotification::class);
+    }
+
     public function moderatorProfile()
     {
         return $this->hasOne(Moderator::class);
