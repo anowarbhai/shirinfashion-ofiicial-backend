@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CouponController;
+use App\Http\Controllers\Api\CustomerAuthSettingsController;
 use App\Http\Controllers\Api\OrderController as StorefrontOrderController;
 use App\Http\Controllers\Api\WishlistController;
 use App\Http\Controllers\Api\Mobile\CategoryController;
@@ -15,6 +16,7 @@ Route::get('/health', HealthController::class);
 Route::get('/media', MediaController::class);
 
 Route::get('/home', HomeController::class);
+Route::get('/settings/customer-auth', [CustomerAuthSettingsController::class, 'show']);
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/{slug}', [ProductController::class, 'show']);
