@@ -70,7 +70,7 @@ class MediaController extends Controller
 
         return response($response->body(), 200, $this->corsHeaders([
             'Content-Type' => $response->header('Content-Type', 'application/octet-stream'),
-            'Cache-Control' => 'public, max-age=86400',
+            'Cache-Control' => 'public, max-age=604800, immutable',
         ]));
     }
 
@@ -78,7 +78,7 @@ class MediaController extends Controller
     {
         return response(File::get($file), 200, $this->corsHeaders([
             'Content-Type' => File::mimeType($file) ?: 'application/octet-stream',
-            'Cache-Control' => 'public, max-age=86400',
+            'Cache-Control' => 'public, max-age=604800, immutable',
         ]));
     }
 
