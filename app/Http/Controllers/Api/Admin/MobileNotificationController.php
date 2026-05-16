@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CustomerNotification;
 use App\Models\MobileDeviceToken;
 use App\Models\MobileNotificationCampaign;
+use App\Models\Product;
 use App\Models\User;
 use App\Services\MobilePushService;
 use Illuminate\Http\JsonResponse;
@@ -132,10 +133,15 @@ class MobileNotificationController extends Controller
     {
         $target = $payload['target'] ?? 'all';
         $type = $payload['type'] ?? 'campaign';
+        $product = $this->productForPayload($payload);
+        $productUrl = $product ? "/product/{$product->slug}" : null;
         $data = [
             'type' => $type,
-            'url' => $payload['url'] ?? null,
-            'product_id' => $payload['product_id'] ?? null,
+            'url' => $payload['url'] ?? $productUrl,
+            'product_id' => $product?->id ?? ($payload['product_id'] ?? null),
+            'product_slug' => $product?->slug,
+            'product_title' => $product?->name,
+            'product_image' => $product?->gallery[0] ?? null,
             'category_id' => $payload['category_id'] ?? null,
             'coupon_code' => $payload['coupon_code'] ?? null,
         ];
@@ -175,6 +181,18 @@ class MobileNotificationController extends Controller
             'notifications_created' => $notificationRows,
             'push' => $pushResult,
         ];
+    }
+
+    private function productForPayload(array $payload): ?Product
+    {
+        $productId = $payload['product_id'] ?? null;
+        if (! $productId) {
+            return null;
+        }
+
+        return Product::query()
+            ->select(['id', 'name', 'slug', 'gallery'])
+            ->find($productId);
     }
 
     private function validated(Request $request): array

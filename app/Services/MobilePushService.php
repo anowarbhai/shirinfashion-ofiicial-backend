@@ -73,6 +73,18 @@ class MobilePushService
         $failed = 0;
 
         foreach ($tokens as $token) {
+            $androidNotification = [
+                'channel_id' => 'shirin_customer_updates',
+                'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
+                'color' => '#FF2B61',
+                'notification_priority' => 'PRIORITY_HIGH',
+                'visibility' => 'PUBLIC',
+            ];
+
+            if (! empty($data['product_image']) && is_string($data['product_image'])) {
+                $androidNotification['image'] = $data['product_image'];
+            }
+
             $response = Http::withToken($accessToken)
                 ->timeout(10)
                 ->post("https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send", [
@@ -85,13 +97,7 @@ class MobilePushService
                         'data' => $this->stringData($data),
                         'android' => [
                             'priority' => 'HIGH',
-                            'notification' => [
-                                'channel_id' => 'shirin_customer_updates',
-                                'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
-                                'color' => '#FF2B61',
-                                'notification_priority' => 'PRIORITY_HIGH',
-                                'visibility' => 'PUBLIC',
-                            ],
+                            'notification' => $androidNotification,
                         ],
                     ],
                 ]);
