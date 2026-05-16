@@ -7,6 +7,7 @@ use App\Models\OrderAssignment;
 use App\Models\OrderAssignmentHistory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class OrderAssignmentController extends Controller
 {
@@ -15,7 +16,12 @@ class OrderAssignmentController extends Controller
         $query = OrderAssignment::query()
             ->with(['order.items', 'moderator.user', 'moderator.digitalMarketer', 'assignedBy'])
             ->whereNull('order_item_id')
-            ->latest();
+            ->orderByDesc(
+                DB::raw(
+                    "(SELECT COALESCE(orders.placed_at, orders.completed_at, orders.last_activity_at, orders.created_at) FROM orders WHERE orders.id = order_assignments.order_id)"
+                )
+            )
+            ->orderByDesc('id');
         $user = $request->user();
 
         if (
@@ -34,8 +40,17 @@ class OrderAssignmentController extends Controller
             }
         }
 
+        if ($request->filled('manager_id')) {
+            $query->whereHas('moderator', fn ($moderatorQuery) => $moderatorQuery
+                ->where('digital_marketer_id', (int) $request->query('manager_id')));
+        }
+
         if ($request->filled('moderator_id')) {
-            $query->where('moderator_id', (int) $request->query('moderator_id'));
+            if ($request->query('moderator_id') === 'unassigned') {
+                $query->whereNull('moderator_id');
+            } else {
+                $query->where('moderator_id', (int) $request->query('moderator_id'));
+            }
         }
 
         if ($request->filled('order_status_type')) {
@@ -50,7 +65,9 @@ class OrderAssignmentController extends Controller
             $query->where('status', $request->query('status'));
         }
 
-        return response()->json(['data' => $query->paginate(30)]);
+        $perPage = min(max((int) $request->integer('per_page', 30), 1), 100);
+
+        return response()->json(['data' => $query->paginate($perPage)]);
     }
 
     public function history(int $orderId): JsonResponse
