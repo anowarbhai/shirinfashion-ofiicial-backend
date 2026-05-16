@@ -41,6 +41,7 @@ Route::post('/orders/incomplete', [StorefrontOrderController::class, 'storeIncom
 Route::post('/orders/send-otp', [StorefrontOrderController::class, 'sendOtp']);
 Route::post('/orders/verify-otp', [StorefrontOrderController::class, 'verifyOtp']);
 Route::post('/orders/track', [StorefrontOrderController::class, 'track']);
+Route::get('/notifications/public', [NotificationController::class, 'publicIndex']);
 
 Route::middleware('jwt.auth')->group(function (): void {
     Route::get('/auth/me', [AuthController::class, 'me']);

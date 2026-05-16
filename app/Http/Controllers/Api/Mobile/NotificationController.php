@@ -4,11 +4,55 @@ namespace App\Http\Controllers\Api\Mobile;
 
 use App\Http\Controllers\Controller;
 use App\Models\CustomerNotification;
+use App\Models\MobileNotificationCampaign;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class NotificationController extends Controller
 {
+    public function publicIndex(Request $request): JsonResponse
+    {
+        $perPage = min(max((int) $request->integer('per_page', 20), 1), 50);
+
+        $notifications = MobileNotificationCampaign::query()
+            ->with(['category:id,name,slug', 'product:id,name,slug'])
+            ->whereIn('target', ['all', 'guests'])
+            ->where('status', 'sent')
+            ->latest('last_sent_at')
+            ->latest()
+            ->paginate($perPage);
+
+        $items = collect($notifications->items())
+            ->map(fn (MobileNotificationCampaign $notification): array => [
+                'id' => $notification->id,
+                'type' => $notification->type,
+                'title' => $notification->title,
+                'body' => $notification->body,
+                'data' => [
+                    'url' => $notification->url,
+                    'coupon_code' => $notification->coupon_code,
+                    'category_id' => $notification->category_id,
+                    'category' => $notification->category?->only(['id', 'name', 'slug']),
+                    'product_id' => $notification->product_id,
+                    'product' => $notification->product?->only(['id', 'name', 'slug']),
+                ],
+                'read_at' => null,
+                'sent_at' => $notification->last_sent_at,
+                'created_at' => $notification->created_at,
+            ])
+            ->values();
+
+        return response()->json([
+            'data' => $items,
+            'meta' => [
+                'current_page' => $notifications->currentPage(),
+                'last_page' => $notifications->lastPage(),
+                'total' => $notifications->total(),
+                'unread_count' => $notifications->total(),
+            ],
+        ]);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
