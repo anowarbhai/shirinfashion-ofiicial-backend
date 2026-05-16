@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\OrderController as StorefrontOrderController;
 use App\Http\Controllers\Api\ProductPageSettingsController;
 use App\Http\Controllers\Api\WishlistController;
 use App\Http\Controllers\Api\Mobile\CategoryController;
+use App\Http\Controllers\Api\Mobile\DeviceTokenController;
 use App\Http\Controllers\Api\Mobile\HealthController;
 use App\Http\Controllers\Api\Mobile\HomeController;
 use App\Http\Controllers\Api\Mobile\MediaController;
@@ -23,6 +24,8 @@ Route::get('/settings/product-page', [ProductPageSettingsController::class, 'sho
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/{slug}', [ProductController::class, 'show']);
+Route::post('/device-tokens', [DeviceTokenController::class, 'store']);
+Route::delete('/device-tokens', [DeviceTokenController::class, 'destroy']);
 
 Route::prefix('auth')->group(function (): void {
     Route::post('/register', [AuthController::class, 'register']);
@@ -42,6 +45,8 @@ Route::post('/orders/track', [StorefrontOrderController::class, 'track']);
 Route::middleware('jwt.auth')->group(function (): void {
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
+    Route::post('/account/device-tokens', [DeviceTokenController::class, 'store']);
+    Route::delete('/account/device-tokens', [DeviceTokenController::class, 'destroy']);
 
     Route::get('/wishlist', [WishlistController::class, 'index']);
     Route::post('/wishlist', [WishlistController::class, 'store']);

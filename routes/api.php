@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\Admin\FacebookMarketingController as AdminFacebookM
 use App\Http\Controllers\Api\Admin\GeneralSettingsController as AdminGeneralSettingsController;
 use App\Http\Controllers\Api\Admin\GoogleMarketingController as AdminGoogleMarketingController;
 use App\Http\Controllers\Api\Admin\MailSetupSettingsController as AdminMailSetupSettingsController;
+use App\Http\Controllers\Api\Admin\MobileNotificationController as AdminMobileNotificationController;
 use App\Http\Controllers\Api\Admin\AdminPermissionController as AdminPermissionController;
 use App\Http\Controllers\Api\Admin\AdminAuditLogController as AdminAuditLogController;
 use App\Http\Controllers\Api\Admin\AdminRoleController as AdminRoleController;
@@ -196,6 +197,7 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::patch('/settings/sms-integration', [AdminSmsIntegrationSettingsController::class, 'update']);
         Route::get('/settings/sms-integration/balance', [AdminSmsIntegrationSettingsController::class, 'balance']);
         Route::post('/settings/sms-integration/test', [AdminSmsIntegrationSettingsController::class, 'sendTest']);
+        Route::post('/mobile-notifications/send', [AdminMobileNotificationController::class, 'send']);
         Route::get('/settings/roles', [AdminRoleController::class, 'index']);
         Route::post('/settings/roles', [AdminRoleController::class, 'store']);
         Route::patch('/settings/roles/{role}', [AdminRoleController::class, 'update']);

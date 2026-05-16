@@ -8,6 +8,10 @@ use App\Models\User;
 
 class CustomerNotificationService
 {
+    public function __construct(private readonly MobilePushService $push)
+    {
+    }
+
     public function sendToUser(
         User|int $user,
         string $title,
@@ -21,7 +25,7 @@ class CustomerNotificationService
             return null;
         }
 
-        return CustomerNotification::query()->create([
+        $notification = CustomerNotification::query()->create([
             'user_id' => $userId,
             'type' => $type,
             'title' => $title,
@@ -29,6 +33,18 @@ class CustomerNotificationService
             'data' => $data,
             'sent_at' => now(),
         ]);
+
+        try {
+            $this->push->sendToUser($userId, $title, $body, [
+                ...$data,
+                'type' => $type,
+                'notification_id' => $notification->id,
+            ]);
+        } catch (\Throwable) {
+            // Push delivery should not block order or account workflows.
+        }
+
+        return $notification;
     }
 
     public function notifyOrderStatusChanged(Order $order, string $oldStatus, string $newStatus): ?CustomerNotification

@@ -86,6 +86,11 @@ class User extends Authenticatable
         return $this->hasMany(CustomerNotification::class);
     }
 
+    public function mobileDeviceTokens(): HasMany
+    {
+        return $this->hasMany(MobileDeviceToken::class);
+    }
+
     public function moderatorProfile()
     {
         return $this->hasOne(Moderator::class);

@@ -137,6 +137,11 @@ class AdminSettingsService
                 'google_client_id' => '',
                 'google_android_client_id' => '',
             ],
+            'mobile_push' => [
+                'firebase_project_id' => '',
+                'firebase_client_email' => '',
+                'firebase_private_key' => '',
+            ],
             'product_page' => [
                 'reviewSettings' => [
                     'enableReviews' => true,
