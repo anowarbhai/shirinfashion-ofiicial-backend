@@ -198,6 +198,9 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::get('/settings/sms-integration/balance', [AdminSmsIntegrationSettingsController::class, 'balance']);
         Route::post('/settings/sms-integration/test', [AdminSmsIntegrationSettingsController::class, 'sendTest']);
         Route::post('/mobile-notifications/send', [AdminMobileNotificationController::class, 'send']);
+        Route::post('/mobile-notifications/{mobileNotification}/send', [AdminMobileNotificationController::class, 'sendCampaign']);
+        Route::apiResource('mobile-notifications', AdminMobileNotificationController::class)
+            ->parameters(['mobile-notifications' => 'mobileNotification']);
         Route::get('/settings/roles', [AdminRoleController::class, 'index']);
         Route::post('/settings/roles', [AdminRoleController::class, 'store']);
         Route::patch('/settings/roles/{role}', [AdminRoleController::class, 'update']);
