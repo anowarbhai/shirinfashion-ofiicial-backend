@@ -67,6 +67,9 @@ class CouponController extends Controller
             'ends_at' => ['nullable', 'date'],
             'free_shipping' => ['sometimes', 'boolean'],
             'individual_use' => ['sometimes', 'boolean'],
+            'first_order_only' => ['sometimes', 'boolean'],
+            'registered_customer_only' => ['sometimes', 'boolean'],
+            'mobile_app_only' => ['sometimes', 'boolean'],
             'is_active' => ['sometimes', 'boolean'],
         ]);
     }

@@ -5,12 +5,23 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Coupon;
 use App\Models\Order;
+use App\Models\User;
+use App\Services\CouponEligibilityService;
+use App\Services\JwtService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class CouponController extends Controller
 {
+    public function __construct(
+        protected CouponEligibilityService $couponEligibility,
+        protected JwtService $jwtService,
+    ) {
+    }
+
     public function validateCode(Request $request): JsonResponse
     {
         $payload = $request->validate([
@@ -18,6 +29,7 @@ class CouponController extends Controller
             'subtotal' => ['nullable', 'numeric'],
             'phone' => ['nullable', 'string', 'max:30'],
             'email' => ['nullable', 'email'],
+            'source' => ['nullable', 'string', 'max:80'],
         ]);
 
         $coupon = Coupon::where('code', strtoupper($payload['code']))->first();
@@ -60,6 +72,22 @@ class CouponController extends Controller
         if ($this->couponPerUserLimitReached($coupon, $payload['phone'] ?? null, $payload['email'] ?? null)) {
             return response()->json([
                 'message' => 'This coupon usage limit has been reached for this customer.',
+            ], 422);
+        }
+
+        try {
+            $this->couponEligibility->assertEligible(
+                $coupon,
+                [
+                    'source' => $payload['source'] ?? null,
+                    'phone' => $payload['phone'] ?? null,
+                    'email' => $payload['email'] ?? null,
+                ],
+                $this->resolveAuthenticatedUser($request),
+            );
+        } catch (ValidationException $exception) {
+            return response()->json([
+                'message' => collect($exception->errors())->flatten()->first() ?? 'This coupon is not available.',
             ], 422);
         }
 
@@ -111,5 +139,27 @@ class CouponController extends Controller
         }
 
         return $digits;
+    }
+
+    protected function resolveAuthenticatedUser(Request $request): ?User
+    {
+        if ($request->user() instanceof User) {
+            return $request->user();
+        }
+
+        $token = $request->bearerToken();
+
+        if (! $token) {
+            return null;
+        }
+
+        try {
+            $payload = $this->jwtService->decode($token);
+            $user = User::find($payload->sub);
+
+            return $user && $user->role === 'customer' ? $user : null;
+        } catch (Throwable) {
+            return null;
+        }
     }
 }

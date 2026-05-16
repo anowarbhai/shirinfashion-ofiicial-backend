@@ -23,6 +23,9 @@ class Coupon extends Model
         'ends_at',
         'free_shipping',
         'individual_use',
+        'first_order_only',
+        'registered_customer_only',
+        'mobile_app_only',
         'is_active',
     ];
 
@@ -39,6 +42,9 @@ class Coupon extends Model
             'ends_at' => 'datetime',
             'free_shipping' => 'boolean',
             'individual_use' => 'boolean',
+            'first_order_only' => 'boolean',
+            'registered_customer_only' => 'boolean',
+            'mobile_app_only' => 'boolean',
             'is_active' => 'boolean',
         ];
     }

@@ -10,6 +10,7 @@ use App\Models\ProductVolumeDiscount;
 use App\Models\User;
 use App\Services\AdminSettingsService;
 use App\Services\CustomerNotificationService;
+use App\Services\CouponEligibilityService;
 use App\Services\FraudCheckerService;
 use App\Services\JwtService;
 use App\Services\OrderAssignmentService;
@@ -35,6 +36,7 @@ class OrderController extends Controller
         protected FraudCheckerService $fraudCheckerService,
         protected OrderAssignmentService $orderAssignmentService,
         protected CustomerNotificationService $customerNotificationService,
+        protected CouponEligibilityService $couponEligibility,
     ) {
     }
 
@@ -387,6 +389,15 @@ class OrderController extends Controller
         $coupon = $this->resolveCoupon($payload['coupon_code'] ?? null, $subtotal);
 
         if ($coupon && $enforceCouponUsageLimit) {
+            $this->couponEligibility->assertEligible(
+                $coupon,
+                [
+                    'source' => $payload['order_source'] ?? null,
+                    'phone' => $payload['phone'] ?? null,
+                    'email' => $payload['email'] ?? null,
+                ],
+                $customer,
+            );
             $this->ensureCouponPerUserLimit($coupon, $payload, $customer);
         }
 
