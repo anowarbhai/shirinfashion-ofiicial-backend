@@ -88,6 +88,9 @@ class MobilePushService
                             'notification' => [
                                 'channel_id' => 'shirin_customer_updates',
                                 'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
+                                'color' => '#FF2B61',
+                                'notification_priority' => 'PRIORITY_HIGH',
+                                'visibility' => 'PUBLIC',
                             ],
                         ],
                     ],
