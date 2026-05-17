@@ -124,7 +124,9 @@ class MobileCartReminderService
         $tokens = $this->tokensForSnapshot($snapshot);
 
         if ($tokens->isEmpty()) {
-            $snapshot->delete();
+            if ($snapshot->synced_at?->lt(now()->subDays(7))) {
+                $snapshot->delete();
+            }
 
             return ['sent' => 0, 'failed' => 0];
         }

@@ -34,15 +34,17 @@ class MobilePushSettingsController extends Controller
             'cart_reminder_body' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $payload['firebase_project_id'] = trim((string) ($payload['firebase_project_id'] ?? ''));
-        $payload['firebase_client_email'] = trim((string) ($payload['firebase_client_email'] ?? ''));
-        $payload['firebase_private_key'] = trim((string) ($payload['firebase_private_key'] ?? ''));
-        $payload['cart_reminder_enabled'] = (bool) ($payload['cart_reminder_enabled'] ?? true);
-        $payload['cart_reminder_delay_minutes'] = (int) ($payload['cart_reminder_delay_minutes'] ?? 120);
-        $payload['cart_reminder_repeat_hours'] = (int) ($payload['cart_reminder_repeat_hours'] ?? 24);
-        $payload['cart_reminder_max_reminders'] = (int) ($payload['cart_reminder_max_reminders'] ?? 2);
-        $payload['cart_reminder_title'] = trim((string) ($payload['cart_reminder_title'] ?? 'Your cart is waiting'));
-        $payload['cart_reminder_body'] = trim((string) ($payload['cart_reminder_body'] ?? 'You left items in your Shirin Fashion cart.'));
+        $payload = array_replace($this->settings->getGroup('mobile_push'), $payload);
+
+        $payload['firebase_project_id'] = trim((string) $payload['firebase_project_id']);
+        $payload['firebase_client_email'] = trim((string) $payload['firebase_client_email']);
+        $payload['firebase_private_key'] = trim((string) $payload['firebase_private_key']);
+        $payload['cart_reminder_enabled'] = (bool) $payload['cart_reminder_enabled'];
+        $payload['cart_reminder_delay_minutes'] = (int) $payload['cart_reminder_delay_minutes'];
+        $payload['cart_reminder_repeat_hours'] = (int) $payload['cart_reminder_repeat_hours'];
+        $payload['cart_reminder_max_reminders'] = (int) $payload['cart_reminder_max_reminders'];
+        $payload['cart_reminder_title'] = trim((string) $payload['cart_reminder_title']);
+        $payload['cart_reminder_body'] = trim((string) $payload['cart_reminder_body']);
 
         $settings = $this->settings->saveGroup('mobile_push', $payload);
 

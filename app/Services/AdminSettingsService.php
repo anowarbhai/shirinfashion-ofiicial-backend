@@ -141,6 +141,12 @@ class AdminSettingsService
                 'firebase_project_id' => '',
                 'firebase_client_email' => '',
                 'firebase_private_key' => '',
+                'cart_reminder_enabled' => true,
+                'cart_reminder_delay_minutes' => 120,
+                'cart_reminder_repeat_hours' => 24,
+                'cart_reminder_max_reminders' => 2,
+                'cart_reminder_title' => 'Your cart is waiting',
+                'cart_reminder_body' => 'You left {count} item(s) in your Shirin Fashion cart.',
             ],
             'product_page' => [
                 'reviewSettings' => [

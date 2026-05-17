@@ -9,4 +9,4 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('backup:database-monthly')->hourly();
-Schedule::command('mobile:send-cart-reminders')->hourly();
+Schedule::command('mobile:send-cart-reminders')->everyTenMinutes()->withoutOverlapping();
