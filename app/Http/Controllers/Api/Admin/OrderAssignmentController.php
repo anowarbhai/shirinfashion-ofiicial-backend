@@ -63,6 +63,16 @@ class OrderAssignmentController extends Controller
 
         if ($request->filled('status')) {
             $query->where('status', $request->query('status'));
+        } else {
+            $query->where('status', 'assigned');
+        }
+
+        if ($request->filled('order_status') && $request->query('order_status') !== 'all') {
+            $query->whereHas('order', fn ($orderQuery) => $orderQuery
+                ->where('status', $request->query('order_status')));
+        } elseif (! $request->boolean('include_all_orders')) {
+            $query->whereHas('order', fn ($orderQuery) => $orderQuery
+                ->whereIn('status', ['processing', 'incomplete']));
         }
 
         $perPage = min(max((int) $request->integer('per_page', 30), 1), 100);
