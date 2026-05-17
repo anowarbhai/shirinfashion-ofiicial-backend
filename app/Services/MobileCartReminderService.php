@@ -12,12 +12,19 @@ use Illuminate\Support\Str;
 
 class MobileCartReminderService
 {
-    public function __construct(private readonly MobilePushService $push)
+    public function __construct(
+        private readonly MobilePushService $push,
+        private readonly AdminSettingsService $settings,
+    )
     {
     }
 
     public function sync(?int $userId, ?string $deviceId, array $items): ?MobileCartSnapshot
     {
+        if (! $this->remindersEnabled()) {
+            return null;
+        }
+
         $normalizedDeviceId = $this->normalizeDeviceId($deviceId);
         $prepared = $this->prepareItems($items);
 
@@ -68,8 +75,15 @@ class MobileCartReminderService
         return $query->delete();
     }
 
-    public function sendDueReminders(int $delayMinutes = 120, int $repeatHours = 24, int $maxReminders = 2): array
+    public function sendDueReminders(?int $delayMinutes = null, ?int $repeatHours = null, ?int $maxReminders = null): array
     {
+        if (! $this->remindersEnabled()) {
+            return ['processed' => 0, 'sent' => 0, 'failed' => 0, 'skipped' => 0];
+        }
+
+        $delayMinutes ??= $this->settingInt('cart_reminder_delay_minutes', 120);
+        $repeatHours ??= $this->settingInt('cart_reminder_repeat_hours', 24);
+        $maxReminders ??= $this->settingInt('cart_reminder_max_reminders', 2);
         $cutoff = now()->subMinutes(max(1, $delayMinutes));
         $repeatCutoff = now()->subHours(max(1, $repeatHours));
         $processed = 0;
@@ -115,10 +129,13 @@ class MobileCartReminderService
             return ['sent' => 0, 'failed' => 0];
         }
 
-        $title = 'Your cart is waiting';
-        $body = $snapshot->item_count === 1
-            ? 'You left 1 item in your Shirin Fashion cart.'
-            : "You left {$snapshot->item_count} items in your Shirin Fashion cart.";
+        $title = $this->settingText('cart_reminder_title', 'Your cart is waiting');
+        $bodyTemplate = $this->settingText('cart_reminder_body', 'You left {count} item(s) in your Shirin Fashion cart.');
+        $body = str_replace(
+            ['{count}', '{subtotal}'],
+            [(string) $snapshot->item_count, (string) $snapshot->subtotal],
+            $bodyTemplate,
+        );
         $data = [
             'type' => 'abandoned_cart',
             'url' => '/cart',
@@ -253,5 +270,24 @@ class MobileCartReminderService
         $value = trim((string) $deviceId);
 
         return $value === '' ? null : $value;
+    }
+
+    private function remindersEnabled(): bool
+    {
+        return (bool) ($this->settings->getSetting('mobile_push.cart_reminder_enabled') ?? true);
+    }
+
+    private function settingInt(string $key, int $fallback): int
+    {
+        $value = $this->settings->getSetting("mobile_push.{$key}");
+
+        return is_numeric($value) ? (int) $value : $fallback;
+    }
+
+    private function settingText(string $key, string $fallback): string
+    {
+        $value = trim((string) $this->settings->getSetting("mobile_push.{$key}"));
+
+        return $value === '' ? $fallback : $value;
     }
 }

@@ -8,18 +8,18 @@ use Illuminate\Console\Command;
 class SendMobileCartReminders extends Command
 {
     protected $signature = 'mobile:send-cart-reminders
-        {--delay-minutes=120 : Minutes to wait after the latest cart sync}
-        {--repeat-hours=24 : Hours before sending another reminder}
-        {--max=2 : Maximum reminders per cart snapshot}';
+        {--delay-minutes= : Minutes to wait after the latest cart sync}
+        {--repeat-hours= : Hours before sending another reminder}
+        {--max= : Maximum reminders per cart snapshot}';
 
     protected $description = 'Send mobile app abandoned cart reminder push notifications.';
 
     public function handle(MobileCartReminderService $cartReminder): int
     {
         $result = $cartReminder->sendDueReminders(
-            (int) $this->option('delay-minutes'),
-            (int) $this->option('repeat-hours'),
-            (int) $this->option('max'),
+            $this->option('delay-minutes') !== null ? (int) $this->option('delay-minutes') : null,
+            $this->option('repeat-hours') !== null ? (int) $this->option('repeat-hours') : null,
+            $this->option('max') !== null ? (int) $this->option('max') : null,
         );
 
         $this->info(sprintf(
