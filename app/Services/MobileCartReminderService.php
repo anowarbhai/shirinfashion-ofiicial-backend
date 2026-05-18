@@ -40,7 +40,7 @@ class MobileCartReminderService
 
         $lookup = $this->lookup($userId, $normalizedDeviceId);
 
-        return MobileCartSnapshot::query()->updateOrCreate($lookup, [
+        $snapshot = MobileCartSnapshot::query()->updateOrCreate($lookup, [
             'user_id' => $userId,
             'device_id' => $normalizedDeviceId,
             'cart_hash' => $prepared['cart_hash'],
@@ -51,6 +51,10 @@ class MobileCartReminderService
             'last_reminded_at' => null,
             'reminder_count' => 0,
         ]);
+
+        $this->deleteDuplicateSnapshots($snapshot);
+
+        return $snapshot;
     }
 
     public function clear(?int $userId, ?string $deviceId): int
@@ -90,6 +94,7 @@ class MobileCartReminderService
         $sent = 0;
         $failed = 0;
         $skipped = 0;
+        $notifiedTokens = [];
 
         MobileCartSnapshot::query()
             ->where('item_count', '>', 0)
@@ -100,11 +105,12 @@ class MobileCartReminderService
                     ->whereNull('last_reminded_at')
                     ->orWhere('last_reminded_at', '<=', $repeatCutoff);
             })
-            ->orderBy('synced_at')
-            ->chunkById(100, function ($snapshots) use (&$processed, &$sent, &$failed, &$skipped): void {
+            ->orderByDesc('synced_at')
+            ->orderByDesc('id')
+            ->chunk(100, function ($snapshots) use (&$processed, &$sent, &$failed, &$skipped, &$notifiedTokens): void {
                 foreach ($snapshots as $snapshot) {
                     $processed++;
-                    $result = $this->sendReminder($snapshot);
+                    $result = $this->sendReminder($snapshot, $notifiedTokens);
 
                     if ($result['sent'] > 0) {
                         $sent += $result['sent'];
@@ -119,14 +125,23 @@ class MobileCartReminderService
         return compact('processed', 'sent', 'failed', 'skipped');
     }
 
-    private function sendReminder(MobileCartSnapshot $snapshot): array
+    private function sendReminder(MobileCartSnapshot $snapshot, array &$notifiedTokens): array
     {
-        $tokens = $this->tokensForSnapshot($snapshot);
+        $allTokens = $this->tokensForSnapshot($snapshot);
+        $tokens = $allTokens
+            ->reject(fn (string $token): bool => isset($notifiedTokens[$token]))
+            ->values();
 
-        if ($tokens->isEmpty()) {
+        if ($allTokens->isEmpty()) {
             if ($snapshot->synced_at?->lt(now()->subDays(7))) {
                 $snapshot->delete();
             }
+
+            return ['sent' => 0, 'failed' => 0];
+        }
+
+        if ($tokens->isEmpty()) {
+            $snapshot->delete();
 
             return ['sent' => 0, 'failed' => 0];
         }
@@ -148,6 +163,10 @@ class MobileCartReminderService
         $result = $this->push->sendToTokens($tokens->all(), $title, $body, $data);
 
         if (($result['sent'] ?? 0) > 0) {
+            foreach ($tokens as $token) {
+                $notifiedTokens[$token] = true;
+            }
+
             $snapshot->forceFill([
                 'last_reminded_at' => now(),
                 'reminder_count' => $snapshot->reminder_count + 1,
@@ -173,8 +192,37 @@ class MobileCartReminderService
 
     private function tokensForSnapshot(MobileCartSnapshot $snapshot): Collection
     {
-        return MobileDeviceToken::query()
-            ->where('enabled', true)
+        if ($snapshot->device_id) {
+            $deviceTokens = MobileDeviceToken::query()
+                ->where('enabled', true)
+                ->where('device_id', $snapshot->device_id)
+                ->pluck('token')
+                ->filter()
+                ->unique()
+                ->values();
+
+            if ($deviceTokens->isNotEmpty()) {
+                return $deviceTokens;
+            }
+        }
+
+        if ($snapshot->user_id) {
+            return MobileDeviceToken::query()
+                ->where('enabled', true)
+                ->where('user_id', $snapshot->user_id)
+                ->pluck('token')
+                ->filter()
+                ->unique()
+                ->values();
+        }
+
+        return collect();
+    }
+
+    private function deleteDuplicateSnapshots(MobileCartSnapshot $snapshot): void
+    {
+        MobileCartSnapshot::query()
+            ->whereKeyNot($snapshot->id)
             ->where(function ($query) use ($snapshot): void {
                 if ($snapshot->user_id) {
                     $query->orWhere('user_id', $snapshot->user_id);
@@ -184,10 +232,7 @@ class MobileCartReminderService
                     $query->orWhere('device_id', $snapshot->device_id);
                 }
             })
-            ->pluck('token')
-            ->filter()
-            ->unique()
-            ->values();
+            ->delete();
     }
 
     private function prepareItems(array $items): array
