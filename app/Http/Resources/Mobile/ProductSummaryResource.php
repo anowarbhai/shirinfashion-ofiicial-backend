@@ -34,6 +34,7 @@ class ProductSummaryResource extends JsonResource
             'manage_stock' => (bool) $this->manage_stock,
             'stock_status' => $this->stock_status,
             'is_featured' => (bool) $this->is_featured,
+            'show_trust_badges' => (bool) ($this->show_trust_badges ?? true),
             'category' => $this->whenLoaded('category', fn () => $this->category ? [
                 'id' => $this->category->id,
                 'name' => $this->category->name,

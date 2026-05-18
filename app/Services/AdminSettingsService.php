@@ -200,6 +200,32 @@ class AdminSettingsService
                 ],
                 'cartDrawerStyle' => 'style-1',
                 'mobileStickyProductActions' => true,
+                'trustBadges' => [
+                    'enabled' => true,
+                    'items' => [
+                        [
+                            'id' => 'customers',
+                            'icon' => 'star',
+                            'title' => '1200+',
+                            'subtitle' => 'Satisfied customers',
+                            'active' => true,
+                        ],
+                        [
+                            'id' => 'delivery',
+                            'icon' => 'truck',
+                            'title' => 'All Bangladesh',
+                            'subtitle' => 'Home delivery',
+                            'active' => true,
+                        ],
+                        [
+                            'id' => 'cod',
+                            'icon' => 'cash',
+                            'title' => 'Cash On Delivery',
+                            'subtitle' => 'Available',
+                            'active' => true,
+                        ],
+                    ],
+                ],
                 'abandonedCheckoutCoupon' => [
                     'enabled' => false,
                     'couponCode' => '',

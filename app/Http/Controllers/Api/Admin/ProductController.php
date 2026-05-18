@@ -452,6 +452,7 @@ class ProductController extends Controller
             'is_active' => ['sometimes', 'boolean'],
             'is_featured' => ['sometimes', 'boolean'],
             'hide_from_storefront' => ['sometimes', 'boolean'],
+            'show_trust_badges' => ['sometimes', 'boolean'],
             'campaign_facebook_pixel_ids' => ['nullable', 'array'],
             'campaign_facebook_pixel_ids.*' => ['string', 'max:80'],
             'campaign_google_tag_ids' => ['nullable', 'array'],
@@ -475,6 +476,7 @@ class ProductController extends Controller
         );
         $validated['category_id'] = $validated['category_ids'][0];
         $validated['manage_stock'] = (bool) ($validated['manage_stock'] ?? true);
+        $validated['show_trust_badges'] = (bool) ($validated['show_trust_badges'] ?? true);
         $validated['stock_status'] = $validated['stock_status'] ?? (
             ((int) $validated['inventory']) > 0 ? 'in_stock' : 'out_of_stock'
         );

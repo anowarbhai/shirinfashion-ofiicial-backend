@@ -39,6 +39,7 @@ class Product extends Model
         'is_active',
         'is_featured',
         'hide_from_storefront',
+        'show_trust_badges',
         'campaign_facebook_pixel_ids',
         'campaign_google_tag_ids',
     ];
@@ -56,6 +57,7 @@ class Product extends Model
             'is_active' => 'boolean',
             'is_featured' => 'boolean',
             'hide_from_storefront' => 'boolean',
+            'show_trust_badges' => 'boolean',
             'campaign_facebook_pixel_ids' => 'array',
             'campaign_google_tag_ids' => 'array',
         ];
