@@ -6,11 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\Review;
 use App\Models\User;
+use App\Services\ProductReviewService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ReviewController extends Controller
 {
+    public function __construct(private readonly ProductReviewService $productReviews)
+    {
+    }
+
     public function index(): JsonResponse
     {
         return response()->json([
@@ -109,11 +114,6 @@ class ReviewController extends Controller
 
     protected function refreshProductMetrics(Product $product): void
     {
-        $approved = $product->reviews()->where('status', 'approved');
-
-        $product->update([
-            'rating' => round((float) $approved->avg('rating'), 1),
-            'review_count' => $approved->count(),
-        ]);
+        $this->productReviews->refreshProductGroupMetrics($product);
     }
 }

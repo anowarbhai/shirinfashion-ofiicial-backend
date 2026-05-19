@@ -19,6 +19,7 @@ class Product extends Model
         'name',
         'slug',
         'sku',
+        'review_group_key',
         'brand',
         'short_description',
         'description',

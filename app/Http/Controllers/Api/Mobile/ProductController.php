@@ -6,11 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\Mobile\ProductDetailResource;
 use App\Http\Resources\Mobile\ProductSummaryResource;
 use App\Models\Product;
+use App\Services\ProductReviewService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ProductController extends Controller
 {
+    public function __construct(private readonly ProductReviewService $productReviews)
+    {
+    }
+
     public function index(Request $request): JsonResponse
     {
         $query = Product::query()
@@ -44,8 +49,8 @@ class ProductController extends Controller
 
         $perPage = min(max((int) $request->integer('per_page', 20), 1), 50);
         $products = $query->paginate($perPage);
-        $products->getCollection()->transform(
-            fn (Product $product) => $this->applyApprovedReviewMetrics($product)
+        $products->setCollection(
+            $this->productReviews->applyApprovedReviewMetricsToCollection($products->getCollection())
         );
 
         return response()->json([
@@ -67,10 +72,6 @@ class ProductController extends Controller
                 'categories',
                 'attributeTerms.attribute',
                 'activeVolumeDiscounts.freeProduct',
-                'reviews' => fn ($query) => $query
-                    ->where('status', 'approved')
-                    ->latest()
-                    ->limit(20),
             ])
             ->withCount([
                 'reviews as approved_reviews_count' => fn ($builder) => $builder->where('status', 'approved'),
@@ -91,7 +92,12 @@ class ProductController extends Controller
             ->firstOrFail();
 
         return response()->json([
-            'data' => new ProductDetailResource($this->applyApprovedReviewMetrics($product)),
+            'data' => new ProductDetailResource(
+                $this->productReviews->loadApprovedReviews(
+                    $this->productReviews->applyApprovedReviewMetrics($product),
+                    20,
+                )
+            ),
         ]);
     }
 
@@ -146,18 +152,4 @@ class ProductController extends Controller
         }
     }
 
-    protected function applyApprovedReviewMetrics(Product $product): Product
-    {
-        $approvedReviewCount = (int) ($product->approved_reviews_count ?? 0);
-        $approvedReviewAverage = $approvedReviewCount > 0
-            ? round((float) ($product->approved_reviews_avg_rating ?? 0), 1)
-            : 0;
-
-        $product->setAttribute('review_count', $approvedReviewCount);
-        $product->setAttribute('rating', $approvedReviewAverage);
-        $product->setAttribute('sold_quantity', (int) ($product->sold_quantity ?? 0));
-
-        return $product;
-    }
 }
-

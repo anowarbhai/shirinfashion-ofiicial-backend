@@ -16,6 +16,7 @@ class ProductController extends Controller
 {
     private const CSV_HEADERS = [
         'sku',
+        'review_group_key',
         'name',
         'slug',
         'brand',
@@ -90,6 +91,7 @@ class ProductController extends Controller
 
                         fputcsv($handle, [
                             $product->sku,
+                            $product->review_group_key,
                             $product->name,
                             $product->slug,
                             $product->brand,
@@ -123,6 +125,7 @@ class ProductController extends Controller
             fputcsv($handle, self::CSV_HEADERS);
             fputcsv($handle, [
                 'SKU-00001',
+                'sample-beauty-product',
                 'Sample Beauty Product',
                 'sample-beauty-product',
                 'Shirin Fashion',
@@ -221,6 +224,7 @@ class ProductController extends Controller
                     'name' => $name,
                     'slug' => $this->resolveUniqueSlug((string) ($row['slug'] ?? $name), $product?->id),
                     'sku' => $sku,
+                    'review_group_key' => trim((string) ($row['review_group_key'] ?? '')) ?: null,
                     'brand' => trim((string) ($row['brand'] ?? '')) ?: 'Shirin Fashion',
                     'short_description' => $shortDescription,
                     'description' => (string) ($row['description'] ?? ''),
@@ -434,6 +438,7 @@ class ProductController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'slug' => ['nullable', 'string', 'max:255'],
             'sku' => ['required', 'string', 'max:255', 'unique:products,sku,'.($productId ?? 'NULL').',id'],
+            'review_group_key' => ['nullable', 'string', 'max:255'],
             'brand' => ['required', 'string', 'max:255'],
             'short_description' => ['nullable', 'string'],
             'description' => ['nullable', 'string'],
@@ -474,6 +479,7 @@ class ProductController extends Controller
             $validated['slug'] ?? $validated['name'],
             $productId,
         );
+        $validated['review_group_key'] = trim((string) ($validated['review_group_key'] ?? '')) ?: null;
         $validated['category_id'] = $validated['category_ids'][0];
         $validated['manage_stock'] = (bool) ($validated['manage_stock'] ?? true);
         $validated['show_trust_badges'] = (bool) ($validated['show_trust_badges'] ?? true);

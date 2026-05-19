@@ -5,11 +5,16 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\Review;
+use App\Services\ProductReviewService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ReviewController extends Controller
 {
+    public function __construct(private readonly ProductReviewService $productReviews)
+    {
+    }
+
     public function index(Request $request): JsonResponse
     {
         $query = Review::query()
@@ -17,9 +22,15 @@ class ReviewController extends Controller
             ->where('status', 'approved');
 
         if ($request->filled('product')) {
-            $query->whereHas('product', function ($builder) use ($request): void {
-                $builder->where('slug', $request->string('product'));
-            });
+            $product = Product::query()
+                ->where('slug', $request->string('product'))
+                ->first();
+
+            if ($product) {
+                $query = $this->productReviews->approvedReviewQuery($product)->with('product');
+            } else {
+                $query->whereRaw('1 = 0');
+            }
         }
 
         return response()->json([
@@ -61,11 +72,6 @@ class ReviewController extends Controller
 
     protected function refreshProductMetrics(Product $product): void
     {
-        $approved = $product->reviews()->where('status', 'approved');
-
-        $product->update([
-            'rating' => round((float) $approved->avg('rating'), 1),
-            'review_count' => $approved->count(),
-        ]);
+        $this->productReviews->refreshProductGroupMetrics($product);
     }
 }

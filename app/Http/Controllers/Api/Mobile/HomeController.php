@@ -9,13 +9,17 @@ use App\Http\Resources\Mobile\SliderResource;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\Slider;
+use App\Services\ProductReviewService;
 use App\Services\ThemeSettingsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class HomeController extends Controller
 {
-    public function __construct(private readonly ThemeSettingsService $themeSettings)
+    public function __construct(
+        private readonly ThemeSettingsService $themeSettings,
+        private readonly ProductReviewService $productReviews,
+    )
     {
     }
 
@@ -47,13 +51,13 @@ class HomeController extends Controller
             ->latest()
             ->limit($limit)
             ->get()
-            ->map(fn (Product $product) => $this->applyApprovedReviewMetrics($product));
+            ->pipe(fn ($products) => $this->productReviews->applyApprovedReviewMetricsToCollection($products));
 
         $newProducts = (clone $baseProductQuery)
             ->latest()
             ->limit($limit)
             ->get()
-            ->map(fn (Product $product) => $this->applyApprovedReviewMetrics($product));
+            ->pipe(fn ($products) => $this->productReviews->applyApprovedReviewMetricsToCollection($products));
 
         $categories = Category::query()
             ->with('parent')
@@ -85,20 +89,6 @@ class HomeController extends Controller
                 'new_products' => ProductSummaryResource::collection($newProducts),
             ],
         ]);
-    }
-
-    protected function applyApprovedReviewMetrics(Product $product): Product
-    {
-        $approvedReviewCount = (int) ($product->approved_reviews_count ?? 0);
-        $approvedReviewAverage = $approvedReviewCount > 0
-            ? round((float) ($product->approved_reviews_avg_rating ?? 0), 1)
-            : 0;
-
-        $product->setAttribute('review_count', $approvedReviewCount);
-        $product->setAttribute('rating', $approvedReviewAverage);
-        $product->setAttribute('sold_quantity', (int) ($product->sold_quantity ?? 0));
-
-        return $product;
     }
 
     protected function mobileUrl(?string $url, Request $request): ?string

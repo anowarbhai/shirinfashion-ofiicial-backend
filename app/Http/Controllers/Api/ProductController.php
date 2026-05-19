@@ -5,11 +5,16 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\StorefrontSetting;
+use App\Services\ProductReviewService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ProductController extends Controller
 {
+    public function __construct(private readonly ProductReviewService $productReviews)
+    {
+    }
+
     public function index(Request $request): JsonResponse
     {
         $query = Product::query()
@@ -61,8 +66,8 @@ class ProductController extends Controller
 
         $perPage = min(max((int) $request->integer('per_page', 12), 1), 100);
         $products = $query->latest()->paginate($perPage);
-        $products->getCollection()->transform(
-            fn (Product $product) => $this->applyApprovedReviewMetrics($product)
+        $products->setCollection(
+            $this->productReviews->applyApprovedReviewMetricsToCollection($products->getCollection())
         );
 
         return response()->json($products);
@@ -75,9 +80,6 @@ class ProductController extends Controller
             'categories',
             'attributeTerms.attribute',
             'activeVolumeDiscounts.freeProduct',
-            'reviews' => fn ($query) => $query
-                ->where('status', 'approved')
-                ->latest(),
         ]);
         $product->loadCount([
             'reviews as approved_reviews_count' => fn ($builder) => $builder->where('status', 'approved'),
@@ -93,7 +95,8 @@ class ProductController extends Controller
                 ),
         ], 'quantity');
 
-        $product = $this->applyApprovedReviewMetrics($product);
+        $product = $this->productReviews->applyApprovedReviewMetrics($product);
+        $this->productReviews->loadApprovedReviews($product);
 
         if ($product->hide_from_storefront) {
             $product->setAttribute('campaign_tracking', $this->campaignTrackingFor($product));
@@ -102,20 +105,6 @@ class ProductController extends Controller
         return response()->json([
             'data' => $product,
         ]);
-    }
-
-    private function applyApprovedReviewMetrics(Product $product): Product
-    {
-        $approvedReviewCount = (int) ($product->approved_reviews_count ?? 0);
-        $approvedReviewAverage = $approvedReviewCount > 0
-            ? round((float) ($product->approved_reviews_avg_rating ?? 0), 1)
-            : 0;
-
-        $product->setAttribute('review_count', $approvedReviewCount);
-        $product->setAttribute('rating', $approvedReviewAverage);
-        $product->setAttribute('sold_quantity', (int) ($product->sold_quantity ?? 0));
-
-        return $product;
     }
 
     private function campaignTrackingFor(Product $product): array
