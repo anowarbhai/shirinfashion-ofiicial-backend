@@ -17,6 +17,7 @@ class ProductController extends Controller
     private const CSV_HEADERS = [
         'sku',
         'review_group_key',
+        'review_source_product_id',
         'name',
         'slug',
         'brand',
@@ -92,6 +93,7 @@ class ProductController extends Controller
                         fputcsv($handle, [
                             $product->sku,
                             $product->review_group_key,
+                            $product->review_source_product_id,
                             $product->name,
                             $product->slug,
                             $product->brand,
@@ -126,6 +128,7 @@ class ProductController extends Controller
             fputcsv($handle, [
                 'SKU-00001',
                 'sample-beauty-product',
+                '',
                 'Sample Beauty Product',
                 'sample-beauty-product',
                 'Shirin Fashion',
@@ -225,6 +228,7 @@ class ProductController extends Controller
                     'slug' => $this->resolveUniqueSlug((string) ($row['slug'] ?? $name), $product?->id),
                     'sku' => $sku,
                     'review_group_key' => trim((string) ($row['review_group_key'] ?? '')) ?: null,
+                    'review_source_product_id' => $this->nullableInteger($row['review_source_product_id'] ?? null),
                     'brand' => trim((string) ($row['brand'] ?? '')) ?: 'Shirin Fashion',
                     'short_description' => $shortDescription,
                     'description' => (string) ($row['description'] ?? ''),
@@ -379,6 +383,15 @@ class ProductController extends Controller
         return (float) $value;
     }
 
+    protected function nullableInteger(mixed $value): ?int
+    {
+        if ($value === null || trim((string) $value) === '') {
+            return null;
+        }
+
+        return (int) $value;
+    }
+
     protected function resolveImportCategoryIds(string $value): array
     {
         $categoryIds = collect($this->splitCsvList($value))
@@ -439,6 +452,7 @@ class ProductController extends Controller
             'slug' => ['nullable', 'string', 'max:255'],
             'sku' => ['required', 'string', 'max:255', 'unique:products,sku,'.($productId ?? 'NULL').',id'],
             'review_group_key' => ['nullable', 'string', 'max:255'],
+            'review_source_product_id' => ['nullable', 'integer', 'exists:products,id'],
             'brand' => ['required', 'string', 'max:255'],
             'short_description' => ['nullable', 'string'],
             'description' => ['nullable', 'string'],
@@ -480,6 +494,11 @@ class ProductController extends Controller
             $productId,
         );
         $validated['review_group_key'] = trim((string) ($validated['review_group_key'] ?? '')) ?: null;
+        $validated['review_source_product_id'] = $this->normalizeReviewSourceProductId(
+            $validated['review_source_product_id'] ?? null,
+            $productId,
+            (bool) ($validated['hide_from_storefront'] ?? false),
+        );
         $validated['category_id'] = $validated['category_ids'][0];
         $validated['manage_stock'] = (bool) ($validated['manage_stock'] ?? true);
         $validated['show_trust_badges'] = (bool) ($validated['show_trust_badges'] ?? true);
@@ -514,6 +533,30 @@ class ProductController extends Controller
                 'short_description' => ['The short description may not be greater than 500 characters.'],
             ]);
         }
+    }
+
+    protected function normalizeReviewSourceProductId(
+        mixed $value,
+        ?int $productId,
+        bool $isCampaignUrl,
+    ): ?int {
+        if (! $isCampaignUrl) {
+            return null;
+        }
+
+        $sourceProductId = (int) ($value ?? 0);
+
+        if ($sourceProductId <= 0) {
+            return null;
+        }
+
+        if ($productId !== null && $sourceProductId === $productId) {
+            throw ValidationException::withMessages([
+                'review_source_product_id' => ['Select a different product as the review source.'],
+            ]);
+        }
+
+        return $sourceProductId;
     }
 
     protected function resolveUniqueSlug(string $value, ?int $ignoreId = null): string

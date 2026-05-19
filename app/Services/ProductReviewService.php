@@ -14,6 +14,18 @@ class ProductReviewService
         return Review::query()
             ->where('status', 'approved')
             ->whereHas('product', function (Builder $query) use ($product): void {
+                $reviewSourceProductId = $this->reviewSourceProductId($product);
+
+                if ($reviewSourceProductId !== null) {
+                    $query->where(function (Builder $builder) use ($reviewSourceProductId): void {
+                        $builder
+                            ->whereKey($reviewSourceProductId)
+                            ->orWhere('review_source_product_id', $reviewSourceProductId);
+                    });
+
+                    return;
+                }
+
                 $reviewGroupKey = $this->reviewGroupKey($product);
 
                 if ($reviewGroupKey !== null) {
@@ -85,6 +97,15 @@ class ProductReviewService
      */
     private function relatedProducts(Product $product): Collection
     {
+        $reviewSourceProductId = $this->reviewSourceProductId($product);
+
+        if ($reviewSourceProductId !== null) {
+            return Product::query()
+                ->whereKey($reviewSourceProductId)
+                ->orWhere('review_source_product_id', $reviewSourceProductId)
+                ->get();
+        }
+
         $reviewGroupKey = $this->reviewGroupKey($product);
 
         if ($reviewGroupKey === null) {
@@ -103,5 +124,16 @@ class ProductReviewService
         $key = trim((string) ($product->review_group_key ?? ''));
 
         return $key !== '' ? $key : null;
+    }
+
+    private function reviewSourceProductId(Product $product): ?int
+    {
+        $sourceProductId = (int) ($product->review_source_product_id ?? 0);
+
+        if ($sourceProductId > 0) {
+            return $sourceProductId;
+        }
+
+        return $this->reviewGroupKey($product) === null ? (int) $product->id : null;
     }
 }

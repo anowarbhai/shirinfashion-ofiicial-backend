@@ -20,6 +20,7 @@ class Product extends Model
         'slug',
         'sku',
         'review_group_key',
+        'review_source_product_id',
         'brand',
         'short_description',
         'description',

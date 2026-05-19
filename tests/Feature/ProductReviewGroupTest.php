@@ -56,6 +56,46 @@ class ProductReviewGroupTest extends TestCase
             ->assertJsonMissing(['author_name' => 'Other Customer']);
     }
 
+    public function test_campaign_product_can_use_selected_product_as_review_source(): void
+    {
+        $category = Category::query()->create([
+            'name' => 'Skincare',
+            'slug' => 'skincare',
+        ]);
+        $mainProduct = $this->createProduct($category, 'Glow Cream', 'glow-cream', null);
+        $campaignProduct = $this->createProduct($category, 'Glow Cream Campaign', 'glow-cream-campaign', null);
+        $campaignProduct->update(['review_source_product_id' => $mainProduct->id]);
+
+        Review::query()->create([
+            'product_id' => $mainProduct->id,
+            'author_name' => 'Main Customer',
+            'author_phone' => '01700000003',
+            'rating' => 5,
+            'body' => 'Main product review.',
+            'status' => 'approved',
+        ]);
+        Review::query()->create([
+            'product_id' => $campaignProduct->id,
+            'author_name' => 'Campaign Customer',
+            'author_phone' => '01700000004',
+            'rating' => 4,
+            'body' => 'Campaign product review.',
+            'status' => 'approved',
+        ]);
+
+        $this->getJson('/api/products/'.$campaignProduct->slug)
+            ->assertOk()
+            ->assertJsonPath('data.review_count', 2)
+            ->assertJsonPath('data.rating', '4.5')
+            ->assertJsonFragment(['author_name' => 'Main Customer'])
+            ->assertJsonFragment(['author_name' => 'Campaign Customer']);
+
+        $this->getJson('/api/products/'.$mainProduct->slug)
+            ->assertOk()
+            ->assertJsonPath('data.review_count', 2)
+            ->assertJsonFragment(['author_name' => 'Campaign Customer']);
+    }
+
     private function createProduct(
         Category $category,
         string $name,
