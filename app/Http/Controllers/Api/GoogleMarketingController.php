@@ -21,6 +21,7 @@ class GoogleMarketingController extends Controller
             'ga4_measurement_id' => '',
             'google_ads_enabled' => false,
             'google_ads_conversion_id' => '',
+            'google_ads_conversion_label' => '',
             'campaign_tags' => [],
         ], is_array($stored) ? $stored : []);
 
@@ -32,6 +33,7 @@ class GoogleMarketingController extends Controller
                 'ga4_measurement_id' => trim((string) ($settings['ga4_measurement_id'] ?? '')),
                 'google_ads_enabled' => (bool) ($settings['google_ads_enabled'] ?? false),
                 'google_ads_conversion_id' => trim((string) ($settings['google_ads_conversion_id'] ?? '')),
+                'google_ads_conversion_label' => trim((string) ($settings['google_ads_conversion_label'] ?? '')),
                 'campaign_tags' => collect($settings['campaign_tags'] ?? [])
                     ->filter(fn ($tag): bool => is_array($tag) && (bool) ($tag['enabled'] ?? true))
                     ->map(fn (array $tag): array => [

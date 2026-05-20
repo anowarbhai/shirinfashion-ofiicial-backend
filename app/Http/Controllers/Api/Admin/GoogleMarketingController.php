@@ -26,6 +26,7 @@ class GoogleMarketingController extends Controller
             'ga4_measurement_id' => ['nullable', 'string', 'max:64'],
             'google_ads_enabled' => ['required', 'boolean'],
             'google_ads_conversion_id' => ['nullable', 'string', 'max:64'],
+            'google_ads_conversion_label' => ['nullable', 'string', 'max:128'],
             'campaign_tags' => ['nullable', 'array'],
             'campaign_tags.*.id' => ['nullable', 'string', 'max:80'],
             'campaign_tags.*.name' => ['nullable', 'string', 'max:120'],
@@ -41,6 +42,7 @@ class GoogleMarketingController extends Controller
             'ga4_measurement_id' => $this->normalizeTrackingId((string) ($validated['ga4_measurement_id'] ?? ''), 'ga4'),
             'google_ads_enabled' => (bool) $validated['google_ads_enabled'],
             'google_ads_conversion_id' => $this->normalizeTrackingId((string) ($validated['google_ads_conversion_id'] ?? ''), 'google_ads'),
+            'google_ads_conversion_label' => $this->normalizeConversionLabel((string) ($validated['google_ads_conversion_label'] ?? '')),
             'campaign_tags' => $this->normalizeCampaignTags($validated['campaign_tags'] ?? []),
         ];
 
@@ -73,6 +75,7 @@ class GoogleMarketingController extends Controller
             'ga4_measurement_id' => '',
             'google_ads_enabled' => false,
             'google_ads_conversion_id' => '',
+            'google_ads_conversion_label' => '',
             'campaign_tags' => [],
         ];
     }
@@ -121,5 +124,20 @@ class GoogleMarketingController extends Controller
         }
 
         return strtoupper($value);
+    }
+
+    private function normalizeConversionLabel(string $value): string
+    {
+        $value = trim($value);
+
+        if ($value === '') {
+            return '';
+        }
+
+        if (preg_match('/[A-Za-z0-9_-]+/', $value, $matches)) {
+            return $matches[0];
+        }
+
+        return '';
     }
 }
