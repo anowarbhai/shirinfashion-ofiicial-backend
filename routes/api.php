@@ -87,6 +87,7 @@ Route::get('/settings/customer-auth', [CustomerAuthSettingsController::class, 's
 Route::get('/settings/sms-integration/public', [SmsIntegrationController::class, 'publicConfig']);
 Route::get('/theme', [ThemeController::class, 'show']);
 Route::post('/contact-messages', [ContactMessageController::class, 'store']);
+Route::get('/pages/sitemap', [PageController::class, 'sitemap']);
 Route::get('/pages/{slug}', [PageController::class, 'show']);
 Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/sitemap', [ProductController::class, 'sitemap']);

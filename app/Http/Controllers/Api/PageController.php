@@ -8,6 +8,21 @@ use Illuminate\Http\JsonResponse;
 
 class PageController extends Controller
 {
+    public function sitemap(): JsonResponse
+    {
+        return response()->json([
+            'data' => StorefrontPage::query()
+                ->select(['slug', 'updated_at'])
+                ->where('status', 'published')
+                ->orderBy('slug')
+                ->get()
+                ->map(fn (StorefrontPage $page): array => [
+                    'slug' => $page->slug,
+                    'updated_at' => optional($page->updated_at)?->toIso8601String(),
+                ]),
+        ]);
+    }
+
     public function show(string $slug): JsonResponse
     {
         $page = StorefrontPage::query()
