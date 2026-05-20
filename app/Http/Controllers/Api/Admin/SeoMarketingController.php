@@ -60,8 +60,8 @@ class SeoMarketingController extends Controller
             'home_title' => 'Shirin Fashion | Premium Cosmetics & Beauty',
             'meta_description' => 'Discover premium cosmetics and beauty products at Shirin Fashion. Shop skincare, makeup, fragrance and more.',
             'meta_keywords' => 'cosmetics, beauty, skincare, makeup, fragrance, fashion',
-            'canonical_url' => 'https://shirinfashion.store',
-            'robots_content' => "User-agent: *\nAllow: /\nSitemap: https://shirinfashion.store/sitemap.xml",
+            'canonical_url' => 'https://shirinfashion.com.bd',
+            'robots_content' => "User-agent: *\nAllow: /\nSitemap: https://shirinfashion.com.bd/sitemap.xml",
         ];
     }
 }
