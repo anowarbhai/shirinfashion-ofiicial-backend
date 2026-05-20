@@ -16,6 +16,7 @@ class ProductDetailResource extends ProductSummaryResource
             'skin_types' => $this->skin_types ?? [],
             'meta_title' => $this->meta_title,
             'meta_description' => $this->meta_description,
+            'meta_keywords' => $this->meta_keywords,
             'attributes' => ProductAttributeResource::collection(
                 $this->whenLoaded('attributeTerms', fn () => $this->attributeTerms, collect())
             ),
@@ -25,4 +26,3 @@ class ProductDetailResource extends ProductSummaryResource
         ];
     }
 }
-

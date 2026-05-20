@@ -38,6 +38,7 @@ class Product extends Model
         'ingredients',
         'meta_title',
         'meta_description',
+        'meta_keywords',
         'is_active',
         'is_featured',
         'hide_from_storefront',

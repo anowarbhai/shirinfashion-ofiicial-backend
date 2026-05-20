@@ -32,6 +32,9 @@ class ProductController extends Controller
         'hide_from_storefront',
         'short_description',
         'description',
+        'meta_title',
+        'meta_description',
+        'meta_keywords',
         'gallery',
     ];
 
@@ -108,6 +111,9 @@ class ProductController extends Controller
                             $product->hide_from_storefront ? '1' : '0',
                             $product->short_description,
                             $product->description,
+                            $product->meta_title,
+                            $product->meta_description,
+                            $product->meta_keywords,
                             collect($product->gallery)->filter()->implode(';'),
                         ]);
                     }
@@ -143,6 +149,9 @@ class ProductController extends Controller
                 '0',
                 'Short product summary within 500 characters.',
                 '<p>Full product description can include HTML.</p>',
+                'Sample Beauty Product Meta Title',
+                'Search-friendly product meta description.',
+                'sample beauty product, skincare, cosmetics',
                 'https://example.com/product-1.jpg;https://example.com/product-2.jpg',
             ]);
             fclose($handle);
@@ -232,6 +241,9 @@ class ProductController extends Controller
                     'brand' => trim((string) ($row['brand'] ?? '')) ?: 'Shirin Fashion',
                     'short_description' => $shortDescription,
                     'description' => (string) ($row['description'] ?? ''),
+                    'meta_title' => trim((string) ($row['meta_title'] ?? '')) ?: null,
+                    'meta_description' => trim((string) ($row['meta_description'] ?? '')) ?: null,
+                    'meta_keywords' => trim((string) ($row['meta_keywords'] ?? '')) ?: null,
                     'price' => (float) $price,
                     'compare_price' => $this->nullableFloat($row['compare_price'] ?? null),
                     'inventory' => $inventory,
@@ -468,6 +480,7 @@ class ProductController extends Controller
             'ingredients' => ['nullable', 'array'],
             'meta_title' => ['nullable', 'string', 'max:255'],
             'meta_description' => ['nullable', 'string'],
+            'meta_keywords' => ['nullable', 'string', 'max:500'],
             'is_active' => ['sometimes', 'boolean'],
             'is_featured' => ['sometimes', 'boolean'],
             'hide_from_storefront' => ['sometimes', 'boolean'],
