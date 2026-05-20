@@ -73,6 +73,22 @@ class ProductController extends Controller
         return response()->json($products);
     }
 
+    public function sitemap(): JsonResponse
+    {
+        return response()->json([
+            'data' => Product::query()
+                ->where('is_active', true)
+                ->orderBy('updated_at', 'desc')
+                ->get(['slug', 'updated_at', 'hide_from_storefront'])
+                ->map(fn (Product $product): array => [
+                    'slug' => $product->slug,
+                    'updated_at' => optional($product->updated_at)->toISOString(),
+                    'is_campaign' => (bool) $product->hide_from_storefront,
+                ])
+                ->values(),
+        ]);
+    }
+
     public function show(Product $product): JsonResponse
     {
         $product->load([

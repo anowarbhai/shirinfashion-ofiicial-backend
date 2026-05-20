@@ -89,6 +89,7 @@ Route::get('/theme', [ThemeController::class, 'show']);
 Route::post('/contact-messages', [ContactMessageController::class, 'store']);
 Route::get('/pages/{slug}', [PageController::class, 'show']);
 Route::get('/products', [ProductController::class, 'index']);
+Route::get('/products/sitemap', [ProductController::class, 'sitemap']);
 Route::get('/products/{product}', [ProductController::class, 'show']);
 Route::get('/product-page-settings', [ProductPageSettingsController::class, 'show']);
 Route::get('/reviews', [ReviewController::class, 'index']);
