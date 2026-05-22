@@ -223,6 +223,7 @@ Route::middleware('jwt.auth')->group(function (): void {
         ]);
         Route::get('/media', [AdminMediaController::class, 'index']);
         Route::post('/media', [AdminMediaController::class, 'store']);
+        Route::patch('/media/{mediaAsset}', [AdminMediaController::class, 'update']);
         Route::delete('/media/{mediaAsset}', [AdminMediaController::class, 'destroy']);
     });
 });

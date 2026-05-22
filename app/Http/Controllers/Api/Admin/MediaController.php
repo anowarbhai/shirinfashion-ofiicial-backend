@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\MediaAsset;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Storage;
@@ -60,23 +61,25 @@ class MediaController extends Controller
             $file = $validated['file'];
             $disk = (string) config('filesystems.media', 'public');
             $directory = 'media/'.now()->format('Y/m');
-            $filename = Str::uuid()->toString().'-'.preg_replace('/[^A-Za-z0-9.\-_]/', '-', $file->getClientOriginalName());
             $dimensions = @getimagesize($file->getRealPath()) ?: [null, null];
-            $storedPath = $file->storeAs($directory, $filename, $disk);
+            $stored = $this->storeUploadedImage($file, $disk, $directory, $dimensions);
 
             $media = MediaAsset::create([
                 'file_name' => $file->getClientOriginalName(),
                 'alt_text' => $validated['alt_text'] ?? null,
-                'url' => Storage::disk($disk)->url($storedPath),
+                'url' => $stored['url'],
                 'disk' => $disk,
-                'mime_type' => $file->getMimeType(),
-                'size_bytes' => $file->getSize(),
-                'width' => $dimensions[0],
-                'height' => $dimensions[1],
+                'mime_type' => $stored['mime_type'],
+                'size_bytes' => $stored['size_bytes'],
+                'width' => $stored['width'],
+                'height' => $stored['height'],
                 'metadata' => [
                     'folder' => $directory,
-                    'path' => $storedPath,
+                    'path' => $stored['path'],
                     'original_name' => $file->getClientOriginalName(),
+                    'original_mime_type' => $file->getMimeType(),
+                    'original_size_bytes' => $file->getSize(),
+                    'optimized' => $stored['optimized'],
                 ],
             ]);
         } else {
@@ -97,6 +100,22 @@ class MediaController extends Controller
             'message' => 'Media asset created successfully.',
             'data' => $media,
         ], 201);
+    }
+
+    public function update(Request $request, MediaAsset $mediaAsset): JsonResponse
+    {
+        $validated = $request->validate([
+            'alt_text' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $mediaAsset->update([
+            'alt_text' => $validated['alt_text'] ?? null,
+        ]);
+
+        return response()->json([
+            'message' => 'Media asset updated successfully.',
+            'data' => $mediaAsset->fresh(),
+        ]);
     }
 
     public function destroy(MediaAsset $mediaAsset): JsonResponse
@@ -139,5 +158,153 @@ class MediaController extends Controller
         if ($storagePath !== '' && Storage::disk($disk)->exists($storagePath)) {
             Storage::disk($disk)->delete($storagePath);
         }
+    }
+
+    /**
+     * Converts future uploads to right-sized WebP when the server supports GD.
+     * If GD/WebP is unavailable, the original upload path is preserved.
+     *
+     * @param array<int, int|null> $dimensions
+     * @return array{path: string, url: string, mime_type: string|null, size_bytes: int|null, width: int|null, height: int|null, optimized: bool}
+     */
+    protected function storeUploadedImage(UploadedFile $file, string $disk, string $directory, array $dimensions): array
+    {
+        $optimized = $this->storeOptimizedWebp($file, $disk, $directory);
+
+        if ($optimized !== null) {
+            return $optimized;
+        }
+
+        $filename = Str::uuid()->toString().'-'.preg_replace('/[^A-Za-z0-9.\-_]/', '-', $file->getClientOriginalName());
+        $storedPath = $file->storeAs($directory, $filename, $disk);
+
+        return [
+            'path' => $storedPath,
+            'url' => Storage::disk($disk)->url($storedPath),
+            'mime_type' => $file->getMimeType(),
+            'size_bytes' => $file->getSize(),
+            'width' => $dimensions[0],
+            'height' => $dimensions[1],
+            'optimized' => false,
+        ];
+    }
+
+    /**
+     * @return array{path: string, url: string, mime_type: string, size_bytes: int|null, width: int, height: int, optimized: bool}|null
+     */
+    protected function storeOptimizedWebp(UploadedFile $file, string $disk, string $directory): ?array
+    {
+        if (! function_exists('imagewebp') || ! function_exists('imagecreatetruecolor')) {
+            return null;
+        }
+
+        $mimeType = (string) $file->getMimeType();
+        $sourcePath = $file->getRealPath();
+
+        if (! is_string($sourcePath) || ! in_array($mimeType, ['image/jpeg', 'image/png', 'image/webp'], true)) {
+            return null;
+        }
+
+        $source = $this->createImageResource($sourcePath, $mimeType);
+
+        if ($source === null) {
+            return null;
+        }
+
+        $temporaryPath = tempnam(sys_get_temp_dir(), 'media-webp-');
+
+        if ($temporaryPath === false) {
+            imagedestroy($source);
+
+            return null;
+        }
+
+        try {
+            $sourceWidth = imagesx($source);
+            $sourceHeight = imagesy($source);
+
+            if ($sourceWidth < 1 || $sourceHeight < 1) {
+                return null;
+            }
+
+            $maxDimension = 1800;
+            $scale = min(1, $maxDimension / $sourceWidth, $maxDimension / $sourceHeight);
+            $targetWidth = max(1, (int) round($sourceWidth * $scale));
+            $targetHeight = max(1, (int) round($sourceHeight * $scale));
+            $target = $source;
+
+            if ($targetWidth !== $sourceWidth || $targetHeight !== $sourceHeight) {
+                $target = imagecreatetruecolor($targetWidth, $targetHeight);
+
+                if (! $target) {
+                    return null;
+                }
+
+                imagealphablending($target, false);
+                imagesavealpha($target, true);
+                $transparent = imagecolorallocatealpha($target, 255, 255, 255, 127);
+                imagefill($target, 0, 0, $transparent);
+                imagecopyresampled($target, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, $sourceWidth, $sourceHeight);
+            }
+
+            if (! imagewebp($target, $temporaryPath, 82)) {
+                return null;
+            }
+
+            $contents = file_get_contents($temporaryPath);
+
+            if ($contents === false || $contents === '') {
+                return null;
+            }
+
+            $optimizedSize = strlen($contents);
+
+            if (
+                $targetWidth === $sourceWidth
+                && $targetHeight === $sourceHeight
+                && $file->getSize() > 0
+                && $optimizedSize >= $file->getSize()
+            ) {
+                return null;
+            }
+
+            $baseName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+            $safeBaseName = preg_replace('/[^A-Za-z0-9\-_]/', '-', $baseName) ?: 'image';
+            $storedPath = $directory.'/'.Str::uuid()->toString().'-'.$safeBaseName.'.webp';
+
+            if (! Storage::disk($disk)->put($storedPath, $contents)) {
+                return null;
+            }
+
+            return [
+                'path' => $storedPath,
+                'url' => Storage::disk($disk)->url($storedPath),
+                'mime_type' => 'image/webp',
+                'size_bytes' => Storage::disk($disk)->size($storedPath),
+                'width' => $targetWidth,
+                'height' => $targetHeight,
+                'optimized' => true,
+            ];
+        } finally {
+            if (isset($target) && $target !== $source) {
+                imagedestroy($target);
+            }
+
+            imagedestroy($source);
+
+            if (is_file($temporaryPath)) {
+                @unlink($temporaryPath);
+            }
+        }
+    }
+
+    protected function createImageResource(string $path, string $mimeType): mixed
+    {
+        return match ($mimeType) {
+            'image/jpeg' => function_exists('imagecreatefromjpeg') ? @imagecreatefromjpeg($path) ?: null : null,
+            'image/png' => function_exists('imagecreatefrompng') ? @imagecreatefrompng($path) ?: null : null,
+            'image/webp' => function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($path) ?: null : null,
+            default => null,
+        };
     }
 }

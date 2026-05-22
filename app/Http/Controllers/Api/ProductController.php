@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\MediaAsset;
 use App\Models\Product;
 use App\Models\StorefrontSetting;
 use App\Services\ProductReviewService;
+use App\Support\MediaUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -118,9 +120,48 @@ class ProductController extends Controller
             $product->setAttribute('campaign_tracking', $this->campaignTrackingFor($product));
         }
 
+        $product->setAttribute('image_alt_texts', $this->imageAltTextsFor($product));
+
         return response()->json([
             'data' => $product,
         ]);
+    }
+
+    private function imageAltTextsFor(Product $product): array
+    {
+        $gallery = collect($product->gallery)
+            ->filter(fn ($image): bool => is_string($image) && trim($image) !== '')
+            ->values();
+
+        if ($gallery->isEmpty()) {
+            return [];
+        }
+
+        $storedUrls = $gallery
+            ->map(fn (string $image): ?string => MediaUrl::normalizeStored($image))
+            ->filter()
+            ->values();
+
+        if ($storedUrls->isEmpty()) {
+            return [];
+        }
+
+        $altTextByStoredUrl = MediaAsset::query()
+            ->whereIn('url', $storedUrls->all())
+            ->whereNotNull('alt_text')
+            ->get(['url', 'alt_text'])
+            ->mapWithKeys(fn (MediaAsset $media): array => [
+                (string) $media->getRawOriginal('url') => trim((string) $media->alt_text),
+            ]);
+
+        return $gallery
+            ->mapWithKeys(function (string $image) use ($altTextByStoredUrl): array {
+                $storedUrl = MediaUrl::normalizeStored($image);
+                $altText = is_string($storedUrl) ? $altTextByStoredUrl->get($storedUrl) : null;
+
+                return is_string($altText) && $altText !== '' ? [$image => $altText] : [];
+            })
+            ->all();
     }
 
     private function campaignTrackingFor(Product $product): array
