@@ -27,6 +27,7 @@ class HomeController extends Controller
     {
         $limit = min(max((int) $request->integer('limit', 12), 4), 20);
         $appearance = $this->themeSettings->getGroup('appearance');
+        $header = $this->themeSettings->getGroup('header');
 
         $baseProductQuery = Product::query()
             ->with(['category', 'categories', 'activeVolumeDiscounts.freeProduct'])
@@ -83,12 +84,30 @@ class HomeController extends Controller
                     'tagline' => $appearance['tagline'] ?? '',
                     'colors' => $appearance['colors'] ?? [],
                 ],
+                'announcement' => $this->mobileAnnouncement($header),
                 'sliders' => SliderResource::collection($sliders),
                 'categories' => CategoryResource::collection($categories),
                 'featured_products' => ProductSummaryResource::collection($featuredProducts),
                 'new_products' => ProductSummaryResource::collection($newProducts),
             ],
         ]);
+    }
+
+    protected function mobileAnnouncement(array $header): array
+    {
+        $text = trim((string) ($header['announcement_text'] ?? ''));
+        $expiresAt = trim((string) ($header['announcement_expires_at'] ?? ''));
+        $expiresTimestamp = $expiresAt !== '' ? strtotime($expiresAt) : false;
+        $hasExpired = $expiresTimestamp !== false && $expiresTimestamp <= now('Asia/Dhaka')->timestamp;
+        $isActive = (bool) ($header['show_announcement_bar'] ?? false)
+            && $text !== ''
+            && ! $hasExpired;
+
+        return [
+            'is_active' => $isActive,
+            'text' => $isActive ? $text : '',
+            'expires_at' => $isActive ? $expiresAt : null,
+        ];
     }
 
     protected function mobileUrl(?string $url, Request $request): ?string
