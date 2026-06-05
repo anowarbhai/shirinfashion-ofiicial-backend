@@ -350,6 +350,18 @@ class OrderController extends Controller
                 ]);
             }
 
+            if (! $product->is_active) {
+                throw ValidationException::withMessages([
+                    'items' => ["{$product->name} is not available for checkout."],
+                ]);
+            }
+
+            if ($product->stock_status === 'out_of_stock') {
+                throw ValidationException::withMessages([
+                    'items' => ["{$product->name} is out of stock."],
+                ]);
+            }
+
             $tier = ! empty($item['volume_discount_id'])
                 ? $tiers->get($item['volume_discount_id'])
                 : null;

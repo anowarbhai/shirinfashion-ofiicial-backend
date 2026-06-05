@@ -71,6 +71,19 @@ class ProductStorefrontVisibilityTest extends TestCase
             ->assertJsonMissing(['pixel_id' => '99999999999']);
     }
 
+    public function test_inactive_product_detail_is_not_publicly_visible(): void
+    {
+        $category = Category::query()->create([
+            'name' => 'Skincare',
+            'slug' => 'skincare',
+        ]);
+        $product = $this->createProduct($category, 'Draft Serum', 'draft-serum');
+        $product->update(['is_active' => false]);
+
+        $this->getJson('/api/products/'.$product->slug)
+            ->assertNotFound();
+    }
+
     private function createProduct(
         Category $category,
         string $name,

@@ -93,6 +93,8 @@ class ProductController extends Controller
 
     public function show(Product $product): JsonResponse
     {
+        abort_if(! $product->is_active, 404);
+
         $product->load([
             'category',
             'categories',

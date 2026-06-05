@@ -54,6 +54,29 @@ class IncompleteOrderTest extends TestCase
         $this->assertSame(9, $product->fresh()->inventory);
     }
 
+    public function test_final_order_rejects_inactive_product(): void
+    {
+        $product = $this->createProduct();
+        $product->update(['is_active' => false]);
+
+        $this->postJson('/api/orders', $this->orderPayload($product))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('items');
+    }
+
+    public function test_final_order_rejects_out_of_stock_product(): void
+    {
+        $product = $this->createProduct();
+        $product->update([
+            'inventory' => 0,
+            'stock_status' => 'out_of_stock',
+        ]);
+
+        $this->postJson('/api/orders', $this->orderPayload($product))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('items');
+    }
+
     public function test_same_guest_session_updates_incomplete_order_when_phone_changes(): void
     {
         $product = $this->createProduct();
