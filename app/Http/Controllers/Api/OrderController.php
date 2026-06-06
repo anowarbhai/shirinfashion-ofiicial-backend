@@ -195,6 +195,7 @@ class OrderController extends Controller
 
             $this->replaceOrderItems($order, $prepared['order_items'], false);
             $this->orderAssignmentService->assignIncompleteOrder($order);
+            $this->deleteDuplicateIncompleteOrders($order, $customer, $prepared);
 
             return $order->load('items');
         });
@@ -579,12 +580,23 @@ class OrderController extends Controller
 
         if ($customer) {
             $query->where('user_id', $customer->id);
-        } elseif ($prepared['cart_session_id']) {
-            $query->where('cart_session_id', $prepared['cart_session_id']);
-        } elseif ($prepared['normalized_phone']) {
-            $query->where('normalized_phone', $prepared['normalized_phone']);
         } else {
-            return null;
+            $cartSessionId = $prepared['cart_session_id'] ?? null;
+            $normalizedPhone = $prepared['normalized_phone'] ?? null;
+
+            if (! $cartSessionId && ! $normalizedPhone) {
+                return null;
+            }
+
+            $query->where(function ($query) use ($cartSessionId, $normalizedPhone): void {
+                if ($cartSessionId) {
+                    $query->orWhere('cart_session_id', $cartSessionId);
+                }
+
+                if ($normalizedPhone) {
+                    $query->orWhere('normalized_phone', $normalizedPhone);
+                }
+            });
         }
 
         return $query
@@ -602,12 +614,23 @@ class OrderController extends Controller
 
         if ($customer) {
             $query->where('user_id', $customer->id);
-        } elseif ($prepared['cart_session_id']) {
-            $query->where('cart_session_id', $prepared['cart_session_id']);
-        } elseif ($prepared['normalized_phone']) {
-            $query->where('normalized_phone', $prepared['normalized_phone']);
         } else {
-            return null;
+            $cartSessionId = $prepared['cart_session_id'] ?? null;
+            $normalizedPhone = $prepared['normalized_phone'] ?? null;
+
+            if (! $cartSessionId && ! $normalizedPhone) {
+                return null;
+            }
+
+            $query->where(function ($query) use ($cartSessionId, $normalizedPhone): void {
+                if ($cartSessionId) {
+                    $query->orWhere('cart_session_id', $cartSessionId);
+                }
+
+                if ($normalizedPhone) {
+                    $query->orWhere('normalized_phone', $normalizedPhone);
+                }
+            });
         }
 
         return $query->latest('completed_at')->first();
@@ -624,12 +647,23 @@ class OrderController extends Controller
 
         if ($customer) {
             $query->where('user_id', $customer->id);
-        } elseif ($prepared['cart_session_id']) {
-            $query->where('cart_session_id', $prepared['cart_session_id']);
-        } elseif ($prepared['normalized_phone']) {
-            $query->where('normalized_phone', $prepared['normalized_phone']);
         } else {
-            return;
+            $cartSessionId = $prepared['cart_session_id'] ?? null;
+            $normalizedPhone = $prepared['normalized_phone'] ?? null;
+
+            if (! $cartSessionId && ! $normalizedPhone) {
+                return;
+            }
+
+            $query->where(function ($query) use ($cartSessionId, $normalizedPhone): void {
+                if ($cartSessionId) {
+                    $query->orWhere('cart_session_id', $cartSessionId);
+                }
+
+                if ($normalizedPhone) {
+                    $query->orWhere('normalized_phone', $normalizedPhone);
+                }
+            });
         }
 
         $query->get()->each(function (Order $order): void {

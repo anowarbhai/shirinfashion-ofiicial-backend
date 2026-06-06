@@ -32,6 +32,65 @@ class IncompleteOrderTest extends TestCase
         $this->assertNull($order->placed_at);
     }
 
+    public function test_same_phone_updates_incomplete_order_across_different_cart_sessions(): void
+    {
+        $product = $this->createProduct();
+
+        $this->postJson('/api/orders/incomplete', $this->orderPayload(
+            $product,
+            quantity: 1,
+            cartSessionId: 'first-cart-session',
+        ))->assertOk();
+
+        $this->postJson('/api/orders/incomplete', $this->orderPayload(
+            $product,
+            quantity: 2,
+            address: 'Road 2, Dhaka',
+            cartSessionId: 'second-cart-session',
+        ))->assertOk();
+
+        $this->assertDatabaseCount('orders', 1);
+        $order = Order::query()->with('items')->firstOrFail();
+
+        $this->assertSame('incomplete', $order->status);
+        $this->assertSame('01919012186', $order->phone);
+        $this->assertSame('second-cart-session', $order->cart_session_id);
+        $this->assertSame('Road 2, Dhaka', $order->shipping_address['address']);
+        $this->assertSame(2, $order->items->first()->quantity);
+    }
+
+    public function test_incomplete_order_save_cleans_existing_duplicate_phone_rows(): void
+    {
+        $product = $this->createProduct();
+
+        Order::query()->create($this->incompleteOrderPayload([
+            'order_number' => 'SBA-1001',
+            'cart_session_id' => 'first-cart-session',
+            'last_activity_at' => now()->subMinutes(2),
+        ]));
+
+        $latestDuplicate = Order::query()->create($this->incompleteOrderPayload([
+            'order_number' => 'SBA-1002',
+            'cart_session_id' => 'second-cart-session',
+            'last_activity_at' => now()->subMinute(),
+        ]));
+
+        $this->postJson('/api/orders/incomplete', $this->orderPayload(
+            $product,
+            quantity: 2,
+            address: 'Road 3, Dhaka',
+            cartSessionId: 'third-cart-session',
+        ))->assertOk();
+
+        $this->assertDatabaseCount('orders', 1);
+        $order = Order::query()->with('items')->firstOrFail();
+
+        $this->assertSame($latestDuplicate->id, $order->id);
+        $this->assertSame('third-cart-session', $order->cart_session_id);
+        $this->assertSame('Road 3, Dhaka', $order->shipping_address['address']);
+        $this->assertSame(2, $order->items->first()->quantity);
+    }
+
     public function test_final_order_converts_matching_incomplete_order_to_processing(): void
     {
         $product = $this->createProduct();
@@ -52,6 +111,33 @@ class IncompleteOrderTest extends TestCase
         $this->assertNotNull($order->placed_at);
         $this->assertNotNull($order->completed_at);
         $this->assertSame(9, $product->fresh()->inventory);
+    }
+
+    public function test_final_order_converts_matching_incomplete_order_by_phone_when_session_changes(): void
+    {
+        $product = $this->createProduct();
+
+        $this->postJson('/api/orders/incomplete', $this->orderPayload(
+            $product,
+            cartSessionId: 'first-cart-session',
+        ))->assertOk();
+        $incompleteOrderId = Order::query()->value('id');
+
+        $this->postJson('/api/orders', $this->orderPayload(
+            $product,
+            quantity: 2,
+            cartSessionId: 'second-cart-session',
+        ))
+            ->assertCreated()
+            ->assertJsonPath('data.status', 'processing');
+
+        $this->assertDatabaseCount('orders', 1);
+
+        $order = Order::query()->with('items')->firstOrFail();
+        $this->assertSame($incompleteOrderId, $order->id);
+        $this->assertSame('processing', $order->status);
+        $this->assertSame('second-cart-session', $order->cart_session_id);
+        $this->assertSame(2, $order->items->first()->quantity);
     }
 
     public function test_final_order_rejects_inactive_product(): void
@@ -253,5 +339,31 @@ class IncompleteOrderTest extends TestCase
                 ],
             ],
         ];
+    }
+
+    private function incompleteOrderPayload(array $overrides = []): array
+    {
+        return array_merge([
+            'order_number' => 'SBA-1000',
+            'customer_name' => 'Test Customer',
+            'email' => '01919012186-guest@guest.checkout',
+            'phone' => '01919012186',
+            'normalized_phone' => '01919012186',
+            'status' => 'incomplete',
+            'payment_method' => 'cod',
+            'payment_status' => 'pending',
+            'subtotal' => 100,
+            'discount_total' => 0,
+            'shipping_total' => 80,
+            'grand_total' => 180,
+            'shipping_address' => [
+                'address' => 'Road 1, Dhaka',
+                'city' => 'Dhaka',
+                'country' => 'Bangladesh',
+            ],
+            'cart_hash' => hash('sha256', 'test-cart'),
+            'normalized_address_hash' => hash('sha256', 'test-address'),
+            'last_activity_at' => now(),
+        ], $overrides);
     }
 }
