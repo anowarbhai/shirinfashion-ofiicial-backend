@@ -683,6 +683,26 @@ class OrderController extends Controller
         return $digits;
     }
 
+    /**
+     * @return array<int, string>
+     */
+    protected function phoneVariantsForMatch(string $phone): array
+    {
+        $normalized = $this->normalizePhoneForMatch($phone);
+        $variants = [trim($phone), $normalized];
+
+        if (str_starts_with($normalized, '0') && strlen($normalized) === 11) {
+            $international = '880'.substr($normalized, 1);
+            $variants[] = $international;
+            $variants[] = '+'.$international;
+        }
+
+        return array_values(array_unique(array_filter(
+            $variants,
+            fn (string $value): bool => trim($value) !== '',
+        )));
+    }
+
     protected function hashAddressForMatch(array $shippingAddress): string
     {
         $normalized = collect([
@@ -880,6 +900,7 @@ class OrderController extends Controller
         if ((($settings['block_by_phone'] ?? true) || $forceCustomerSignals) && trim($phone) !== '') {
             $matches['phone'] = trim($phone);
             $matches['normalized_phone'] = $this->normalizePhoneForMatch($phone);
+            $matches['phone_variants'] = $this->phoneVariantsForMatch($phone);
         }
 
         if ((($settings['block_by_ip'] ?? true) || $forceCustomerSignals) && $normalizedClientIp) {
@@ -902,8 +923,8 @@ class OrderController extends Controller
             ->where(DB::raw('COALESCE(placed_at, completed_at, created_at)'), '>=', $cutoff)
             ->whereNotIn('status', ['cancelled', 'refunded', 'incomplete'])
             ->where(function ($query) use ($matches): void {
-                if (isset($matches['phone'])) {
-                    $query->orWhere('phone', $matches['phone']);
+                if (! empty($matches['phone_variants'])) {
+                    $query->orWhereIn('phone', $matches['phone_variants']);
                 }
 
                 if (isset($matches['normalized_phone'])) {
@@ -943,7 +964,7 @@ class OrderController extends Controller
         $matchedBy = [];
 
         if (
-            ($matches['phone'] ?? null) === $recentOrder->phone ||
+            in_array($recentOrder->phone, $matches['phone_variants'] ?? [], true) ||
             (($matches['normalized_phone'] ?? null) && ($matches['normalized_phone'] ?? null) === $recentOrder->normalized_phone)
         ) {
             $matchedBy[] = 'phone';
@@ -977,7 +998,7 @@ class OrderController extends Controller
     ): ?array {
         $settings = $this->settings->getGroup('checkout_guard');
 
-        if (! ($settings['enabled'] ?? false) || ! ($settings['protect_incomplete_orders'] ?? true)) {
+        if (! ($settings['enabled'] ?? false)) {
             return null;
         }
 
