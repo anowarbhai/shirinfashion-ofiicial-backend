@@ -28,6 +28,7 @@ class DashboardController extends Controller
 
         [$previousStartDate, $previousEndDate] = $this->previousRange($rangeKey, $startDate, $endDate);
 
+        $user = $request->user();
         $ordersQuery = Order::query();
         $previousOrdersQuery = Order::query();
         $customersQuery = User::query()->where('role', 'customer');
@@ -37,6 +38,8 @@ class DashboardController extends Controller
 
         $this->excludeIncompleteOrders($ordersQuery);
         $this->excludeIncompleteOrders($previousOrdersQuery);
+        $this->applyOrderVisibility($ordersQuery, $user);
+        $this->applyOrderVisibility($previousOrdersQuery, $user);
         $this->applyOrderDateRange($ordersQuery, $startDate, $endDate);
         $this->applyOrderDateRange($previousOrdersQuery, $previousStartDate, $previousEndDate);
         $this->applyRange($customersQuery, 'created_at', $startDate, $endDate);
@@ -83,7 +86,7 @@ class DashboardController extends Controller
                         'delta' => $this->formatDelta($productsCount, $previousProductsCount),
                     ],
                 ],
-                'today_summary' => $this->buildTodaySummary(),
+                'today_summary' => $this->buildTodaySummary($user),
                 'recent_orders' => (clone $ordersQuery)
                     ->latest('placed_at')
                     ->take(5)
@@ -118,9 +121,10 @@ class DashboardController extends Controller
                         $previousEndDate,
                         $revenue,
                         $previousRevenue,
+                        $user,
                     ),
                     'activity' => $this->buildActivityChart($startDate, $endDate, $request->user()?->id),
-                    'order_sources' => $this->buildOrderSources($startDate, $endDate),
+                    'order_sources' => $this->buildOrderSources($startDate, $endDate, $user),
                 ],
                 'quick_actions' => [
                     'Review pending orders',
@@ -238,6 +242,42 @@ class DashboardController extends Controller
         $query->where('status', '!=', 'incomplete');
     }
 
+    private function applyOrderVisibility(Builder $query, ?User $user): void
+    {
+        if (! $user || $user->hasAdminPermission('system.everything')) {
+            return;
+        }
+
+        $moderator = $user->moderatorProfile()->first();
+
+        if ($moderator) {
+            $query->where(function (Builder $orderQuery) use ($user, $moderator): void {
+                $orderQuery
+                    ->where('assigned_moderator_id', $user->id)
+                    ->orWhereHas('assignments', fn (Builder $assignmentQuery) => $assignmentQuery
+                        ->whereNull('order_item_id')
+                        ->where('moderator_id', $moderator->id));
+            });
+
+            return;
+        }
+
+        if ($user->hasAdminPermission('moderator.view_all_moderator_orders') || $user->hasAdminPermission('orders.view')) {
+            return;
+        }
+
+        if ($user->hasAdminPermission('moderator.manage_moderators')) {
+            $managedIds = $user->managedModerators()->pluck('id');
+
+            if ($managedIds->isNotEmpty()) {
+                $query->whereHas('assignments', fn (Builder $assignmentQuery) => $assignmentQuery->whereIn('moderator_id', $managedIds));
+                return;
+            }
+        }
+
+        $query->whereRaw('1 = 0');
+    }
+
     /**
      * @return array{current:array<int,array{label:string,value:float}>,previous:array<int,array{label:string,value:float}>}
      */
@@ -248,43 +288,48 @@ class DashboardController extends Controller
         ?Carbon $previousEndDate,
         float $rangeRevenue,
         float $previousRangeRevenue,
+        ?User $user,
     ): array
     {
         $chartEnd = ($endDate ?? now($this->dashboardTimezone()))->copy()->endOfDay();
-        $oldestOrderDate = ! $startDate
-            ? Order::query()
-                ->where('status', '!=', 'incomplete')
+        $oldestOrderDate = null;
+
+        if (! $startDate) {
+            $oldestOrderQuery = Order::query();
+            $this->excludeIncompleteOrders($oldestOrderQuery);
+            $this->applyOrderVisibility($oldestOrderQuery, $user);
+            $oldestOrderDate = $oldestOrderQuery
                 ->selectRaw('MIN(COALESCE(placed_at, created_at)) as oldest_order_date')
-                ->value('oldest_order_date')
-            : null;
+                ->value('oldest_order_date');
+        }
         $chartStart = ($startDate
             ?? ($oldestOrderDate ? Carbon::parse($oldestOrderDate, $this->databaseTimezone())->timezone($this->dashboardTimezone()) : $chartEnd->copy()->subDays(29)))
             ->copy()
             ->startOfDay();
 
         if ($chartStart->diffInDays($chartEnd) > 370) {
-            $current = $this->aggregateRevenueByMonth($chartStart, $chartEnd);
+            $current = $this->aggregateRevenueByMonth($chartStart, $chartEnd, $user);
             $previous = $previousStartDate && $previousEndDate
-                ? $this->aggregateRevenueByMonth($previousStartDate, $previousEndDate)
+                ? $this->aggregateRevenueByMonth($previousStartDate, $previousEndDate, $user)
                 : [];
 
             return [
-                'current' => $this->ensureRevenuePoints($current, $chartStart, $chartEnd, $rangeRevenue),
+                'current' => $this->ensureRevenuePoints($current, $chartStart, $chartEnd, $rangeRevenue, $user),
                 'previous' => $previousStartDate && $previousEndDate
-                    ? $this->ensureRevenuePoints($previous, $previousStartDate, $previousEndDate, $previousRangeRevenue)
+                    ? $this->ensureRevenuePoints($previous, $previousStartDate, $previousEndDate, $previousRangeRevenue, $user)
                     : [],
             ];
         }
 
-        $current = $this->aggregateRevenueByDay($chartStart, $chartEnd);
+        $current = $this->aggregateRevenueByDay($chartStart, $chartEnd, $user);
         $previous = $previousStartDate && $previousEndDate
-            ? $this->aggregateRevenueByDay($previousStartDate, $previousEndDate)
+            ? $this->aggregateRevenueByDay($previousStartDate, $previousEndDate, $user)
             : [];
 
         return [
-            'current' => $this->ensureRevenuePoints($current, $chartStart, $chartEnd, $rangeRevenue),
+            'current' => $this->ensureRevenuePoints($current, $chartStart, $chartEnd, $rangeRevenue, $user),
             'previous' => $previousStartDate && $previousEndDate
-                ? $this->ensureRevenuePoints($previous, $previousStartDate, $previousEndDate, $previousRangeRevenue)
+                ? $this->ensureRevenuePoints($previous, $previousStartDate, $previousEndDate, $previousRangeRevenue, $user)
                 : [],
         ];
     }
@@ -292,13 +337,16 @@ class DashboardController extends Controller
     /**
      * @return array<int,array{label:string,value:float}>
      */
-    private function aggregateRevenueByDay(Carbon $startDate, Carbon $endDate): array
+    private function aggregateRevenueByDay(Carbon $startDate, Carbon $endDate, ?User $user): array
     {
         $bucketExpression = $this->localDateExpression();
 
-        $rows = Order::query()
-            ->selectRaw("{$bucketExpression} as bucket, SUM(grand_total) as total")
-            ->where('status', '!=', 'incomplete')
+        $query = Order::query()
+            ->selectRaw("{$bucketExpression} as bucket, SUM(grand_total) as total");
+        $this->excludeIncompleteOrders($query);
+        $this->applyOrderVisibility($query, $user);
+
+        $rows = $query
             ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [
                 $this->toDatabaseTimezone($startDate),
                 $this->toDatabaseTimezone($endDate),
@@ -322,13 +370,16 @@ class DashboardController extends Controller
     /**
      * @return array<int,array{label:string,value:float}>
      */
-    private function aggregateRevenueByMonth(Carbon $startDate, Carbon $endDate): array
+    private function aggregateRevenueByMonth(Carbon $startDate, Carbon $endDate, ?User $user): array
     {
-        $dateTimeExpression = $this->localDateTimeExpression();
+        $monthExpression = $this->localMonthExpression();
 
-        $rows = Order::query()
-            ->selectRaw("DATE_FORMAT({$dateTimeExpression}, '%Y-%m') as bucket, SUM(grand_total) as total")
-            ->where('status', '!=', 'incomplete')
+        $query = Order::query()
+            ->selectRaw("{$monthExpression} as bucket, SUM(grand_total) as total");
+        $this->excludeIncompleteOrders($query);
+        $this->applyOrderVisibility($query, $user);
+
+        $rows = $query
             ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [
                 $this->toDatabaseTimezone($startDate),
                 $this->toDatabaseTimezone($endDate),
@@ -355,11 +406,12 @@ class DashboardController extends Controller
     /**
      * @return array{sales:string,orders:string}
      */
-    private function buildTodaySummary(): array
+    private function buildTodaySummary(?User $user): array
     {
         $today = now($this->dashboardTimezone())->startOfDay();
         $query = Order::query();
         $this->excludeIncompleteOrders($query);
+        $this->applyOrderVisibility($query, $user);
         $this->applyOrderDateRange($query, $today->copy(), $today->copy()->endOfDay());
 
         return [
@@ -421,9 +473,9 @@ class DashboardController extends Controller
      */
     private function aggregateAdminActivityByMonth(Carbon $startDate, Carbon $endDate, int $actorId): array
     {
-        $dateTimeExpression = $this->localDateTimeExpression('created_at');
+        $monthExpression = $this->localMonthExpression('created_at');
         $rows = AdminAuditLog::query()
-            ->selectRaw("DATE_FORMAT({$dateTimeExpression}, '%Y-%m') as bucket, COUNT(*) as total")
+            ->selectRaw("{$monthExpression} as bucket, COUNT(*) as total")
             ->where('actor_id', $actorId)
             ->whereBetween('created_at', [
                 $this->toDatabaseTimezone($startDate),
@@ -468,10 +520,11 @@ class DashboardController extends Controller
     /**
      * @return array<int,array{label:string,value:int,percentage:float,color:string}>
      */
-    private function buildOrderSources(?Carbon $startDate, ?Carbon $endDate): array
+    private function buildOrderSources(?Carbon $startDate, ?Carbon $endDate, ?User $user): array
     {
         $query = Order::query();
         $this->excludeIncompleteOrders($query);
+        $this->applyOrderVisibility($query, $user);
         $this->applyOrderDateRange($query, $startDate, $endDate);
 
         $total = (clone $query)->count();
@@ -509,7 +562,7 @@ class DashboardController extends Controller
      * @param array<int,array{label:string,value:float}> $points
      * @return array<int,array{label:string,value:float}>
      */
-    private function ensureRevenuePoints(array $points, Carbon $startDate, Carbon $endDate, float $fallbackRevenue): array
+    private function ensureRevenuePoints(array $points, Carbon $startDate, Carbon $endDate, float $fallbackRevenue, ?User $user): array
     {
         $hasRevenue = collect($points)->contains(fn (array $point): bool => (float) $point['value'] > 0);
 
@@ -517,8 +570,11 @@ class DashboardController extends Controller
             return $points;
         }
 
-        $total = (float) Order::query()
-            ->where('status', '!=', 'incomplete')
+        $query = Order::query();
+        $this->excludeIncompleteOrders($query);
+        $this->applyOrderVisibility($query, $user);
+
+        $total = (float) $query
             ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [
                 $this->toDatabaseTimezone($startDate),
                 $this->toDatabaseTimezone($endDate),
@@ -581,8 +637,23 @@ class DashboardController extends Controller
         return 'DATE('.$this->localDateTimeExpression($column).')';
     }
 
+    private function localMonthExpression(string $column = 'COALESCE(placed_at, created_at)'): string
+    {
+        $dateTimeExpression = $this->localDateTimeExpression($column);
+
+        if (DB::connection()->getDriverName() === 'sqlite') {
+            return "strftime('%Y-%m', {$dateTimeExpression})";
+        }
+
+        return "DATE_FORMAT({$dateTimeExpression}, '%Y-%m')";
+    }
+
     private function localDateTimeExpression(string $column = 'COALESCE(placed_at, created_at)'): string
     {
+        if (DB::connection()->getDriverName() === 'sqlite') {
+            return $column;
+        }
+
         return sprintf(
             "CONVERT_TZ({$column}, '%s', '%s')",
             now($this->databaseTimezone())->format('P'),
