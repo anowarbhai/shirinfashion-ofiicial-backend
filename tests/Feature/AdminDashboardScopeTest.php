@@ -76,6 +76,30 @@ class AdminDashboardScopeTest extends TestCase
             ->assertJsonPath('data.today_summary.orders', '2');
     }
 
+    public function test_dashboard_defaults_to_today_and_summary_follows_selected_range(): void
+    {
+        $admin = $this->createAdminUser(['dashboard.view', 'orders.view']);
+        $todayOrder = $this->createOrder(180, 'Facebook', now());
+        $this->createOrder(320, 'Google', now()->subDay());
+
+        $this->getDashboard($admin, null)
+            ->assertOk()
+            ->assertJsonPath('data.filter.key', 'today')
+            ->assertJsonPath('data.kpis.0.value', 'BDT 180.00')
+            ->assertJsonPath('data.kpis.1.value', '1')
+            ->assertJsonPath('data.today_summary.sales', 'BDT 180.00')
+            ->assertJsonPath('data.today_summary.orders', '1')
+            ->assertJsonPath('data.recent_orders.0.id', $todayOrder->order_number);
+
+        $this->getDashboard($admin, 'all_time')
+            ->assertOk()
+            ->assertJsonPath('data.filter.key', 'all_time')
+            ->assertJsonPath('data.kpis.0.value', 'BDT 500.00')
+            ->assertJsonPath('data.kpis.1.value', '2')
+            ->assertJsonPath('data.today_summary.sales', 'BDT 500.00')
+            ->assertJsonPath('data.today_summary.orders', '2');
+    }
+
     /**
      * @return array<int, Moderator>
      */
@@ -112,7 +136,7 @@ class AdminDashboardScopeTest extends TestCase
         ]);
     }
 
-    private function createOrder(float $grandTotal, string $source): Order
+    private function createOrder(float $grandTotal, string $source, mixed $placedAt = null): Order
     {
         return Order::query()->create([
             'order_number' => 'SBA-'.random_int(100000, 999999),
@@ -128,7 +152,7 @@ class AdminDashboardScopeTest extends TestCase
             'shipping_total' => 80,
             'grand_total' => $grandTotal,
             'shipping_address' => ['address' => 'Dhaka', 'city' => 'Dhaka', 'country' => 'Bangladesh'],
-            'placed_at' => now(),
+            'placed_at' => $placedAt ?? now(),
         ]);
     }
 
@@ -173,11 +197,16 @@ class AdminDashboardScopeTest extends TestCase
         return $role;
     }
 
-    private function getDashboard(User $user)
+    private function getDashboard(User $user, ?string $range = 'all_time')
     {
         $token = app(JwtService::class)->issueToken($user);
+        $url = '/api/admin/dashboard';
+
+        if ($range !== null) {
+            $url .= '?range='.$range;
+        }
 
         return $this->withHeader('Authorization', "Bearer {$token}")
-            ->getJson('/api/admin/dashboard?range=all_time');
+            ->getJson($url);
     }
 }

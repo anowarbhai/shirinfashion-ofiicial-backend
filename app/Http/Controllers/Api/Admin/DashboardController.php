@@ -21,7 +21,7 @@ class DashboardController extends Controller
     public function __invoke(Request $request): JsonResponse
     {
         [$rangeKey, $label, $startDate, $endDate] = $this->resolveRange(
-            (string) $request->query('range', 'all_time'),
+            (string) $request->query('range', 'today'),
             $request->query('start_date'),
             $request->query('end_date'),
         );
@@ -86,7 +86,7 @@ class DashboardController extends Controller
                         'delta' => $this->formatDelta($productsCount, $previousProductsCount),
                     ],
                 ],
-                'today_summary' => $this->buildTodaySummary($user),
+                'today_summary' => $this->buildRangeSummary($user, $startDate, $endDate),
                 'recent_orders' => (clone $ordersQuery)
                     ->latest('placed_at')
                     ->take(5)
@@ -406,13 +406,12 @@ class DashboardController extends Controller
     /**
      * @return array{sales:string,orders:string}
      */
-    private function buildTodaySummary(?User $user): array
+    private function buildRangeSummary(?User $user, ?Carbon $startDate, ?Carbon $endDate): array
     {
-        $today = now($this->dashboardTimezone())->startOfDay();
         $query = Order::query();
         $this->excludeIncompleteOrders($query);
         $this->applyOrderVisibility($query, $user);
-        $this->applyOrderDateRange($query, $today->copy(), $today->copy()->endOfDay());
+        $this->applyOrderDateRange($query, $startDate, $endDate);
 
         return [
             'sales' => $this->formatCurrency((float) (clone $query)->sum('grand_total')),
