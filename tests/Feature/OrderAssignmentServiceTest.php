@@ -88,6 +88,24 @@ class OrderAssignmentServiceTest extends TestCase
         $this->assertSame('pending_manual_review', $order->fresh()->assignment_status);
     }
 
+    public function test_inactive_product_specific_moderator_falls_back_to_active_round_robin(): void
+    {
+        [$inactive, $active] = $this->createModerators(2);
+        $inactive->update(['status' => 'inactive']);
+        $product = $this->createProduct('inactive-specific-product-with-fallback');
+        ProductModeratorAssignment::query()->create([
+            'product_id' => $product->id,
+            'moderator_id' => $inactive->id,
+        ]);
+
+        $order = $this->createOrder('processing', $product);
+        app(OrderAssignmentService::class)->assignProcessingOrder($order);
+
+        $this->assertSame($active->user_id, $order->fresh()->assigned_moderator_id);
+        $this->assertSame('assigned', $order->fresh()->assignment_status);
+        $this->assertSame('auto_round_robin', $order->fresh()->assignment_type);
+    }
+
     public function test_admin_can_reassign_order(): void
     {
         [$first, $second] = $this->createModerators(2);

@@ -135,11 +135,10 @@ class OrderAssignmentService
             });
 
         if ($moderatorSetsByProduct->contains(fn ($moderators): bool => $moderators->isEmpty())) {
-            return $this->markPendingManualReview(
+            return $this->assignByRoundRobin(
                 $order,
-                'Product-specific moderator is inactive or unavailable.',
                 $statusType,
-                'moderator_inactive',
+                'Product-specific moderator is inactive or unavailable; assigned by fallback round-robin.',
             );
         }
 
@@ -151,10 +150,10 @@ class OrderAssignmentService
         }
 
         if (empty($candidateIds)) {
-            return $this->markPendingManualReview(
+            return $this->assignByRoundRobin(
                 $order,
-                'Order contains products assigned to different moderators.',
                 $statusType,
+                'Products are assigned to different moderators; assigned by fallback round-robin.',
             );
         }
 
@@ -199,11 +198,10 @@ class OrderAssignmentService
             );
         }
 
-        return $this->markPendingManualReview(
+        return $this->assignByRoundRobin(
             $order,
-            'Product-specific moderator is inactive or unavailable.',
             $statusType,
-            'moderator_inactive',
+            'Product-specific moderator is inactive or unavailable; assigned by fallback round-robin.',
         );
     }
 
@@ -238,7 +236,11 @@ class OrderAssignmentService
         return $nextModerator;
     }
 
-    public function assignByRoundRobin(Order $order, string $statusType): OrderAssignment
+    public function assignByRoundRobin(
+        Order $order,
+        string $statusType,
+        string $note = '',
+    ): OrderAssignment
     {
         $moderators = Moderator::query()
             ->active()
@@ -277,7 +279,7 @@ class OrderAssignmentService
             'auto_round_robin',
             'assigned',
             null,
-            "Auto assigned by {$statusType} round-robin queue.",
+            $note ?: "Auto assigned by {$statusType} round-robin queue.",
         );
     }
 

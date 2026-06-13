@@ -45,8 +45,10 @@ class OrderAssignmentController extends Controller
                 ->where('digital_marketer_id', (int) $request->query('manager_id')));
         }
 
+        $showingUnassigned = $request->query('moderator_id') === 'unassigned';
+
         if ($request->filled('moderator_id')) {
-            if ($request->query('moderator_id') === 'unassigned') {
+            if ($showingUnassigned) {
                 $query->whereNull('moderator_id');
             } else {
                 $query->where('moderator_id', (int) $request->query('moderator_id'));
@@ -63,6 +65,8 @@ class OrderAssignmentController extends Controller
 
         if ($request->filled('status')) {
             $query->where('status', $request->query('status'));
+        } elseif ($showingUnassigned) {
+            $query->whereIn('status', ['assigned', 'pending_manual_review', 'unassigned']);
         } else {
             $query->where('status', 'assigned');
         }
