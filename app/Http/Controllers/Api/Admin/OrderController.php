@@ -59,6 +59,21 @@ class OrderController extends Controller
             $this->applyCampaignTrackingFilter($query, (string) $request->query('campaign_tracking'));
         }
 
+        if ($request->filled('order_source') && $request->query('order_source') !== 'all') {
+            $source = trim((string) $request->query('order_source'));
+
+            if ($source === 'Direct') {
+                $query->where(function ($sourceQuery): void {
+                    $sourceQuery
+                        ->whereNull('order_source')
+                        ->orWhere('order_source', '')
+                        ->orWhere('order_source', 'Direct');
+                });
+            } elseif ($source !== '') {
+                $query->where('order_source', $source);
+            }
+        }
+
         if ($request->filled('status') && $request->query('status') !== 'all') {
             $query->where('status', $request->query('status'));
         }
