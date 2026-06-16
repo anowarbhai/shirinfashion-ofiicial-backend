@@ -46,6 +46,7 @@ class TeamMemberController extends Controller
             'email' => $validated['email'] ?? null,
             'phone' => $validated['phone'],
             'password' => Hash::make($validated['password']),
+            'password_set_at' => now(),
             'role' => 'admin',
             'admin_role_id' => $adminRole->id,
             'status' => $validated['status'],
@@ -94,6 +95,7 @@ class TeamMemberController extends Controller
 
         if (! empty($validated['password'])) {
             $validated['password'] = Hash::make($validated['password']);
+            $validated['password_set_at'] = now();
         } else {
             unset($validated['password']);
         }

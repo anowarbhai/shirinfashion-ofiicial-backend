@@ -80,6 +80,7 @@ class AuthController extends Controller
             'phone' => $payload['phone'],
             'email' => $payload['email'] ?? null,
             'password' => $payload['password'],
+            'password_set_at' => now(),
             'role' => 'customer',
         ]);
 
@@ -549,15 +550,16 @@ class AuthController extends Controller
 
     public function updatePassword(Request $request): JsonResponse
     {
+        /** @var User $user */
+        $user = $request->user();
+        $hasPassword = (bool) $user->has_password;
+
         $payload = $request->validate([
-            'current_password' => ['required', 'string'],
+            'current_password' => [$hasPassword ? 'required' : 'nullable', 'string'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
-        /** @var User $user */
-        $user = $request->user();
-
-        if (! Hash::check($payload['current_password'], $user->password)) {
+        if ($hasPassword && ! Hash::check($payload['current_password'], $user->password)) {
             throw ValidationException::withMessages([
                 'current_password' => ['Your current password is incorrect.'],
             ]);
@@ -565,10 +567,12 @@ class AuthController extends Controller
 
         $user->update([
             'password' => $payload['password'],
+            'password_set_at' => now(),
         ]);
 
         return response()->json([
-            'message' => 'Password updated successfully.',
+            'message' => $hasPassword ? 'Password updated successfully.' : 'Password set successfully.',
+            'data' => $user->fresh(),
         ]);
     }
 

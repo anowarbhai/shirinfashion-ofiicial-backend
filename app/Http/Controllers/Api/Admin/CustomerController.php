@@ -47,6 +47,8 @@ class CustomerController extends Controller
 
         $this->ensureUniqueCustomerPhone($validated['phone']);
 
+        $hasPassword = ! empty($validated['password']);
+
         $customer = User::query()->create([
             'name' => $validated['name'],
             'phone' => $validated['phone'],
@@ -54,6 +56,7 @@ class CustomerController extends Controller
             'address' => $validated['address'] ?? null,
             'marketing_opt_in' => $validated['marketing_opt_in'] ?? false,
             'password' => $validated['password'] ?? Str::random(16),
+            'password_set_at' => $hasPassword ? now() : null,
             'role' => 'customer',
             'status' => 'active',
         ]);

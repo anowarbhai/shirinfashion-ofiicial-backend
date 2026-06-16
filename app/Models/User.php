@@ -35,6 +35,7 @@ class User extends Authenticatable
         'avatar_url',
         'marketing_opt_in',
         'password',
+        'password_set_at',
     ];
 
     /**
@@ -45,6 +46,10 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+    ];
+
+    protected $appends = [
+        'has_password',
     ];
 
     /**
@@ -58,6 +63,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'marketing_opt_in' => 'boolean',
             'password' => 'hashed',
+            'password_set_at' => 'datetime',
         ];
     }
 
@@ -144,6 +150,13 @@ class User extends Authenticatable
         return Attribute::make(
             get: fn (?string $value) => MediaUrl::toPublic($value),
             set: fn (?string $value) => MediaUrl::normalizeStored($value),
+        );
+    }
+
+    protected function hasPassword(): Attribute
+    {
+        return Attribute::make(
+            get: fn (): bool => $this->password_set_at !== null,
         );
     }
 }
