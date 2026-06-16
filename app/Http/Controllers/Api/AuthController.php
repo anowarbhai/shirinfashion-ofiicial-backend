@@ -728,7 +728,7 @@ class AuthController extends Controller
 
         $data = $response->json();
 
-        if (($data['aud'] ?? null) !== $clientId || empty($data['sub']) || empty($data['email'])) {
+        if (! in_array(($data['aud'] ?? null), $this->googleAllowedClientIds(), true) || empty($data['sub']) || empty($data['email'])) {
             throw ValidationException::withMessages([
                 'id_token' => ['Google sign in token is not valid for this website.'],
             ]);
@@ -764,6 +764,19 @@ class AuthController extends Controller
         $settings = $this->settings->getGroup('customer_auth');
 
         return trim((string) ($settings['google_client_id'] ?? ''));
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    protected function googleAllowedClientIds(): array
+    {
+        $settings = $this->settings->getGroup('customer_auth');
+
+        return array_values(array_unique(array_filter([
+            trim((string) ($settings['google_client_id'] ?? '')),
+            trim((string) ($settings['google_android_client_id'] ?? '')),
+        ])));
     }
 
     /**
