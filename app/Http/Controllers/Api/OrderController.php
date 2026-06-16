@@ -1154,6 +1154,7 @@ class OrderController extends Controller
                     [
                         'order_id' => $order->id,
                         'order_number' => $order->order_number,
+                        'grand_total' => (string) $order->grand_total,
                         'new_status' => $order->status,
                     ],
                 );
