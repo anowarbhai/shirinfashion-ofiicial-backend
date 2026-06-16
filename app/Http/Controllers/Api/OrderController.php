@@ -124,20 +124,7 @@ class OrderController extends Controller
             return $order->load('items');
         });
 
-        $this->sendOrderNotification($order);
-        if ($order->user_id) {
-            $this->customerNotificationService->sendToUser(
-                (int) $order->user_id,
-                'Order placed successfully',
-                'Your order '.($order->order_number ?: '#'.$order->id).' has been placed.',
-                'order_status',
-                [
-                    'order_id' => $order->id,
-                    'order_number' => $order->order_number,
-                    'new_status' => $order->status,
-                ],
-            );
-        }
+        $this->dispatchPostResponseOrderNotifications($order);
 
         return response()->json([
             'message' => 'Order created successfully.',
@@ -1144,5 +1131,33 @@ class OrderController extends Controller
         } catch (Throwable) {
             // Do not block successful order placement if SMS provider is unavailable.
         }
+    }
+
+    protected function dispatchPostResponseOrderNotifications(Order $order): void
+    {
+        $orderId = (int) $order->id;
+
+        app()->terminating(function () use ($orderId): void {
+            $order = Order::query()->find($orderId);
+
+            if (! $order) {
+                return;
+            }
+
+            $this->sendOrderNotification($order);
+            if ($order->user_id) {
+                $this->customerNotificationService->sendToUser(
+                    (int) $order->user_id,
+                    'Order placed successfully',
+                    'Your order '.($order->order_number ?: '#'.$order->id).' has been placed.',
+                    'order_status',
+                    [
+                        'order_id' => $order->id,
+                        'order_number' => $order->order_number,
+                        'new_status' => $order->status,
+                    ],
+                );
+            }
+        });
     }
 }
