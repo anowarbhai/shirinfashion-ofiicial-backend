@@ -89,7 +89,7 @@ class OrderController extends Controller
         }
 
         $order = DB::transaction(function () use ($customer, $payload, $clientIp) {
-            $prepared = $this->prepareOrderPayload($payload, true, true, $customer);
+            $prepared = $this->prepareOrderPayload($payload, true, false, $customer);
             $order = $this->findMatchingIncompleteOrder($customer, $prepared)
                 ?? new Order(['order_number' => $this->generateOrderNumber()]);
             $hadIncompleteAssignment = $order->exists && $order->status === 'incomplete';
@@ -124,7 +124,7 @@ class OrderController extends Controller
             return $order->load('items');
         });
 
-        $this->dispatchPostResponseOrderNotifications($order);
+        $this->dispatchPostResponseOrderWork($order);
 
         return response()->json([
             'message' => 'Order created successfully.',
@@ -1133,7 +1133,7 @@ class OrderController extends Controller
         }
     }
 
-    protected function dispatchPostResponseOrderNotifications(Order $order): void
+    protected function dispatchPostResponseOrderWork(Order $order): void
     {
         $orderId = (int) $order->id;
 
@@ -1159,6 +1159,19 @@ class OrderController extends Controller
                     ],
                 );
             }
+
+            $this->runPostResponseFraudCheck($order);
         });
+    }
+
+    protected function runPostResponseFraudCheck(Order $order): void
+    {
+        if (! $order->phone || $order->fraud_check !== null) {
+            return;
+        }
+
+        $order->forceFill([
+            'fraud_check' => $this->resolveFraudCheck($order->phone),
+        ])->save();
     }
 }
