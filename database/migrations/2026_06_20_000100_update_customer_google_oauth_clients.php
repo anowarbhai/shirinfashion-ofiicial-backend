@@ -8,7 +8,7 @@ return new class extends Migration
 {
     private const WEB_CLIENT_ID = '440007634672-8n25cgifqh7kg37ofk703chtpagihmhd.apps.googleusercontent.com';
 
-    private const ANDROID_CLIENT_ID = '440007634672-gotosqss78q65350fh11qtfk54hpkc1d.apps.googleusercontent.com';
+    private const ANDROID_CLIENT_ID = '440007634672-4p95ne8h3pao542sqnupn23cggbvl21f.apps.googleusercontent.com';
 
     private const OLD_WEB_CLIENT_ID = '1020869753319-p8nna5ou6o9dc7t27aivdb7ptl3ah97p.apps.googleusercontent.com';
 
