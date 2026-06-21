@@ -89,7 +89,8 @@ class AdminDashboardScopeTest extends TestCase
             ->assertJsonPath('data.kpis.1.value', '1')
             ->assertJsonPath('data.today_summary.sales', 'BDT 180.00')
             ->assertJsonPath('data.today_summary.orders', '1')
-            ->assertJsonPath('data.recent_orders.0.id', $todayOrder->order_number);
+            ->assertJsonPath('data.recent_orders.0.id', $todayOrder->order_number)
+            ->assertJsonPath('data.charts.orders.current.0.value', 1);
 
         $this->getDashboard($admin, 'all_time')
             ->assertOk()

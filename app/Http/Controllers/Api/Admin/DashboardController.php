@@ -123,6 +123,13 @@ class DashboardController extends Controller
                         $previousRevenue,
                         $user,
                     ),
+                    'orders' => $this->buildOrdersChart(
+                        $startDate,
+                        $endDate,
+                        $previousStartDate,
+                        $previousEndDate,
+                        $user,
+                    ),
                     'activity' => $this->buildActivityChart($startDate, $endDate, $request->user()?->id),
                     'order_sources' => $this->buildOrderSources($startDate, $endDate, $user),
                 ],
@@ -396,6 +403,106 @@ class DashboardController extends Controller
             $points[] = [
                 'label' => $cursor->format('M Y'),
                 'value' => round((float) ($rows[$key] ?? 0), 2),
+            ];
+            $cursor->addMonth();
+        }
+
+        return $points;
+    }
+
+    /**
+     * @return array{current:array<int,array{label:string,value:float}>,previous:array<int,array{label:string,value:float}>}
+     */
+    private function buildOrdersChart(
+        ?Carbon $startDate,
+        ?Carbon $endDate,
+        ?Carbon $previousStartDate,
+        ?Carbon $previousEndDate,
+        ?User $user,
+    ): array
+    {
+        $chartEnd = ($endDate ?? now($this->dashboardTimezone()))->copy()->endOfDay();
+        $oldestOrderDate = null;
+
+        if (! $startDate) {
+            $oldestOrderQuery = Order::query();
+            $this->excludeIncompleteOrders($oldestOrderQuery);
+            $this->applyOrderVisibility($oldestOrderQuery, $user);
+            $oldestOrderDate = $oldestOrderQuery
+                ->selectRaw('MIN(COALESCE(placed_at, created_at)) as oldest_order_date')
+                ->value('oldest_order_date');
+        }
+
+        $chartStart = ($startDate
+            ?? ($oldestOrderDate ? Carbon::parse($oldestOrderDate, $this->databaseTimezone())->timezone($this->dashboardTimezone()) : $chartEnd->copy()->subDays(29)))
+            ->copy()
+            ->startOfDay();
+        $aggregate = $chartStart->diffInDays($chartEnd) > 370
+            ? fn (Carbon $start, Carbon $end): array => $this->aggregateOrdersByMonth($start, $end, $user)
+            : fn (Carbon $start, Carbon $end): array => $this->aggregateOrdersByDay($start, $end, $user);
+
+        return [
+            'current' => $aggregate($chartStart, $chartEnd),
+            'previous' => $previousStartDate && $previousEndDate
+                ? $aggregate($previousStartDate, $previousEndDate)
+                : [],
+        ];
+    }
+
+    /**
+     * @return array<int,array{label:string,value:float}>
+     */
+    private function aggregateOrdersByDay(Carbon $startDate, Carbon $endDate, ?User $user): array
+    {
+        $bucketExpression = $this->localDateExpression();
+        $query = Order::query()->selectRaw("{$bucketExpression} as bucket, COUNT(*) as total");
+        $this->excludeIncompleteOrders($query);
+        $this->applyOrderVisibility($query, $user);
+
+        $rows = $query
+            ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [
+                $this->toDatabaseTimezone($startDate),
+                $this->toDatabaseTimezone($endDate),
+            ])
+            ->groupBy('bucket')
+            ->pluck('total', 'bucket');
+        $points = [];
+
+        foreach (CarbonPeriod::create($startDate->copy()->startOfDay(), '1 day', $endDate->copy()->startOfDay()) as $date) {
+            $points[] = [
+                'label' => $date->format('M j'),
+                'value' => (float) ($rows[$date->format('Y-m-d')] ?? 0),
+            ];
+        }
+
+        return $points;
+    }
+
+    /**
+     * @return array<int,array{label:string,value:float}>
+     */
+    private function aggregateOrdersByMonth(Carbon $startDate, Carbon $endDate, ?User $user): array
+    {
+        $monthExpression = $this->localMonthExpression();
+        $query = Order::query()->selectRaw("{$monthExpression} as bucket, COUNT(*) as total");
+        $this->excludeIncompleteOrders($query);
+        $this->applyOrderVisibility($query, $user);
+
+        $rows = $query
+            ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [
+                $this->toDatabaseTimezone($startDate),
+                $this->toDatabaseTimezone($endDate),
+            ])
+            ->groupBy('bucket')
+            ->pluck('total', 'bucket');
+        $points = [];
+        $cursor = $startDate->copy()->startOfMonth();
+        $last = $endDate->copy()->startOfMonth();
+
+        while ($cursor->lte($last)) {
+            $points[] = [
+                'label' => $cursor->format('M Y'),
+                'value' => (float) ($rows[$cursor->format('Y-m')] ?? 0),
             ];
             $cursor->addMonth();
         }
