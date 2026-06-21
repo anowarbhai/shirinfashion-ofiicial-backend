@@ -5,12 +5,17 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Moderator;
 use App\Models\User;
+use App\Services\AdminAuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class ModeratorController extends Controller
 {
+    public function __construct(protected AdminAuditLogger $auditLogger)
+    {
+    }
+
     public function index(Request $request): JsonResponse
     {
         $query = Moderator::query()
@@ -64,6 +69,20 @@ class ModeratorController extends Controller
         $this->authorizeManager($request, $payload['digital_marketer_id'] ?? null, 'moderator.add_moderator');
 
         $moderator = Moderator::query()->create($payload);
+        $moderator->load('user');
+
+        $this->auditLogger->log(
+            $request,
+            'moderator.created',
+            "Created moderator {$moderator->user?->name}.",
+            $moderator,
+            [
+                'user_id' => $moderator->user_id,
+                'status' => $moderator->status,
+                'digital_marketer_id' => $moderator->digital_marketer_id,
+                'assignment_order' => $moderator->assignment_order,
+            ],
+        );
 
         return response()->json([
             'message' => 'Moderator created successfully.',
@@ -88,7 +107,23 @@ class ModeratorController extends Controller
             abort(403, 'You do not have permission to activate or deactivate moderators.');
         }
 
+        $before = $moderator->only(['status', 'digital_marketer_id', 'assignment_order']);
         $moderator->update($payload);
+        $moderator->load('user');
+        $statusChanged = $before['status'] !== $moderator->status;
+
+        $this->auditLogger->log(
+            $request,
+            $statusChanged ? 'moderator.status_changed' : 'moderator.updated',
+            $statusChanged
+                ? "Changed moderator {$moderator->user?->name} from {$before['status']} to {$moderator->status}."
+                : "Updated moderator {$moderator->user?->name}.",
+            $moderator,
+            [
+                'before' => $before,
+                'after' => $moderator->only(['status', 'digital_marketer_id', 'assignment_order']),
+            ],
+        );
 
         return response()->json([
             'message' => 'Moderator updated successfully.',

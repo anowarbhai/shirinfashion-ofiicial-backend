@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\StorefrontSetting;
+use App\Support\SensitiveSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -46,7 +47,7 @@ class FacebookMarketingController extends Controller
 
         StorefrontSetting::query()->updateOrCreate(
             ['key' => 'facebook_marketing'],
-            ['value' => $settings],
+            ['value' => SensitiveSettings::protectFacebook($settings)],
         );
 
         return response()->json([
@@ -61,7 +62,10 @@ class FacebookMarketingController extends Controller
             ->where('key', 'facebook_marketing')
             ->value('value');
 
-        return array_merge($this->defaults(), is_array($stored) ? $stored : []);
+        return array_merge(
+            $this->defaults(),
+            SensitiveSettings::revealFacebook(is_array($stored) ? $stored : []),
+        );
     }
 
     private function defaults(): array

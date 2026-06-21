@@ -30,6 +30,15 @@ class AuthenticateWithJwt
         try {
             $payload = $this->jwtService->decode($token);
             $user = User::findOrFail($payload->sub);
+
+            if (($user->status ?? 'active') !== 'active') {
+                throw new \RuntimeException('User account is inactive.');
+            }
+
+            if ((int) ($payload->ver ?? 0) !== (int) ($user->auth_token_version ?? 0)) {
+                throw new \RuntimeException('Authentication token has been revoked.');
+            }
+
             Auth::setUser($user);
             $request->setUserResolver(fn () => $user);
             $request->attributes->set('auth_user', $user);

@@ -6,11 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Models\Moderator;
 use App\Models\Product;
 use App\Models\ProductModeratorAssignment;
+use App\Services\AdminAuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ProductModeratorAssignmentController extends Controller
 {
+    public function __construct(protected AdminAuditLogger $auditLogger)
+    {
+    }
+
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -50,6 +55,12 @@ class ProductModeratorAssignmentController extends Controller
     public function update(Request $request, Product $product): JsonResponse
     {
         $this->authorizeProductAccess($request, $product);
+        $previousModeratorIds = $product->moderatorAssignments()
+            ->pluck('moderator_id')
+            ->map(fn ($id): int => (int) $id)
+            ->sort()
+            ->values()
+            ->all();
 
         $payload = $request->validate([
             'moderator_id' => ['nullable', 'integer', 'exists:moderators,id'],
@@ -72,6 +83,14 @@ class ProductModeratorAssignmentController extends Controller
         if ($moderatorIds->isEmpty()) {
             ProductModeratorAssignment::query()->where('product_id', $product->id)->delete();
 
+            $this->auditLogger->log(
+                $request,
+                'product.moderator_assignments_changed',
+                "Removed all moderator assignments from {$product->name}.",
+                $product,
+                ['before_moderator_ids' => $previousModeratorIds, 'after_moderator_ids' => []],
+            );
+
             return response()->json([
                 'message' => 'Product moderator assignment removed successfully.',
             ]);
@@ -93,6 +112,18 @@ class ProductModeratorAssignmentController extends Controller
                 ],
             );
         }
+
+        $newModeratorIds = $moderatorIds->sort()->values()->all();
+        $this->auditLogger->log(
+            $request,
+            'product.moderator_assignments_changed',
+            "Updated moderator assignments for {$product->name}.",
+            $product,
+            [
+                'before_moderator_ids' => $previousModeratorIds,
+                'after_moderator_ids' => $newModeratorIds,
+            ],
+        );
 
         return response()->json([
             'message' => 'Product moderator assignments saved successfully.',

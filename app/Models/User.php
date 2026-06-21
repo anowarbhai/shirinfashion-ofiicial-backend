@@ -46,6 +46,7 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'auth_token_version',
     ];
 
     protected $appends = [
@@ -64,6 +65,7 @@ class User extends Authenticatable
             'marketing_opt_in' => 'boolean',
             'password' => 'hashed',
             'password_set_at' => 'datetime',
+            'auth_token_version' => 'integer',
         ];
     }
 

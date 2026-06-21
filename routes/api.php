@@ -66,14 +66,14 @@ Route::get('/health', fn () => response()->json([
 ]));
 
 Route::prefix('auth')->group(function (): void {
-    Route::post('/register', [AuthController::class, 'register']);
-    Route::post('/google', [AuthController::class, 'googleAuth']);
-    Route::post('/google/complete-phone', [AuthController::class, 'completeGooglePhone']);
-    Route::post('/login', [AuthController::class, 'login']);
-    Route::post('/login/verify-otp', [AuthController::class, 'verifyCustomerLoginOtp']);
-    Route::post('/admin/login', [AuthController::class, 'adminLogin']);
-    Route::post('/admin/google', [AuthController::class, 'adminGoogleAuth']);
-    Route::post('/admin/login/verify-otp', [AuthController::class, 'verifyAdminLoginOtp']);
+    Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:auth-login');
+    Route::post('/google', [AuthController::class, 'googleAuth'])->middleware('throttle:auth-login');
+    Route::post('/google/complete-phone', [AuthController::class, 'completeGooglePhone'])->middleware('throttle:auth-login');
+    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:auth-login');
+    Route::post('/login/verify-otp', [AuthController::class, 'verifyCustomerLoginOtp'])->middleware('throttle:otp-verify');
+    Route::post('/admin/login', [AuthController::class, 'adminLogin'])->middleware('throttle:auth-login');
+    Route::post('/admin/google', [AuthController::class, 'adminGoogleAuth'])->middleware('throttle:auth-login');
+    Route::post('/admin/login/verify-otp', [AuthController::class, 'verifyAdminLoginOtp'])->middleware('throttle:otp-verify');
 });
 
 Route::get('/home', [StorefrontController::class, 'index']);
@@ -86,7 +86,7 @@ Route::get('/settings/general', [GeneralSettingsController::class, 'show']);
 Route::get('/settings/customer-auth', [CustomerAuthSettingsController::class, 'show']);
 Route::get('/settings/sms-integration/public', [SmsIntegrationController::class, 'publicConfig']);
 Route::get('/theme', [ThemeController::class, 'show']);
-Route::post('/contact-messages', [ContactMessageController::class, 'store']);
+Route::post('/contact-messages', [ContactMessageController::class, 'store'])->middleware('throttle:public-write');
 Route::get('/pages/sitemap', [PageController::class, 'sitemap']);
 Route::get('/pages/{slug}', [PageController::class, 'show']);
 Route::get('/products', [ProductController::class, 'index']);
@@ -94,14 +94,14 @@ Route::get('/products/sitemap', [ProductController::class, 'sitemap']);
 Route::get('/products/{product}', [ProductController::class, 'show']);
 Route::get('/product-page-settings', [ProductPageSettingsController::class, 'show']);
 Route::get('/reviews', [ReviewController::class, 'index']);
-Route::post('/reviews', [ReviewController::class, 'store']);
+Route::post('/reviews', [ReviewController::class, 'store'])->middleware('throttle:public-write');
 Route::get('/tags', [TagController::class, 'index']);
-Route::post('/coupons/validate', [CouponController::class, 'validateCode']);
-Route::post('/orders', [OrderController::class, 'store']);
-Route::post('/orders/incomplete', [OrderController::class, 'storeIncomplete']);
-Route::post('/orders/send-otp', [OrderController::class, 'sendOtp']);
-Route::post('/orders/verify-otp', [OrderController::class, 'verifyOtp']);
-Route::post('/orders/track', [OrderController::class, 'track']);
+Route::post('/coupons/validate', [CouponController::class, 'validateCode'])->middleware('throttle:public-write');
+Route::post('/orders', [OrderController::class, 'store'])->middleware('throttle:checkout');
+Route::post('/orders/incomplete', [OrderController::class, 'storeIncomplete'])->middleware('throttle:checkout');
+Route::post('/orders/send-otp', [OrderController::class, 'sendOtp'])->middleware('throttle:otp-send');
+Route::post('/orders/verify-otp', [OrderController::class, 'verifyOtp'])->middleware('throttle:otp-verify');
+Route::post('/orders/track', [OrderController::class, 'track'])->middleware('throttle:order-track');
 Route::get('/database-backups/download/{token}', [AdminDatabaseBackupController::class, 'downloadByToken']);
 
 Route::middleware('jwt.auth')->group(function (): void {

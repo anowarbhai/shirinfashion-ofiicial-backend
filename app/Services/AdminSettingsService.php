@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\StorefrontSetting;
+use App\Support\SensitiveSettings;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
 
@@ -22,7 +23,7 @@ class AdminSettingsService
 
                 return array_replace_recursive(
                     $this->defaults()[$group] ?? [],
-                    is_array($stored) ? $stored : [],
+                    SensitiveSettings::revealGroup($group, is_array($stored) ? $stored : []),
                 );
             }
         );
@@ -36,7 +37,7 @@ class AdminSettingsService
             ['key' => $this->groupKey($group)],
             [
                 'group' => 'settings.'.$group,
-                'value' => $merged,
+                'value' => SensitiveSettings::protectGroup($group, $merged),
                 'type' => 'json',
                 'is_public' => $isPublic,
             ],
@@ -51,7 +52,7 @@ class AdminSettingsService
     {
         [$group, $nested] = array_pad(explode('.', $path, 2), 2, null);
 
-        if (!$group) {
+        if (! $group) {
             return $default;
         }
 

@@ -2,9 +2,10 @@
 
 namespace App\Models;
 
+use App\Support\HtmlSanitizer;
 use App\Support\MediaUrl;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -155,6 +156,22 @@ class Product extends Model
                     JSON_UNESCAPED_SLASHES
                 ) ?: '[]';
             },
+        );
+    }
+
+    protected function shortDescription(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value): ?string => HtmlSanitizer::sanitize($value),
+            set: fn (?string $value): ?string => HtmlSanitizer::sanitize($value),
+        );
+    }
+
+    protected function description(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value): ?string => HtmlSanitizer::sanitize($value),
+            set: fn (?string $value): ?string => HtmlSanitizer::sanitize($value),
         );
     }
 }

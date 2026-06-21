@@ -34,7 +34,7 @@ class TeamMemberController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255', 'unique:users,email'],
             'phone' => ['required', 'string', 'max:30', 'unique:users,phone'],
-            'password' => ['required', 'string', 'min:6', 'max:100'],
+            'password' => ['required', 'string', 'min:8', 'max:100'],
             'admin_role_id' => ['required', 'integer', 'exists:admin_roles,id'],
             'status' => ['required', Rule::in(['active', 'inactive', 'pending', 'blocked'])],
         ]);
@@ -84,7 +84,7 @@ class TeamMemberController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore($teamMember->id)],
             'phone' => ['required', 'string', 'max:30', Rule::unique('users', 'phone')->ignore($teamMember->id)],
-            'password' => ['nullable', 'string', 'min:6', 'max:100'],
+            'password' => ['nullable', 'string', 'min:8', 'max:100'],
             'admin_role_id' => ['required', 'integer', 'exists:admin_roles,id'],
             'status' => ['required', Rule::in(['active', 'inactive', 'pending', 'blocked'])],
         ]);

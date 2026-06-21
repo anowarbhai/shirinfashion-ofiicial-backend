@@ -97,7 +97,7 @@ class EnsureAdminPermission
             str_starts_with($adminPath, 'database-backups') => 'settings.database-backup.manage',
             str_starts_with($adminPath, 'settings/roles') => 'roles.manage',
             str_starts_with($adminPath, 'settings/permissions') => 'permissions.manage',
-            default => null,
+            default => '__unmapped_admin_route__',
         };
     }
 }

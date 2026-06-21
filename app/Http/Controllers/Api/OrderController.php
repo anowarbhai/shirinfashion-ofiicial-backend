@@ -248,17 +248,28 @@ class OrderController extends Controller
         $payload = $request->validate([
             'order_number' => ['nullable', 'string', 'required_without:tracking_number'],
             'tracking_number' => ['nullable', 'string', 'required_without:order_number'],
+            'phone' => ['required', 'string', 'max:30'],
         ]);
 
+        try {
+            $phone = BangladeshPhone::normalizeToLocal($payload['phone']);
+        } catch (InvalidArgumentException) {
+            return response()->json(['message' => 'Order could not be found.'], 404);
+        }
+        $phoneVariants = [$phone, '880'.substr($phone, 1), '+880'.substr($phone, 1)];
+
         $order = Order::query()
-            ->when(
-                $payload['order_number'] ?? null,
-                fn ($query, $value) => $query->where('order_number', $value)
-            )
-            ->when(
-                $payload['tracking_number'] ?? null,
-                fn ($query, $value) => $query->orWhere('tracking_number', $value)
-            )
+            ->where(function ($query) use ($payload): void {
+                if (! empty($payload['order_number'])) {
+                    $query->where('order_number', $payload['order_number']);
+                } else {
+                    $query->where('tracking_number', $payload['tracking_number']);
+                }
+            })
+            ->where(function ($query) use ($phone, $phoneVariants): void {
+                $query->where('normalized_phone', $this->normalizePhoneForMatch($phone))
+                    ->orWhereIn('phone', $phoneVariants);
+            })
             ->with('items')
             ->first();
 
@@ -269,7 +280,18 @@ class OrderController extends Controller
         }
 
         return response()->json([
-            'data' => $order,
+            'data' => [
+                'order_number' => $order->order_number,
+                'tracking_number' => $order->tracking_number,
+                'status' => $order->status,
+                'payment_status' => $order->payment_status,
+                'placed_at' => $order->placed_at,
+                'updated_at' => $order->updated_at,
+                'items' => $order->items->map(fn ($item): array => [
+                    'product_name' => $item->product_name,
+                    'quantity' => $item->quantity,
+                ])->values(),
+            ],
         ]);
     }
 
@@ -277,11 +299,11 @@ class OrderController extends Controller
     {
         $payload = $request->validate([
             'customer_name' => ['required', 'string', 'max:255'],
-            'email' => ['nullable', 'email'],
+            'email' => ['nullable', 'email', 'max:255'],
             'phone' => ['required', 'string', 'max:30'],
             'payment_method' => ['required', 'in:stripe,paypal,cod'],
             'shipping_method' => ['required', 'in:inside-dhaka,outside-dhaka'],
-            'coupon_code' => ['nullable', 'string'],
+            'coupon_code' => ['nullable', 'string', 'max:80'],
             'otp_session_token' => ['nullable', 'string'],
             'device_id' => ['nullable', 'string', 'max:120'],
             'cart_session_id' => ['nullable', 'string', 'max:120'],
@@ -289,14 +311,14 @@ class OrderController extends Controller
             'order_source_detail' => ['nullable', 'string', 'max:255'],
             'referrer_url' => ['nullable', 'string', 'max:2000'],
             'utm_source' => ['nullable', 'string', 'max:120'],
-            'notes' => ['nullable', 'string'],
+            'notes' => ['nullable', 'string', 'max:2000'],
             'shipping_address' => ['required', 'array'],
-            'shipping_address.address' => ['required', 'string'],
-            'shipping_address.city' => ['nullable', 'string'],
-            'shipping_address.country' => ['nullable', 'string'],
-            'items' => ['required', 'array', 'min:1'],
-            'items.*.product_id' => ['required', 'integer', 'exists:products,id'],
-            'items.*.quantity' => ['required', 'integer', 'min:1'],
+            'shipping_address.address' => ['required', 'string', 'max:1000'],
+            'shipping_address.city' => ['nullable', 'string', 'max:120'],
+            'shipping_address.country' => ['nullable', 'string', 'max:120'],
+            'items' => ['required', 'array', 'min:1', 'max:50'],
+            'items.*.product_id' => ['required', 'integer', 'distinct', 'exists:products,id'],
+            'items.*.quantity' => ['required', 'integer', 'min:1', 'max:100'],
             'items.*.volume_discount_id' => ['nullable', 'integer', 'exists:product_volume_discounts,id'],
         ]);
 
@@ -318,8 +340,13 @@ class OrderController extends Controller
         ?User $customer = null,
         bool $enforceCouponUsageLimit = true,
     ): array {
-        $productIds = collect($payload['items'])->pluck('product_id')->all();
-        $products = Product::whereIn('id', $productIds)->get()->keyBy('id');
+        $productIds = collect($payload['items'])->pluck('product_id')->unique()->sort()->values()->all();
+        $products = Product::query()
+            ->whereIn('id', $productIds)
+            ->orderBy('id')
+            ->when($enforceInventory, fn ($query) => $query->lockForUpdate())
+            ->get()
+            ->keyBy('id');
         $tierIds = collect($payload['items'])->pluck('volume_discount_id')->filter()->all();
         $tiers = ProductVolumeDiscount::with('freeProduct')
             ->whereIn('id', $tierIds)
@@ -386,7 +413,11 @@ class OrderController extends Controller
             ];
         }
 
-        $coupon = $this->resolveCoupon($payload['coupon_code'] ?? null, $subtotal);
+        $coupon = $this->resolveCoupon(
+            $payload['coupon_code'] ?? null,
+            $subtotal,
+            $enforceCouponUsageLimit,
+        );
 
         if ($coupon && $enforceCouponUsageLimit) {
             $this->couponEligibility->assertEligible(
@@ -485,7 +516,16 @@ class OrderController extends Controller
             ]));
 
             if ($decrementInventory && $product->manage_stock) {
-                $product->decrement('inventory', $item['quantity']);
+                $updated = Product::query()
+                    ->whereKey($product->id)
+                    ->where('inventory', '>=', $item['quantity'])
+                    ->decrement('inventory', $item['quantity']);
+
+                if ($updated !== 1) {
+                    throw ValidationException::withMessages([
+                        'items' => ["{$product->name} does not have enough stock."],
+                    ]);
+                }
             }
 
             if ($item['tier']?->freeProduct) {
@@ -504,7 +544,10 @@ class OrderController extends Controller
                 ]));
 
                 if ($decrementInventory && $gift->manage_stock && $gift->inventory > 0) {
-                    $gift->decrement('inventory');
+                    Product::query()
+                        ->whereKey($gift->id)
+                        ->where('inventory', '>', 0)
+                        ->decrement('inventory');
                 }
             }
         }
@@ -732,13 +775,13 @@ class OrderController extends Controller
     protected function generateOrderNumber(): string
     {
         do {
-            $orderNumber = 'SBA-'.random_int(1000, 9999);
+            $orderNumber = 'SBA-'.random_int(10000000, 99999999);
         } while (Order::where('order_number', $orderNumber)->exists());
 
         return $orderNumber;
     }
 
-    protected function resolveCoupon(?string $couponCode, float $subtotal): ?Coupon
+    protected function resolveCoupon(?string $couponCode, float $subtotal, bool $lockForUpdate = false): ?Coupon
     {
         if (! $couponCode) {
             return null;
@@ -746,6 +789,7 @@ class OrderController extends Controller
 
         $coupon = Coupon::where('code', strtoupper($couponCode))
             ->where('is_active', true)
+            ->when($lockForUpdate, fn ($query) => $query->lockForUpdate())
             ->first();
 
         if (! $coupon) {

@@ -351,6 +351,24 @@ class IncompleteOrderTest extends TestCase
         $this->assertDatabaseCount('orders', 1);
     }
 
+    public function test_checkout_rejects_duplicate_products_and_oversized_quantities(): void
+    {
+        $product = $this->createProduct();
+        $duplicatePayload = $this->orderPayload($product);
+        $duplicatePayload['items'][] = $duplicatePayload['items'][0];
+
+        $this->postJson('/api/orders', $duplicatePayload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['items.1.product_id']);
+
+        $this->postJson('/api/orders', $this->orderPayload($product, quantity: 101))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['items.0.quantity']);
+
+        $this->assertDatabaseCount('orders', 0);
+        $this->assertSame(10, $product->fresh()->inventory);
+    }
+
     private function createProduct(): Product
     {
         $category = Category::query()->create([

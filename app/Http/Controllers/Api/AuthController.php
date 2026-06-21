@@ -436,8 +436,10 @@ class AuthController extends Controller
             );
         }
 
+        $request->user()?->increment('auth_token_version');
+
         return response()->json([
-            'message' => 'JWT logout acknowledged. Discard the token client-side.',
+            'message' => 'Logged out successfully.',
         ]);
     }
 

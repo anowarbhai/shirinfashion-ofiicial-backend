@@ -8,6 +8,7 @@ use App\Models\Moderator;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVolumeDiscount;
+use App\Services\AdminAuditLogger;
 use App\Services\AdminSettingsService;
 use App\Services\CustomerNotificationService;
 use App\Services\CouponEligibilityService;
@@ -29,6 +30,7 @@ class OrderController extends Controller
         protected OrderAssignmentService $orderAssignmentService,
         protected CustomerNotificationService $customerNotificationService,
         protected CouponEligibilityService $couponEligibility,
+        protected AdminAuditLogger $auditLogger,
     ) {
     }
 
@@ -474,12 +476,29 @@ class OrderController extends Controller
 
         $this->ensureCanAccessOrder($request, $order);
         $this->ensureCanReassignToModerator($request, (int) $payload['moderator_id']);
+        $previousModeratorId = $order->assignments()
+            ->whereNull('order_item_id')
+            ->where('status', 'assigned')
+            ->latest('id')
+            ->value('moderator_id');
 
         $assignment = $this->orderAssignmentService->reassignOrder(
             $order->id,
             (int) $payload['moderator_id'],
             $request->user()?->id,
             $payload['note'] ?? null,
+        );
+
+        $this->auditLogger->log(
+            $request,
+            'order.reassigned',
+            "Reassigned order {$order->order_number}.",
+            $order,
+            [
+                'previous_moderator_id' => $previousModeratorId ? (int) $previousModeratorId : null,
+                'new_moderator_id' => (int) $payload['moderator_id'],
+                'note' => $payload['note'] ?? null,
+            ],
         );
 
         return response()->json([
@@ -503,6 +522,14 @@ class OrderController extends Controller
         abort_if($allowedQuery->count() !== count(array_unique($payload['order_ids'])), 403, 'You do not have permission to reassign one or more selected orders.');
 
         $this->ensureCanReassignToModerator($request, (int) $payload['moderator_id'], true);
+        $orders = Order::query()->whereIn('id', $payload['order_ids'])->get()->keyBy('id');
+        $previousModeratorIds = $orders->mapWithKeys(fn (Order $order): array => [
+            $order->id => $order->assignments()
+                ->whereNull('order_item_id')
+                ->where('status', 'assigned')
+                ->latest('id')
+                ->value('moderator_id'),
+        ]);
 
         $assignments = $this->orderAssignmentService->bulkReassignOrders(
             $payload['order_ids'],
@@ -510,6 +537,28 @@ class OrderController extends Controller
             $request->user()?->id,
             $payload['note'] ?? null,
         );
+
+        foreach ($assignments as $assignment) {
+            $order = $orders->get($assignment->order_id);
+
+            if (! $order) {
+                continue;
+            }
+
+            $previousModeratorId = $previousModeratorIds->get($order->id);
+            $this->auditLogger->log(
+                $request,
+                'order.reassigned',
+                "Reassigned order {$order->order_number} as part of a bulk action.",
+                $order,
+                [
+                    'bulk' => true,
+                    'previous_moderator_id' => $previousModeratorId ? (int) $previousModeratorId : null,
+                    'new_moderator_id' => (int) $payload['moderator_id'],
+                    'note' => $payload['note'] ?? null,
+                ],
+            );
+        }
 
         return response()->json([
             'message' => count($assignments).' orders reassigned successfully.',

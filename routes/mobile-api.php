@@ -25,34 +25,34 @@ Route::get('/settings/product-page', [ProductPageSettingsController::class, 'sho
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/{slug}', [ProductController::class, 'show']);
-Route::post('/device-tokens', [DeviceTokenController::class, 'store']);
-Route::delete('/device-tokens', [DeviceTokenController::class, 'destroy']);
-Route::post('/cart', [CartController::class, 'sync']);
-Route::post('/cart/clear', [CartController::class, 'clear']);
+Route::post('/device-tokens', [DeviceTokenController::class, 'store'])->middleware('throttle:mobile-sync');
+Route::delete('/device-tokens', [DeviceTokenController::class, 'destroy'])->middleware('throttle:mobile-sync');
+Route::post('/cart', [CartController::class, 'sync'])->middleware('throttle:mobile-sync');
+Route::post('/cart/clear', [CartController::class, 'clear'])->middleware('throttle:mobile-sync');
 
 Route::prefix('auth')->group(function (): void {
-    Route::post('/register', [AuthController::class, 'register']);
-    Route::post('/google', [AuthController::class, 'googleAuth']);
-    Route::post('/google/complete-phone', [AuthController::class, 'completeGooglePhone']);
-    Route::post('/login', [AuthController::class, 'login']);
-    Route::post('/login/verify-otp', [AuthController::class, 'verifyCustomerLoginOtp']);
+    Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:auth-login');
+    Route::post('/google', [AuthController::class, 'googleAuth'])->middleware('throttle:auth-login');
+    Route::post('/google/complete-phone', [AuthController::class, 'completeGooglePhone'])->middleware('throttle:auth-login');
+    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:auth-login');
+    Route::post('/login/verify-otp', [AuthController::class, 'verifyCustomerLoginOtp'])->middleware('throttle:otp-verify');
 });
 
-Route::post('/coupons/validate', [CouponController::class, 'validateCode']);
-Route::post('/orders', [StorefrontOrderController::class, 'store']);
-Route::post('/orders/incomplete', [StorefrontOrderController::class, 'storeIncomplete']);
-Route::post('/orders/send-otp', [StorefrontOrderController::class, 'sendOtp']);
-Route::post('/orders/verify-otp', [StorefrontOrderController::class, 'verifyOtp']);
-Route::post('/orders/track', [StorefrontOrderController::class, 'track']);
+Route::post('/coupons/validate', [CouponController::class, 'validateCode'])->middleware('throttle:public-write');
+Route::post('/orders', [StorefrontOrderController::class, 'store'])->middleware('throttle:checkout');
+Route::post('/orders/incomplete', [StorefrontOrderController::class, 'storeIncomplete'])->middleware('throttle:checkout');
+Route::post('/orders/send-otp', [StorefrontOrderController::class, 'sendOtp'])->middleware('throttle:otp-send');
+Route::post('/orders/verify-otp', [StorefrontOrderController::class, 'verifyOtp'])->middleware('throttle:otp-verify');
+Route::post('/orders/track', [StorefrontOrderController::class, 'track'])->middleware('throttle:order-track');
 Route::get('/notifications/public', [NotificationController::class, 'publicIndex']);
 
 Route::middleware('jwt.auth')->group(function (): void {
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
-    Route::post('/account/device-tokens', [DeviceTokenController::class, 'store']);
-    Route::delete('/account/device-tokens', [DeviceTokenController::class, 'destroy']);
-    Route::post('/account/cart', [CartController::class, 'sync']);
-    Route::post('/account/cart/clear', [CartController::class, 'clear']);
+    Route::post('/account/device-tokens', [DeviceTokenController::class, 'store'])->middleware('throttle:mobile-sync');
+    Route::delete('/account/device-tokens', [DeviceTokenController::class, 'destroy'])->middleware('throttle:mobile-sync');
+    Route::post('/account/cart', [CartController::class, 'sync'])->middleware('throttle:mobile-sync');
+    Route::post('/account/cart/clear', [CartController::class, 'clear'])->middleware('throttle:mobile-sync');
 
     Route::get('/wishlist', [WishlistController::class, 'index']);
     Route::post('/wishlist', [WishlistController::class, 'store']);

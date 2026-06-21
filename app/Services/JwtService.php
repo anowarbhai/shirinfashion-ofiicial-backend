@@ -18,6 +18,7 @@ class JwtService
             'iss' => config('app.url', 'shirinfashionbd-api'),
             'sub' => $user->id,
             'role' => $user->role,
+            'ver' => (int) ($user->auth_token_version ?? 0),
             'iat' => $issuedAt,
             'exp' => $issuedAt + ($ttlMinutes * 60),
         ];
