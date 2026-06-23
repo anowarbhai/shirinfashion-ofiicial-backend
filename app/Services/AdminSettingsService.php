@@ -181,6 +181,12 @@ class AdminSettingsService
                         'active' => true,
                     ],
                     [
+                        'id' => 'sslcommerz',
+                        'name' => 'SSLCommerz',
+                        'description' => 'Pay securely online with card, mobile banking, or internet banking.',
+                        'active' => false,
+                    ],
+                    [
                         'id' => 'stripe',
                         'name' => 'Stripe',
                         'description' => 'Secure card checkout powered by Stripe.',

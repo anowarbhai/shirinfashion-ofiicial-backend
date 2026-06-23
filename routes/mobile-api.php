@@ -44,6 +44,10 @@ Route::post('/orders/incomplete', [StorefrontOrderController::class, 'storeIncom
 Route::post('/orders/send-otp', [StorefrontOrderController::class, 'sendOtp'])->middleware('throttle:otp-send');
 Route::post('/orders/verify-otp', [StorefrontOrderController::class, 'verifyOtp'])->middleware('throttle:otp-verify');
 Route::post('/orders/track', [StorefrontOrderController::class, 'track'])->middleware('throttle:order-track');
+Route::match(['get', 'post'], '/payments/sslcommerz/success', [StorefrontOrderController::class, 'sslCommerzSuccess'])->middleware('throttle:public-write');
+Route::match(['get', 'post'], '/payments/sslcommerz/fail', [StorefrontOrderController::class, 'sslCommerzFail'])->middleware('throttle:public-write');
+Route::match(['get', 'post'], '/payments/sslcommerz/cancel', [StorefrontOrderController::class, 'sslCommerzCancel'])->middleware('throttle:public-write');
+Route::post('/payments/sslcommerz/ipn', [StorefrontOrderController::class, 'sslCommerzIpn'])->middleware('throttle:public-write');
 Route::get('/notifications/public', [NotificationController::class, 'publicIndex']);
 
 Route::middleware('jwt.auth')->group(function (): void {

@@ -102,6 +102,10 @@ Route::post('/orders/incomplete', [OrderController::class, 'storeIncomplete'])->
 Route::post('/orders/send-otp', [OrderController::class, 'sendOtp'])->middleware('throttle:otp-send');
 Route::post('/orders/verify-otp', [OrderController::class, 'verifyOtp'])->middleware('throttle:otp-verify');
 Route::post('/orders/track', [OrderController::class, 'track'])->middleware('throttle:order-track');
+Route::match(['get', 'post'], '/payments/sslcommerz/success', [OrderController::class, 'sslCommerzSuccess'])->middleware('throttle:public-write');
+Route::match(['get', 'post'], '/payments/sslcommerz/fail', [OrderController::class, 'sslCommerzFail'])->middleware('throttle:public-write');
+Route::match(['get', 'post'], '/payments/sslcommerz/cancel', [OrderController::class, 'sslCommerzCancel'])->middleware('throttle:public-write');
+Route::post('/payments/sslcommerz/ipn', [OrderController::class, 'sslCommerzIpn'])->middleware('throttle:public-write');
 Route::get('/database-backups/download/{token}', [AdminDatabaseBackupController::class, 'downloadByToken']);
 
 Route::middleware('jwt.auth')->group(function (): void {

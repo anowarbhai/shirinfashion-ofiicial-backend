@@ -16,14 +16,17 @@ use App\Services\JwtService;
 use App\Services\OrderAssignmentService;
 use App\Services\SmsGatewayService;
 use App\Services\SmsOtpService;
+use App\Services\SslCommerzService;
 use App\Support\BangladeshPhone;
 use InvalidArgumentException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
 use Throwable;
 
 class OrderController extends Controller
@@ -37,6 +40,7 @@ class OrderController extends Controller
         protected OrderAssignmentService $orderAssignmentService,
         protected CustomerNotificationService $customerNotificationService,
         protected CouponEligibilityService $couponEligibility,
+        protected SslCommerzService $sslCommerzService,
     ) {
     }
 
@@ -88,6 +92,10 @@ class OrderController extends Controller
             );
         }
 
+        if ($payload['payment_method'] === 'sslcommerz') {
+            return $this->storeSslCommerzOrder($payload, $customer, $clientIp);
+        }
+
         $order = DB::transaction(function () use ($customer, $payload, $clientIp) {
             $prepared = $this->prepareOrderPayload($payload, true, false, $customer);
             $order = $this->findMatchingIncompleteOrder($customer, $prepared)
@@ -131,6 +139,270 @@ class OrderController extends Controller
             'data' => $order,
             'checkout_guard' => $this->resolveNextCheckoutGuardState($order),
         ], 201);
+    }
+
+    public function sslCommerzSuccess(Request $request): JsonResponse|RedirectResponse
+    {
+        $order = $this->findSslCommerzOrder($request);
+
+        if (! $order) {
+            return $this->sslCommerzRedirect('fail', null, 'Order not found.');
+        }
+
+        try {
+            $validation = $this->sslCommerzService->validateTransaction((string) $request->input('val_id'));
+            $this->finalizeSslCommerzOrder($order, $validation);
+
+            return $this->sslCommerzRedirect('success', $order);
+        } catch (Throwable $exception) {
+            $this->markSslCommerzOrderFailed($order, 'payment_validation_failed', $exception->getMessage());
+
+            return $this->sslCommerzRedirect('fail', $order, 'Payment validation failed.');
+        }
+    }
+
+    public function sslCommerzIpn(Request $request): JsonResponse
+    {
+        $order = $this->findSslCommerzOrder($request);
+
+        if (! $order) {
+            return response()->json(['message' => 'Order not found.'], 404);
+        }
+
+        try {
+            $validationId = (string) ($request->input('val_id') ?: $request->input('val_id'));
+            $validation = $validationId
+                ? $this->sslCommerzService->validateTransaction($validationId)
+                : $request->all();
+            $this->finalizeSslCommerzOrder($order, $validation, false);
+
+            return response()->json(['message' => 'Payment verified successfully.']);
+        } catch (Throwable $exception) {
+            $this->markSslCommerzOrderFailed($order, 'payment_ipn_failed', $exception->getMessage());
+
+            return response()->json(['message' => 'Payment validation failed.'], 422);
+        }
+    }
+
+    public function sslCommerzFail(Request $request): JsonResponse|RedirectResponse
+    {
+        $order = $this->findSslCommerzOrder($request);
+
+        if ($order) {
+            $this->markSslCommerzOrderFailed($order, 'payment_failed', $request->input('failedreason'));
+        }
+
+        return $this->sslCommerzRedirect('fail', $order, 'Payment failed.');
+    }
+
+    public function sslCommerzCancel(Request $request): JsonResponse|RedirectResponse
+    {
+        $order = $this->findSslCommerzOrder($request);
+
+        if ($order) {
+            $this->markSslCommerzOrderFailed($order, 'payment_cancelled', 'Customer cancelled payment.');
+        }
+
+        return $this->sslCommerzRedirect('cancel', $order, 'Payment cancelled.');
+    }
+
+    protected function storeSslCommerzOrder(array $payload, ?User $customer, ?string $clientIp): JsonResponse
+    {
+        $order = DB::transaction(function () use ($customer, $payload, $clientIp) {
+            $prepared = $this->prepareOrderPayload($payload, true, false, $customer);
+            $order = $this->findMatchingIncompleteOrder($customer, $prepared)
+                ?? new Order(['order_number' => $this->generateOrderNumber()]);
+
+            $this->fillOrderFromPreparedPayload(
+                $order,
+                $customer,
+                $payload,
+                $prepared,
+                $clientIp,
+                'pending',
+            );
+            $order->payment_status = 'pending';
+            $order->tracking_number = null;
+            $order->placed_at = null;
+            $order->completed_at = null;
+            $order->last_activity_at = Carbon::now();
+            $order->save();
+
+            $this->replaceOrderItems($order, $prepared['order_items'], false);
+            $this->deleteDuplicateIncompleteOrders($order, $customer, $prepared);
+
+            return $order->load('items');
+        });
+
+        try {
+            $paymentSession = $this->sslCommerzService->initiate($order);
+        } catch (Throwable $exception) {
+            $this->markSslCommerzOrderFailed($order, 'payment_initiation_failed', $exception->getMessage());
+
+            return response()->json([
+                'message' => 'SSLCommerz payment could not be started. Please try again.',
+                'data' => $order->fresh('items'),
+            ], 422);
+        }
+
+        return response()->json([
+            'message' => 'SSLCommerz payment session created successfully.',
+            'data' => $order,
+            'payment' => [
+                'provider' => 'sslcommerz',
+                'redirect_url' => $paymentSession['GatewayPageURL'],
+                'session_key' => $paymentSession['sessionkey'] ?? null,
+            ],
+            'checkout_guard' => $this->resolveNextCheckoutGuardState($order),
+        ], 201);
+    }
+
+    protected function findSslCommerzOrder(Request $request): ?Order
+    {
+        $orderId = $request->input('value_a');
+        $orderNumber = $request->input('tran_id') ?: $request->input('value_b');
+
+        if (! $orderId && ! $orderNumber) {
+            return null;
+        }
+
+        return Order::query()
+            ->with('items')
+            ->when($orderId, fn ($query) => $query->whereKey($orderId))
+            ->when(! $orderId && $orderNumber, fn ($query) => $query->where('order_number', $orderNumber))
+            ->first();
+    }
+
+    protected function finalizeSslCommerzOrder(Order $order, array $validation, bool $dispatchWork = true): void
+    {
+        if (! $this->sslCommerzService->isSuccessful($validation)) {
+            throw new RuntimeException('SSLCommerz payment was not valid.');
+        }
+
+        $validatedTransactionId = (string) ($validation['tran_id'] ?? '');
+
+        if ($validatedTransactionId && $validatedTransactionId !== $order->order_number) {
+            throw new RuntimeException('SSLCommerz transaction does not match this order.');
+        }
+
+        $validatedAmount = round((float) ($validation['amount'] ?? $validation['store_amount'] ?? 0), 2);
+        $orderAmount = round((float) $order->grand_total, 2);
+
+        if ($validatedAmount <= 0 || abs($validatedAmount - $orderAmount) > 0.01) {
+            throw new RuntimeException('SSLCommerz amount does not match this order.');
+        }
+
+        $shouldDispatch = false;
+
+        DB::transaction(function () use ($order, &$shouldDispatch): void {
+            $lockedOrder = Order::query()
+                ->with('items')
+                ->whereKey($order->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($lockedOrder->payment_status === 'paid') {
+                return;
+            }
+
+            $this->decrementInventoryForPlacedOrder($lockedOrder);
+
+            $lockedOrder->payment_status = 'paid';
+            $lockedOrder->status = 'processing';
+            $lockedOrder->tracking_number = $lockedOrder->tracking_number ?: 'TRK-'.random_int(100000, 999999);
+            $lockedOrder->placed_at = $lockedOrder->placed_at ?: Carbon::now();
+            $lockedOrder->completed_at = $lockedOrder->completed_at ?: Carbon::now();
+            $lockedOrder->last_activity_at = Carbon::now();
+            $lockedOrder->save();
+
+            $this->orderAssignmentService->assignProcessingOrder($lockedOrder);
+
+            if (! empty($lockedOrder->coupon_code)) {
+                Coupon::where('code', $lockedOrder->coupon_code)->increment('used_count');
+            }
+
+            $order->setRawAttributes($lockedOrder->getAttributes(), true);
+            $shouldDispatch = true;
+        });
+
+        if ($dispatchWork && $shouldDispatch) {
+            $this->dispatchPostResponseOrderWork($order->fresh('items'));
+        }
+    }
+
+    protected function decrementInventoryForPlacedOrder(Order $order): void
+    {
+        foreach ($order->items as $item) {
+            if (! $item->product_id) {
+                continue;
+            }
+
+            $product = Product::query()
+                ->whereKey($item->product_id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $product || ! $product->manage_stock) {
+                continue;
+            }
+
+            if ($item->is_free_gift) {
+                if ($product->inventory > 0) {
+                    Product::query()
+                        ->whereKey($product->id)
+                        ->where('inventory', '>', 0)
+                        ->decrement('inventory');
+                }
+
+                continue;
+            }
+
+            $quantity = max(1, (int) $item->quantity);
+            $updated = Product::query()
+                ->whereKey($product->id)
+                ->where('inventory', '>=', $quantity)
+                ->decrement('inventory', $quantity);
+
+            if ($updated !== 1) {
+                throw ValidationException::withMessages([
+                    'items' => ["{$product->name} does not have enough stock."],
+                ]);
+            }
+        }
+    }
+
+    protected function markSslCommerzOrderFailed(Order $order, string $statusDetail, ?string $message = null): void
+    {
+        $notes = trim(implode("\n", array_filter([
+            $order->notes,
+            'SSLCommerz: '.$statusDetail.($message ? ' - '.$message : ''),
+        ])));
+
+        $order->forceFill([
+            'status' => 'cancelled',
+            'payment_status' => 'failed',
+            'last_activity_at' => Carbon::now(),
+            'notes' => $notes ?: null,
+        ])->save();
+    }
+
+    protected function sslCommerzRedirect(string $state, ?Order $order, ?string $message = null): RedirectResponse
+    {
+        $path = $state === 'success' ? '/checkout/success' : '/checkout';
+        $query = [
+            'payment' => 'sslcommerz',
+            'status' => $state,
+        ];
+
+        if ($order) {
+            $query['order_id'] = $order->order_number;
+        }
+
+        if ($message) {
+            $query['message'] = $message;
+        }
+
+        return redirect()->away($this->sslCommerzService->frontendUrl($path, $query));
     }
 
     public function storeIncomplete(Request $request): JsonResponse
@@ -301,7 +573,7 @@ class OrderController extends Controller
             'customer_name' => ['required', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255'],
             'phone' => ['required', 'string', 'max:30'],
-            'payment_method' => ['required', 'in:stripe,paypal,cod'],
+            'payment_method' => ['required', 'in:stripe,paypal,cod,sslcommerz'],
             'shipping_method' => ['required', 'in:inside-dhaka,outside-dhaka'],
             'coupon_code' => ['nullable', 'string', 'max:80'],
             'otp_session_token' => ['nullable', 'string'],

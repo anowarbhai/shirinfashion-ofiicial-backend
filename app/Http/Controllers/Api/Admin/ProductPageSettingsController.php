@@ -41,7 +41,7 @@ class ProductPageSettingsController extends Controller
             'freeShippingEnabled' => ['required', 'boolean'],
             'freeShippingThreshold' => ['required', 'string', 'max:40'],
             'paymentMethods' => ['required', 'array'],
-            'paymentMethods.*.id' => ['required', Rule::in(['cod', 'stripe', 'paypal'])],
+            'paymentMethods.*.id' => ['required', Rule::in(['cod', 'sslcommerz', 'stripe', 'paypal'])],
             'paymentMethods.*.name' => ['required', 'string', 'max:255'],
             'paymentMethods.*.description' => ['nullable', 'string', 'max:500'],
             'paymentMethods.*.active' => ['required', 'boolean'],
