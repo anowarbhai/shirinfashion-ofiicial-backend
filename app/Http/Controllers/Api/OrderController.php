@@ -351,9 +351,15 @@ class OrderController extends Controller
             $shouldDispatch = true;
         });
 
+        $freshOrder = $order->fresh('items');
+
         if ($dispatchWork && $shouldDispatch) {
-            $this->dispatchPostResponseOrderWork($order->fresh('items'));
+            $this->dispatchPostResponseOrderWork($freshOrder);
+
+            return;
         }
+
+        $this->dispatchPostResponseFraudCheck($freshOrder);
     }
 
     protected function decrementInventoryForPlacedOrder(Order $order): void
@@ -1500,6 +1506,21 @@ class OrderController extends Controller
                         'new_status' => $order->status,
                     ],
                 );
+            }
+
+            $this->runPostResponseFraudCheck($order);
+        });
+    }
+
+    protected function dispatchPostResponseFraudCheck(Order $order): void
+    {
+        $orderId = (int) $order->id;
+
+        app()->terminating(function () use ($orderId): void {
+            $order = Order::query()->find($orderId);
+
+            if (! $order) {
+                return;
             }
 
             $this->runPostResponseFraudCheck($order);
