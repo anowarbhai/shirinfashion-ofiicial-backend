@@ -24,6 +24,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -238,9 +239,14 @@ class OrderController extends Controller
             $paymentSession = $this->sslCommerzService->initiate($order);
         } catch (Throwable $exception) {
             $this->markSslCommerzOrderFailed($order, 'payment_initiation_failed', $exception->getMessage());
+            Log::warning('SSLCommerz payment initiation failed.', [
+                'order_id' => $order->id,
+                'order_number' => $order->order_number,
+                'reason' => $exception->getMessage(),
+            ]);
 
             return response()->json([
-                'message' => 'SSLCommerz payment could not be started. Please try again.',
+                'message' => $this->publicSslCommerzFailureMessage($exception),
                 'data' => $order->fresh('items'),
             ], 422);
         }
@@ -255,6 +261,26 @@ class OrderController extends Controller
             ],
             'checkout_guard' => $this->resolveNextCheckoutGuardState($order),
         ], 201);
+    }
+
+    protected function publicSslCommerzFailureMessage(Throwable $exception): string
+    {
+        $message = trim($exception->getMessage());
+
+        return match (true) {
+            $message === 'SSLCommerz payment is not enabled.' =>
+                'SSLCommerz payment is not enabled yet. Please choose Cash on Delivery.',
+            $message === 'SSLCommerz credentials are not configured.' =>
+                'SSLCommerz credentials are missing. Please check payment gateway settings.',
+            str_contains($message, 'could not be created') =>
+                'SSLCommerz service is not responding right now. Please try again or choose Cash on Delivery.',
+            str_contains($message, 'did not return a payment URL') =>
+                'SSLCommerz did not return a payment link. Please check sandbox/live credential mode.',
+            $message !== '' =>
+                "SSLCommerz rejected the payment request: {$message}",
+            default =>
+                'SSLCommerz payment could not be started. Please try again or choose Cash on Delivery.',
+        };
     }
 
     protected function findSslCommerzOrder(Request $request): ?Order
