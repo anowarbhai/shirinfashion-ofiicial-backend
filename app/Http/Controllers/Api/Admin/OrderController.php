@@ -201,7 +201,7 @@ class OrderController extends Controller
             'customer_name' => ['required', 'string', 'max:255'],
             'email' => ['nullable', 'email'],
             'phone' => ['required', 'string', 'max:30'],
-            'payment_method' => ['required', 'in:stripe,paypal,cod'],
+            'payment_method' => ['required', 'in:stripe,paypal,cod,sslcommerz'],
             'payment_status' => ['nullable', 'string', 'max:255'],
             'shipping_method' => ['required', 'in:inside-dhaka,outside-dhaka'],
             'shipping_total' => ['nullable', 'numeric', 'min:0'],

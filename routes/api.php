@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\Admin\GoogleMarketingController as AdminGoogleMarke
 use App\Http\Controllers\Api\Admin\MailSetupSettingsController as AdminMailSetupSettingsController;
 use App\Http\Controllers\Api\Admin\MobileNotificationController as AdminMobileNotificationController;
 use App\Http\Controllers\Api\Admin\MobilePushSettingsController as AdminMobilePushSettingsController;
+use App\Http\Controllers\Api\Admin\PaymentGatewaySettingsController as AdminPaymentGatewaySettingsController;
 use App\Http\Controllers\Api\Admin\AdminPermissionController as AdminPermissionController;
 use App\Http\Controllers\Api\Admin\AdminAuditLogController as AdminAuditLogController;
 use App\Http\Controllers\Api\Admin\AdminRoleController as AdminRoleController;
@@ -184,6 +185,8 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::patch('/settings/general', [AdminGeneralSettingsController::class, 'update']);
         Route::get('/settings/customer-auth', [AdminCustomerAuthSettingsController::class, 'show']);
         Route::patch('/settings/customer-auth', [AdminCustomerAuthSettingsController::class, 'update']);
+        Route::get('/settings/payment-gateway', [AdminPaymentGatewaySettingsController::class, 'show']);
+        Route::patch('/settings/payment-gateway', [AdminPaymentGatewaySettingsController::class, 'update']);
         Route::get('/settings/mobile-push', [AdminMobilePushSettingsController::class, 'show']);
         Route::patch('/settings/mobile-push', [AdminMobilePushSettingsController::class, 'update']);
         Route::get('/settings/fraud-checker', [AdminFraudCheckerSettingsController::class, 'show']);

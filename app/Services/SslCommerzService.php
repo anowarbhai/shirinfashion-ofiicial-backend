@@ -9,6 +9,12 @@ use RuntimeException;
 
 class SslCommerzService
 {
+    private ?array $paymentSettings = null;
+
+    public function __construct(private readonly AdminSettingsService $settings)
+    {
+    }
+
     public function initiate(Order $order): array
     {
         $this->ensureConfigured();
@@ -22,10 +28,10 @@ class SslCommerzService
             ->implode(', ');
 
         $payload = [
-            'store_id' => config('sslcommerz.store_id'),
-            'store_passwd' => config('sslcommerz.store_password'),
+            'store_id' => $this->storeId(),
+            'store_passwd' => $this->storePassword(),
             'total_amount' => number_format((float) $order->grand_total, 2, '.', ''),
-            'currency' => config('sslcommerz.currency', 'BDT'),
+            'currency' => $this->currency(),
             'tran_id' => $order->order_number,
             'success_url' => $this->callbackUrl('success'),
             'fail_url' => $this->callbackUrl('fail'),
@@ -78,8 +84,8 @@ class SslCommerzService
             $response = Http::timeout(20)
                 ->get($this->baseUrl().'/validator/api/validationserverAPI.php', [
                     'val_id' => $validationId,
-                    'store_id' => config('sslcommerz.store_id'),
-                    'store_passwd' => config('sslcommerz.store_password'),
+                    'store_id' => $this->storeId(),
+                    'store_passwd' => $this->storePassword(),
                     'format' => 'json',
                 ])
                 ->throw()
@@ -102,27 +108,77 @@ class SslCommerzService
 
     public function frontendUrl(string $path, array $query = []): string
     {
-        $url = config('sslcommerz.frontend_url').'/'.ltrim($path, '/');
+        $url = $this->frontendBaseUrl().'/'.ltrim($path, '/');
 
         return empty($query) ? $url : $url.'?'.http_build_query($query);
     }
 
     private function callbackUrl(string $action): string
     {
-        return config('sslcommerz.callback_base_url')."/api/payments/sslcommerz/{$action}";
+        return $this->callbackBaseUrl()."/api/payments/sslcommerz/{$action}";
     }
 
     private function baseUrl(): string
     {
-        return config('sslcommerz.sandbox')
+        return $this->sandbox()
             ? config('sslcommerz.sandbox_base_url')
             : config('sslcommerz.live_base_url');
     }
 
     private function ensureConfigured(): void
     {
-        if (! config('sslcommerz.store_id') || ! config('sslcommerz.store_password')) {
+        if (! (bool) ($this->paymentSettings()['enabled'] ?? false)) {
+            throw new RuntimeException('SSLCommerz payment is not enabled.');
+        }
+
+        if (! $this->storeId() || ! $this->storePassword()) {
             throw new RuntimeException('SSLCommerz credentials are not configured.');
         }
+    }
+
+    private function paymentSettings(): array
+    {
+        if ($this->paymentSettings === null) {
+            $this->paymentSettings = $this->settings->getGroup('payment_gateway');
+        }
+
+        return $this->paymentSettings;
+    }
+
+    private function setting(string $key, mixed $fallback): mixed
+    {
+        $value = $this->paymentSettings()[$key] ?? null;
+
+        return $value === null || $value === '' ? $fallback : $value;
+    }
+
+    private function storeId(): string
+    {
+        return (string) $this->setting('store_id', config('sslcommerz.store_id'));
+    }
+
+    private function storePassword(): string
+    {
+        return (string) $this->setting('store_password', config('sslcommerz.store_password'));
+    }
+
+    private function currency(): string
+    {
+        return (string) $this->setting('currency', config('sslcommerz.currency', 'BDT'));
+    }
+
+    private function frontendBaseUrl(): string
+    {
+        return rtrim((string) $this->setting('frontend_url', config('sslcommerz.frontend_url')), '/');
+    }
+
+    private function callbackBaseUrl(): string
+    {
+        return rtrim((string) $this->setting('callback_base_url', config('sslcommerz.callback_base_url')), '/');
+    }
+
+    private function sandbox(): bool
+    {
+        return filter_var($this->paymentSettings()['sandbox'] ?? config('sslcommerz.sandbox'), FILTER_VALIDATE_BOOLEAN);
     }
 }

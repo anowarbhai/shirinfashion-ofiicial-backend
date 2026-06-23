@@ -138,6 +138,15 @@ class AdminSettingsService
                 'google_client_id' => '',
                 'google_android_client_id' => '',
             ],
+            'payment_gateway' => [
+                'enabled' => false,
+                'store_id' => '',
+                'store_password' => '',
+                'sandbox' => true,
+                'currency' => 'BDT',
+                'frontend_url' => '',
+                'callback_base_url' => '',
+            ],
             'mobile_push' => [
                 'firebase_project_id' => '',
                 'firebase_client_email' => '',

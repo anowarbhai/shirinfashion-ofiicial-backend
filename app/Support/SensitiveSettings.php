@@ -14,6 +14,7 @@ class SensitiveSettings
         'fraud_checker' => ['api_key', 'onesoftcode_api_key', 'bd_courier_api_key'],
         'mail_setup' => ['smtp_password'],
         'mobile_push' => ['firebase_private_key'],
+        'payment_gateway' => ['store_password'],
         'sms_integration' => ['api_key', 'api_secret'],
     ];
 
