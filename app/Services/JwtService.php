@@ -12,7 +12,7 @@ class JwtService
     public function issueToken(User $user): string
     {
         $issuedAt = time();
-        $ttlMinutes = (int) env('JWT_TTL_MINUTES', 1440);
+        $ttlMinutes = $this->ttlMinutes($user);
 
         $payload = [
             'iss' => config('app.url', 'shirinfashionbd-api'),
@@ -29,6 +29,15 @@ class JwtService
     public function decode(string $token): stdClass
     {
         return JWT::decode($token, new Key($this->secret(), 'HS256'));
+    }
+
+    protected function ttlMinutes(User $user): int
+    {
+        if ($user->role === 'customer') {
+            return max(1, (int) env('CUSTOMER_JWT_TTL_MINUTES', 525600));
+        }
+
+        return max(1, (int) env('JWT_TTL_MINUTES', 1440));
     }
 
     protected function secret(): string
