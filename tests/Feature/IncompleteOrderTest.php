@@ -258,7 +258,7 @@ class IncompleteOrderTest extends TestCase
         $this->assertSame('processing', Order::query()->value('status'));
     }
 
-    public function test_incomplete_order_is_skipped_after_converted_order_completes(): void
+    public function test_incomplete_order_is_allowed_after_converted_order_completes_for_different_phone(): void
     {
         $product = $this->createProduct();
         $payload = $this->orderPayload($product);
@@ -274,13 +274,14 @@ class IncompleteOrderTest extends TestCase
             cartSessionId: 'test-cart-session',
         ))
             ->assertOk()
-            ->assertJsonPath('incomplete_order_skipped', true);
+            ->assertJsonPath('data.status', 'incomplete');
 
-        $this->assertDatabaseCount('orders', 1);
-        $this->assertSame('processing', Order::query()->value('status'));
+        $this->assertDatabaseCount('orders', 2);
+        $this->assertSame(1, Order::query()->where('status', 'processing')->count());
+        $this->assertSame(1, Order::query()->where('status', 'incomplete')->count());
     }
 
-    public function test_order_is_blocked_after_converted_order_completes_for_same_session(): void
+    public function test_order_is_allowed_after_converted_order_completes_for_different_phone_on_same_session(): void
     {
         $product = $this->createProduct();
         $payload = $this->orderPayload($product);
@@ -295,10 +296,10 @@ class IncompleteOrderTest extends TestCase
             phone: '01829312186',
             cartSessionId: 'test-cart-session',
         ))
-            ->assertStatus(429)
-            ->assertJsonPath('checkout_guard.blocked', true);
+            ->assertCreated()
+            ->assertJsonPath('data.status', 'processing');
 
-        $this->assertDatabaseCount('orders', 1);
+        $this->assertDatabaseCount('orders', 2);
     }
 
     public function test_checkout_guard_can_be_disabled_for_incomplete_orders(): void

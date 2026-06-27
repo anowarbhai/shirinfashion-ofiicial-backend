@@ -957,12 +957,14 @@ class OrderController extends Controller
             }
 
             $query->where(function ($query) use ($cartSessionId, $normalizedPhone): void {
-                if ($cartSessionId) {
-                    $query->orWhere('cart_session_id', $cartSessionId);
-                }
-
                 if ($normalizedPhone) {
                     $query->orWhere('normalized_phone', $normalizedPhone);
+
+                    return;
+                }
+
+                if ($cartSessionId) {
+                    $query->orWhere('cart_session_id', $cartSessionId);
                 }
             });
         }
@@ -1231,22 +1233,23 @@ class OrderController extends Controller
         $normalizedDeviceId = $deviceId ? trim($deviceId) : null;
         $normalizedCartSessionId = $cartSessionId ? trim($cartSessionId) : null;
         $normalizedClientIp = $clientIp ? trim($clientIp) : null;
+        $hasPhoneMatch = (($settings['block_by_phone'] ?? true) || $forceCustomerSignals) && trim($phone) !== '';
 
-        if ((($settings['block_by_phone'] ?? true) || $forceCustomerSignals) && trim($phone) !== '') {
+        if ($hasPhoneMatch) {
             $matches['phone'] = trim($phone);
             $matches['normalized_phone'] = $this->normalizePhoneForMatch($phone);
             $matches['phone_variants'] = $this->phoneVariantsForMatch($phone);
         }
 
-        if ((($settings['block_by_ip'] ?? true) || $forceCustomerSignals) && $normalizedClientIp) {
+        if (! $hasPhoneMatch && ((($settings['block_by_ip'] ?? true) || $forceCustomerSignals) && $normalizedClientIp)) {
             $matches['ip'] = $normalizedClientIp;
         }
 
-        if ((($settings['block_by_device'] ?? true) || $forceCustomerSignals) && $normalizedDeviceId) {
+        if (! $hasPhoneMatch && ((($settings['block_by_device'] ?? true) || $forceCustomerSignals) && $normalizedDeviceId)) {
             $matches['device'] = $normalizedDeviceId;
         }
 
-        if ((($settings['block_by_device'] ?? true) || $forceCustomerSignals) && $normalizedCartSessionId) {
+        if (! $hasPhoneMatch && ((($settings['block_by_device'] ?? true) || $forceCustomerSignals) && $normalizedCartSessionId)) {
             $matches['cart_session'] = $normalizedCartSessionId;
         }
 
