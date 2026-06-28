@@ -15,7 +15,7 @@ class ThemeTemplatesUpdateRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'home' => ['required', Rule::in(['classic', 'campaign', 'editorial', 'compact'])],
+            'home' => ['required', Rule::in(['classic', 'campaign', 'editorial', 'runway', 'compact'])],
             'shop' => ['required', Rule::in(['classic', 'sidebar', 'compact', 'visual'])],
             'product' => ['required', Rule::in(['classic', 'conversion', 'minimal', 'review-focused'])],
             'about' => ['required', Rule::in(['classic', 'story', 'brand', 'minimal'])],
