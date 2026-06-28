@@ -202,6 +202,7 @@ class ThemeSettingsService
             'header' => [
                 'active_style' => 'style-1',
                 'sticky' => true,
+                'sticky_on_banner' => false,
                 'show_top_bar' => false,
                 'show_search' => true,
                 'show_cart' => true,

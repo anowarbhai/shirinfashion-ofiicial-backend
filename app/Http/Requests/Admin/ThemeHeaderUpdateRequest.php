@@ -17,6 +17,7 @@ class ThemeHeaderUpdateRequest extends FormRequest
         return [
             'active_style' => ['required', Rule::in(['style-1', 'style-2', 'style-3', 'style-4'])],
             'sticky' => ['required', 'boolean'],
+            'sticky_on_banner' => ['required', 'boolean'],
             'show_top_bar' => ['required', 'boolean'],
             'show_search' => ['required', 'boolean'],
             'show_cart' => ['required', 'boolean'],
