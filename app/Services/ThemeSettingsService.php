@@ -64,6 +64,7 @@ class ThemeSettingsService
                 'appearance' => $this->getGroup('appearance'),
                 'header' => $this->getGroup('header'),
                 'footer' => $this->getGroup('footer'),
+                'templates' => $this->getGroup('templates'),
             ];
         });
     }
@@ -225,6 +226,15 @@ class ThemeSettingsService
                 'text_color' => '#eadfd7',
                 'columns' => 4,
                 'show_social_links' => true,
+            ],
+            'templates' => [
+                'home' => 'classic',
+                'shop' => 'classic',
+                'product' => 'classic',
+                'about' => 'classic',
+                'contact' => 'classic',
+                'blog_list' => 'classic',
+                'blog_detail' => 'classic',
             ],
         ];
     }

@@ -39,6 +39,7 @@ use App\Http\Controllers\Api\Admin\ThemeAppearanceController as AdminThemeAppear
 use App\Http\Controllers\Api\Admin\ThemeFooterController as AdminThemeFooterController;
 use App\Http\Controllers\Api\Admin\ThemeHeaderController as AdminThemeHeaderController;
 use App\Http\Controllers\Api\Admin\ThemeMenuController as AdminThemeMenuController;
+use App\Http\Controllers\Api\Admin\ThemeTemplatesController as AdminThemeTemplatesController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ContactMessageController;
@@ -176,6 +177,8 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::patch('/themes/header', [AdminThemeHeaderController::class, 'update']);
         Route::get('/themes/footer', [AdminThemeFooterController::class, 'show']);
         Route::patch('/themes/footer', [AdminThemeFooterController::class, 'update']);
+        Route::get('/themes/templates', [AdminThemeTemplatesController::class, 'show']);
+        Route::patch('/themes/templates', [AdminThemeTemplatesController::class, 'update']);
         Route::get('/themes/menus', [AdminThemeMenuController::class, 'index']);
         Route::post('/themes/menus', [AdminThemeMenuController::class, 'store']);
         Route::get('/themes/menus/{menu}', [AdminThemeMenuController::class, 'show']);
