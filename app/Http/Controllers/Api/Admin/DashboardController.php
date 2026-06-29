@@ -328,6 +328,20 @@ class DashboardController extends Controller
             ];
         }
 
+        if ($this->isSingleDayRange($chartStart, $chartEnd)) {
+            $current = $this->aggregateRevenueByHour($chartStart, $chartEnd, $user);
+            $previous = $previousStartDate && $previousEndDate
+                ? $this->aggregateRevenueByHour($previousStartDate, $previousEndDate, $user)
+                : [];
+
+            return [
+                'current' => $this->ensureRevenuePoints($current, $chartStart, $chartEnd, $rangeRevenue, $user),
+                'previous' => $previousStartDate && $previousEndDate
+                    ? $this->ensureRevenuePoints($previous, $previousStartDate, $previousEndDate, $previousRangeRevenue, $user)
+                    : [],
+            ];
+        }
+
         $current = $this->aggregateRevenueByDay($chartStart, $chartEnd, $user);
         $previous = $previousStartDate && $previousEndDate
             ? $this->aggregateRevenueByDay($previousStartDate, $previousEndDate, $user)
@@ -369,6 +383,42 @@ class DashboardController extends Controller
                 'label' => $date->format('M j'),
                 'value' => round((float) ($rows[$key] ?? 0), 2),
             ];
+        }
+
+        return $points;
+    }
+
+    /**
+     * @return array<int,array{label:string,value:float}>
+     */
+    private function aggregateRevenueByHour(Carbon $startDate, Carbon $endDate, ?User $user): array
+    {
+        $bucketExpression = $this->localHourExpression();
+
+        $query = Order::query()
+            ->selectRaw("{$bucketExpression} as bucket, SUM(grand_total) as total");
+        $this->excludeIncompleteOrders($query);
+        $this->applyOrderVisibility($query, $user);
+
+        $rows = $query
+            ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [
+                $this->toDatabaseTimezone($startDate),
+                $this->toDatabaseTimezone($endDate),
+            ])
+            ->groupBy('bucket')
+            ->pluck('total', 'bucket');
+
+        $points = [];
+        $cursor = $startDate->copy()->startOfDay();
+        $last = $endDate->copy()->startOfDay()->addHours(23);
+
+        while ($cursor->lte($last)) {
+            $key = $cursor->format('Y-m-d H:00:00');
+            $points[] = [
+                'label' => $cursor->format('g A'),
+                'value' => round((float) ($rows[$key] ?? 0), 2),
+            ];
+            $cursor->addHour();
         }
 
         return $points;
@@ -437,9 +487,11 @@ class DashboardController extends Controller
             ?? ($oldestOrderDate ? Carbon::parse($oldestOrderDate, $this->databaseTimezone())->timezone($this->dashboardTimezone()) : $chartEnd->copy()->subDays(29)))
             ->copy()
             ->startOfDay();
-        $aggregate = $chartStart->diffInDays($chartEnd) > 370
-            ? fn (Carbon $start, Carbon $end): array => $this->aggregateOrdersByMonth($start, $end, $user)
-            : fn (Carbon $start, Carbon $end): array => $this->aggregateOrdersByDay($start, $end, $user);
+        $aggregate = match (true) {
+            $this->isSingleDayRange($chartStart, $chartEnd) => fn (Carbon $start, Carbon $end): array => $this->aggregateOrdersByHour($start, $end, $user),
+            $chartStart->diffInDays($chartEnd) > 370 => fn (Carbon $start, Carbon $end): array => $this->aggregateOrdersByMonth($start, $end, $user),
+            default => fn (Carbon $start, Carbon $end): array => $this->aggregateOrdersByDay($start, $end, $user),
+        };
 
         return [
             'current' => $aggregate($chartStart, $chartEnd),
@@ -473,6 +525,39 @@ class DashboardController extends Controller
                 'label' => $date->format('M j'),
                 'value' => (float) ($rows[$date->format('Y-m-d')] ?? 0),
             ];
+        }
+
+        return $points;
+    }
+
+    /**
+     * @return array<int,array{label:string,value:float}>
+     */
+    private function aggregateOrdersByHour(Carbon $startDate, Carbon $endDate, ?User $user): array
+    {
+        $bucketExpression = $this->localHourExpression();
+        $query = Order::query()->selectRaw("{$bucketExpression} as bucket, COUNT(*) as total");
+        $this->excludeIncompleteOrders($query);
+        $this->applyOrderVisibility($query, $user);
+
+        $rows = $query
+            ->whereBetween(DB::raw('COALESCE(placed_at, created_at)'), [
+                $this->toDatabaseTimezone($startDate),
+                $this->toDatabaseTimezone($endDate),
+            ])
+            ->groupBy('bucket')
+            ->pluck('total', 'bucket');
+
+        $points = [];
+        $cursor = $startDate->copy()->startOfDay();
+        $last = $endDate->copy()->startOfDay()->addHours(23);
+
+        while ($cursor->lte($last)) {
+            $points[] = [
+                'label' => $cursor->format('g A'),
+                'value' => (float) ($rows[$cursor->format('Y-m-d H:00:00')] ?? 0),
+            ];
+            $cursor->addHour();
         }
 
         return $points;
@@ -542,6 +627,10 @@ class DashboardController extends Controller
             return $this->aggregateAdminActivityByMonth($chartStart, $chartEnd, $actorId);
         }
 
+        if ($this->isSingleDayRange($chartStart, $chartEnd)) {
+            return $this->aggregateAdminActivityByHour($chartStart, $chartEnd, $actorId);
+        }
+
         return $this->aggregateAdminActivityByDay($chartStart, $chartEnd, $actorId);
     }
 
@@ -569,6 +658,38 @@ class DashboardController extends Controller
                 'label' => $date->format('M j'),
                 'value' => (float) ($rows[$key] ?? 0),
             ];
+        }
+
+        return $points;
+    }
+
+    /**
+     * @return array<int,array{label:string,value:float}>
+     */
+    private function aggregateAdminActivityByHour(Carbon $startDate, Carbon $endDate, int $actorId): array
+    {
+        $bucketExpression = $this->localHourExpression('created_at');
+        $rows = AdminAuditLog::query()
+            ->selectRaw("{$bucketExpression} as bucket, COUNT(*) as total")
+            ->where('actor_id', $actorId)
+            ->whereBetween('created_at', [
+                $this->toDatabaseTimezone($startDate),
+                $this->toDatabaseTimezone($endDate),
+            ])
+            ->groupBy('bucket')
+            ->pluck('total', 'bucket');
+
+        $points = [];
+        $cursor = $startDate->copy()->startOfDay();
+        $last = $endDate->copy()->startOfDay()->addHours(23);
+
+        while ($cursor->lte($last)) {
+            $key = $cursor->format('Y-m-d H:00:00');
+            $points[] = [
+                'label' => $cursor->format('g A'),
+                'value' => (float) ($rows[$key] ?? 0),
+            ];
+            $cursor->addHour();
         }
 
         return $points;
@@ -611,6 +732,22 @@ class DashboardController extends Controller
      */
     private function emptyActivityPoints(Carbon $startDate, Carbon $endDate): array
     {
+        if ($this->isSingleDayRange($startDate, $endDate)) {
+            $points = [];
+            $cursor = $startDate->copy()->startOfDay();
+            $last = $endDate->copy()->startOfDay()->addHours(23);
+
+            while ($cursor->lte($last)) {
+                $points[] = [
+                    'label' => $cursor->format('g A'),
+                    'value' => 0.0,
+                ];
+                $cursor->addHour();
+            }
+
+            return $points;
+        }
+
         $points = [];
 
         foreach (CarbonPeriod::create($startDate->copy()->startOfDay(), '1 day', $endDate->copy()->startOfDay()) as $date) {
@@ -621,6 +758,13 @@ class DashboardController extends Controller
         }
 
         return $points;
+    }
+
+    private function isSingleDayRange(Carbon $startDate, Carbon $endDate): bool
+    {
+        return $startDate->copy()->timezone($this->dashboardTimezone())->isSameDay(
+            $endDate->copy()->timezone($this->dashboardTimezone()),
+        );
     }
 
     /**
@@ -752,6 +896,17 @@ class DashboardController extends Controller
         }
 
         return "DATE_FORMAT({$dateTimeExpression}, '%Y-%m')";
+    }
+
+    private function localHourExpression(string $column = 'COALESCE(placed_at, created_at)'): string
+    {
+        $dateTimeExpression = $this->localDateTimeExpression($column);
+
+        if (DB::connection()->getDriverName() === 'sqlite') {
+            return "strftime('%Y-%m-%d %H:00:00', {$dateTimeExpression})";
+        }
+
+        return "DATE_FORMAT({$dateTimeExpression}, '%Y-%m-%d %H:00:00')";
     }
 
     private function localDateTimeExpression(string $column = 'COALESCE(placed_at, created_at)'): string
