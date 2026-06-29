@@ -496,6 +496,8 @@ class ProductController extends Controller
         ]);
 
         $this->validateShortDescriptionLength($validated['short_description'] ?? null);
+        $validated['highlights'] = $this->normalizeStringList($validated['highlights'] ?? []);
+        $validated['ingredients'] = $this->normalizeStringList($validated['ingredients'] ?? []);
 
         if (! (bool) ($validated['hide_from_storefront'] ?? false)) {
             $validated['campaign_facebook_pixel_ids'] = [];
@@ -546,6 +548,19 @@ class ProductController extends Controller
                 'short_description' => ['The short description may not be greater than 500 characters.'],
             ]);
         }
+    }
+
+    protected function normalizeStringList(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        return collect($value)
+            ->map(fn ($item) => trim((string) $item))
+            ->filter()
+            ->values()
+            ->all();
     }
 
     protected function normalizeReviewSourceProductId(
