@@ -6,6 +6,7 @@ use App\Models\Order;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Throwable;
 
 class AiOrderCallingService
@@ -62,6 +63,64 @@ class AiOrderCallingService
         return hash_hmac('sha256', "{$order->id}|{$order->order_number}", config('app.key'));
     }
 
+    public function sendTestCall(array $payload): array
+    {
+        $config = $this->settings->getGroup('ai_calling');
+        $this->ensureConfigured($config);
+
+        $storeName = (string) ($config['store_name'] ?: 'Shirin Fashion');
+        $amount = (string) $payload['amount'];
+        $voicePayload = array_filter([
+            'phone_number' => $payload['phone_number'],
+            'caller_id' => $config['caller_id'] ?: null,
+            'customer_name' => $payload['customer_name'],
+            'amount' => $amount,
+            'store_name' => $storeName,
+            'agent_extension' => $config['agent_extension'] ?: null,
+            'custom_text' => $this->renderText(
+                (string) $config['custom_text'],
+                (string) $payload['customer_name'],
+                'TEST-CALL',
+                (string) $payload['product_names'],
+                $storeName,
+                $amount,
+            ),
+            'confirm_text' => $this->renderText(
+                (string) $config['confirm_text'],
+                (string) $payload['customer_name'],
+                'TEST-CALL',
+                (string) $payload['product_names'],
+                $storeName,
+                $amount,
+            ),
+            'cancel_text' => $this->renderText(
+                (string) $config['cancel_text'],
+                (string) $payload['customer_name'],
+                'TEST-CALL',
+                (string) $payload['product_names'],
+                $storeName,
+                $amount,
+            ),
+        ], fn ($value): bool => $value !== null && $value !== '');
+
+        $response = Http::withToken((string) $config['api_token'])
+            ->acceptJson()
+            ->timeout((int) ($config['request_timeout'] ?? 20))
+            ->post(rtrim((string) $config['api_base_url'], '/').'/calls/verify', $voicePayload);
+
+        if (! $response->successful()) {
+            throw new RuntimeException(
+                'AI calling provider rejected the test call request [HTTP '.$response->status().'].'
+            );
+        }
+
+        return [
+            'status' => $response->status(),
+            'provider_response' => $response->json() ?? $response->body(),
+            'payload' => $this->redactedPayload($voicePayload),
+        ];
+    }
+
     public function callbackUrl(Order $order, array $config): string
     {
         $baseUrl = rtrim((string) ($config['webhook_base_url'] ?: config('app.url')), '/');
@@ -116,6 +175,13 @@ class AiOrderCallingService
             && (! ($config['cod_only'] ?? true) || $order->payment_method === 'cod');
     }
 
+    private function ensureConfigured(array $config): void
+    {
+        if ((string) ($config['api_base_url'] ?? '') === '' || (string) ($config['api_token'] ?? '') === '') {
+            throw new RuntimeException('AI calling API base URL and API token are required.');
+        }
+    }
+
     private function payload(Order $order, array $config): array
     {
         $storeName = (string) ($config['store_name'] ?: 'Shirin Fashion');
@@ -137,10 +203,28 @@ class AiOrderCallingService
 
     private function render(string $template, Order $order, string $storeName, string $amount): string
     {
+        return $this->renderText(
+            $template,
+            (string) $order->customer_name,
+            (string) $order->order_number,
+            $this->productNames($order),
+            $storeName,
+            $amount,
+        );
+    }
+
+    private function renderText(
+        string $template,
+        string $customerName,
+        string $orderNumber,
+        string $productNames,
+        string $storeName,
+        string $amount,
+    ): string {
         return strtr($template, [
-            '{{customer_name}}' => (string) $order->customer_name,
-            '{{order_number}}' => (string) $order->order_number,
-            '{{product_names}}' => $this->productNames($order),
+            '{{customer_name}}' => $customerName,
+            '{{order_number}}' => $orderNumber,
+            '{{product_names}}' => $productNames,
             '{{amount}}' => $amount,
             '{{store_name}}' => $storeName,
         ]);

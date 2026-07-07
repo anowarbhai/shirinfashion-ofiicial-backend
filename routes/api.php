@@ -203,6 +203,7 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::patch('/settings/checkout-guard', [AdminCheckoutGuardSettingsController::class, 'update']);
         Route::get('/settings/ai-calling', [AdminAiCallingSettingsController::class, 'show']);
         Route::patch('/settings/ai-calling', [AdminAiCallingSettingsController::class, 'update']);
+        Route::post('/settings/ai-calling/test', [AdminAiCallingSettingsController::class, 'test']);
         Route::get('/settings/mail-setup', [AdminMailSetupSettingsController::class, 'show']);
         Route::patch('/settings/mail-setup', [AdminMailSetupSettingsController::class, 'update']);
         Route::post('/settings/mail-setup/test', [AdminMailSetupSettingsController::class, 'test']);

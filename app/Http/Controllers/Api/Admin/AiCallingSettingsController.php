@@ -3,14 +3,19 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\AiCallingTestRequest;
 use App\Http\Requests\Admin\AiCallingSettingsUpdateRequest;
 use App\Services\AdminSettingsService;
+use App\Services\AiOrderCallingService;
 use Illuminate\Http\JsonResponse;
+use RuntimeException;
 
 class AiCallingSettingsController extends Controller
 {
-    public function __construct(private readonly AdminSettingsService $settings)
-    {
+    public function __construct(
+        private readonly AdminSettingsService $settings,
+        private readonly AiOrderCallingService $calling,
+    ) {
     }
 
     public function show(): JsonResponse
@@ -28,5 +33,19 @@ class AiCallingSettingsController extends Controller
             'message' => 'AI calling settings saved successfully.',
             'data' => $data,
         ]);
+    }
+
+    public function test(AiCallingTestRequest $request): JsonResponse
+    {
+        try {
+            return response()->json([
+                'message' => 'AI test call request submitted successfully.',
+                'data' => $this->calling->sendTestCall($request->validated()),
+            ]);
+        } catch (RuntimeException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
     }
 }
