@@ -140,9 +140,29 @@ class AiOrderCallingService
         return strtr($template, [
             '{{customer_name}}' => (string) $order->customer_name,
             '{{order_number}}' => (string) $order->order_number,
+            '{{product_names}}' => $this->productNames($order),
             '{{amount}}' => $amount,
             '{{store_name}}' => $storeName,
         ]);
+    }
+
+    private function productNames(Order $order): string
+    {
+        $items = $order->relationLoaded('items') ? $order->items : $order->items()->get(['product_name', 'quantity']);
+
+        return $items
+            ->map(function ($item): string {
+                $name = trim((string) $item->product_name);
+                $quantity = (int) $item->quantity;
+
+                if ($name === '') {
+                    return '';
+                }
+
+                return $quantity > 1 ? "{$name} quantity {$quantity}" : $name;
+            })
+            ->filter()
+            ->join(', ');
     }
 
     private function redactedPayload(array $payload): array

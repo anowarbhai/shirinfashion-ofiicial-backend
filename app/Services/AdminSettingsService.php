@@ -143,7 +143,7 @@ class AdminSettingsService
                 'cod_only' => true,
                 'confirmed_status' => 'confirmed',
                 'rejected_status' => 'cancelled',
-                'custom_text' => 'Hello {{customer_name}}, this is an automated confirmation call from {{store_name}}. Your order amount is {{amount}}. To confirm your order, press 1. To cancel your order, press 2.',
+                'custom_text' => 'Hello {{customer_name}}, this is an automated confirmation call from {{store_name}}. You ordered {{product_names}}. Your order amount is {{amount}}. To confirm your order, press 1. To cancel your order, press 2.',
                 'confirm_text' => 'Your order has been confirmed successfully. Thank you.',
                 'cancel_text' => 'Your order has been cancelled. Thank you.',
                 'request_timeout' => 20,
