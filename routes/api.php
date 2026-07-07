@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\Admin\CategoryController as AdminCategoryController;
+use App\Http\Controllers\Api\Admin\AiCallingSettingsController as AdminAiCallingSettingsController;
 use App\Http\Controllers\Api\Admin\CheckoutGuardSettingsController as AdminCheckoutGuardSettingsController;
 use App\Http\Controllers\Api\Admin\CouponController as AdminCouponController;
 use App\Http\Controllers\Api\Admin\ContactMessageController as AdminContactMessageController;
@@ -41,6 +42,7 @@ use App\Http\Controllers\Api\Admin\ThemeHeaderController as AdminThemeHeaderCont
 use App\Http\Controllers\Api\Admin\ThemeMenuController as AdminThemeMenuController;
 use App\Http\Controllers\Api\Admin\ThemeTemplatesController as AdminThemeTemplatesController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AiCallingCallbackController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ContactMessageController;
 use App\Http\Controllers\Api\CouponController;
@@ -104,6 +106,7 @@ Route::post('/orders/incomplete', [OrderController::class, 'storeIncomplete'])->
 Route::post('/orders/send-otp', [OrderController::class, 'sendOtp'])->middleware('throttle:otp-send');
 Route::post('/orders/verify-otp', [OrderController::class, 'verifyOtp'])->middleware('throttle:otp-verify');
 Route::post('/orders/track', [OrderController::class, 'track'])->middleware('throttle:order-track');
+Route::match(['get', 'post'], '/ai-calling/order-confirmation/{order}', [AiCallingCallbackController::class, 'orderConfirmation'])->middleware('throttle:public-write');
 Route::match(['get', 'post'], '/payments/sslcommerz/success', [OrderController::class, 'sslCommerzSuccess'])->middleware('throttle:public-write');
 Route::match(['get', 'post'], '/payments/sslcommerz/fail', [OrderController::class, 'sslCommerzFail'])->middleware('throttle:public-write');
 Route::match(['get', 'post'], '/payments/sslcommerz/cancel', [OrderController::class, 'sslCommerzCancel'])->middleware('throttle:public-write');
@@ -198,6 +201,8 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::get('/settings/fraud-checker/bd-courier-plan', [AdminFraudCheckerSettingsController::class, 'bdCourierPlan']);
         Route::get('/settings/checkout-guard', [AdminCheckoutGuardSettingsController::class, 'show']);
         Route::patch('/settings/checkout-guard', [AdminCheckoutGuardSettingsController::class, 'update']);
+        Route::get('/settings/ai-calling', [AdminAiCallingSettingsController::class, 'show']);
+        Route::patch('/settings/ai-calling', [AdminAiCallingSettingsController::class, 'update']);
         Route::get('/settings/mail-setup', [AdminMailSetupSettingsController::class, 'show']);
         Route::patch('/settings/mail-setup', [AdminMailSetupSettingsController::class, 'update']);
         Route::post('/settings/mail-setup/test', [AdminMailSetupSettingsController::class, 'test']);

@@ -46,6 +46,10 @@ class Order extends Model
         'last_activity_at',
         'completed_at',
         'notes',
+        'ai_call_status',
+        'ai_call_response',
+        'ai_call_last_attempt_at',
+        'ai_call_callback_at',
     ];
 
     protected function casts(): array
@@ -60,6 +64,9 @@ class Order extends Model
             'placed_at' => 'datetime',
             'last_activity_at' => 'datetime',
             'completed_at' => 'datetime',
+            'ai_call_response' => 'array',
+            'ai_call_last_attempt_at' => 'datetime',
+            'ai_call_callback_at' => 'datetime',
         ];
     }
 

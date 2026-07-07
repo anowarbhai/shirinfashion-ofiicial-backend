@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Models\ProductVolumeDiscount;
 use App\Models\User;
 use App\Services\AdminSettingsService;
+use App\Services\AiOrderCallingService;
 use App\Services\CustomerNotificationService;
 use App\Services\CouponEligibilityService;
 use App\Services\FraudCheckerService;
@@ -37,6 +38,7 @@ class OrderController extends Controller
         protected SmsOtpService $smsOtpService,
         protected SmsGatewayService $smsGatewayService,
         protected AdminSettingsService $settings,
+        protected AiOrderCallingService $aiOrderCallingService,
         protected FraudCheckerService $fraudCheckerService,
         protected OrderAssignmentService $orderAssignmentService,
         protected CustomerNotificationService $customerNotificationService,
@@ -1496,6 +1498,8 @@ class OrderController extends Controller
             }
 
             $this->sendOrderNotification($order);
+            $this->aiOrderCallingService->triggerForOrder($order);
+
             if ($order->user_id) {
                 $this->customerNotificationService->sendToUser(
                     (int) $order->user_id,

@@ -11,6 +11,7 @@ class SensitiveSettings
     private const PREFIX = 'encrypted:v1:';
 
     private const GROUP_PATHS = [
+        'ai_calling' => ['api_token'],
         'fraud_checker' => ['api_key', 'onesoftcode_api_key', 'bd_courier_api_key'],
         'mail_setup' => ['smtp_password'],
         'mobile_push' => ['firebase_private_key'],
