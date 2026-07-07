@@ -44,4 +44,15 @@ class AiCallingCallbackController extends Controller
             ],
         ]);
     }
+
+    public function testCallback(Request $request): JsonResponse
+    {
+        return response()->json([
+            'message' => 'AI test call callback received.',
+            'data' => [
+                'received' => true,
+                'payload' => $request->all(),
+            ],
+        ]);
+    }
 }

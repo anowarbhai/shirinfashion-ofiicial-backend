@@ -107,6 +107,7 @@ Route::post('/orders/send-otp', [OrderController::class, 'sendOtp'])->middleware
 Route::post('/orders/verify-otp', [OrderController::class, 'verifyOtp'])->middleware('throttle:otp-verify');
 Route::post('/orders/track', [OrderController::class, 'track'])->middleware('throttle:order-track');
 Route::match(['get', 'post'], '/ai-calling/order-confirmation/{order}', [AiCallingCallbackController::class, 'orderConfirmation'])->middleware('throttle:public-write');
+Route::match(['get', 'post'], '/ai-calling/test-callback', [AiCallingCallbackController::class, 'testCallback'])->middleware('throttle:public-write');
 Route::match(['get', 'post'], '/payments/sslcommerz/success', [OrderController::class, 'sslCommerzSuccess'])->middleware('throttle:public-write');
 Route::match(['get', 'post'], '/payments/sslcommerz/fail', [OrderController::class, 'sslCommerzFail'])->middleware('throttle:public-write');
 Route::match(['get', 'post'], '/payments/sslcommerz/cancel', [OrderController::class, 'sslCommerzCancel'])->middleware('throttle:public-write');

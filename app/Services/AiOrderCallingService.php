@@ -101,6 +101,7 @@ class AiOrderCallingService
                 $storeName,
                 $amount,
             ),
+            'webhook_url' => $this->testCallbackUrl($config),
         ], fn ($value): bool => $value !== null && $value !== '');
 
         $response = Http::withToken((string) $config['api_token'])
@@ -109,8 +110,13 @@ class AiOrderCallingService
             ->post(rtrim((string) $config['api_base_url'], '/').'/calls/verify', $voicePayload);
 
         if (! $response->successful()) {
+            $providerMessage = $response->json('message')
+                ?: $response->json('error')
+                ?: $response->body();
+
             throw new RuntimeException(
-                'AI calling provider rejected the test call request [HTTP '.$response->status().'].'
+                'AI calling provider rejected the test call request [HTTP '.$response->status().']'
+                .($providerMessage ? ': '.Str::limit((string) $providerMessage, 240) : '.')
             );
         }
 
@@ -126,6 +132,13 @@ class AiOrderCallingService
         $baseUrl = rtrim((string) ($config['webhook_base_url'] ?: config('app.url')), '/');
 
         return "{$baseUrl}/api/ai-calling/order-confirmation/{$order->id}?token=".$this->callbackToken($order);
+    }
+
+    public function testCallbackUrl(array $config): string
+    {
+        $baseUrl = rtrim((string) ($config['webhook_base_url'] ?: config('app.url')), '/');
+
+        return "{$baseUrl}/api/ai-calling/test-callback";
     }
 
     public function applyCallback(Order $order, string $status, array $payload = []): string
