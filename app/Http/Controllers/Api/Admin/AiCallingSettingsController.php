@@ -8,7 +8,9 @@ use App\Http\Requests\Admin\AiCallingSettingsUpdateRequest;
 use App\Services\AdminSettingsService;
 use App\Services\AiOrderCallingService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
+use Throwable;
 
 class AiCallingSettingsController extends Controller
 {
@@ -45,6 +47,14 @@ class AiCallingSettingsController extends Controller
         } catch (RuntimeException $exception) {
             return response()->json([
                 'message' => $exception->getMessage(),
+            ], 422);
+        } catch (Throwable $exception) {
+            Log::error('AI calling test request failed.', [
+                'error' => $exception->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => 'AI calling test failed: '.$exception->getMessage(),
             ], 422);
         }
     }
