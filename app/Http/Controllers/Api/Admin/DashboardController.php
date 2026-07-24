@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AdminAuditLog;
 use App\Models\Coupon;
+use App\Models\MobileDeviceToken;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Review;
@@ -113,6 +114,7 @@ class DashboardController extends Controller
                     ->values(),
                 'pending_reviews' => Review::query()->where('status', 'pending')->count(),
                 'active_coupons' => Coupon::query()->where('is_active', true)->count(),
+                'mobile_app' => $this->buildMobileAppSummary(),
                 'charts' => [
                     'revenue' => $this->buildRevenueChart(
                         $startDate,
@@ -609,6 +611,50 @@ class DashboardController extends Controller
             'sales' => $this->formatCurrency((float) (clone $query)->sum('grand_total')),
             'orders' => number_format((clone $query)->count()),
         ];
+    }
+
+    /**
+     * @return array{installs:int,enabled_devices:int,active_today:int,active_7_days:int,active_30_days:int,latest_version:string,versions:array<int,array{version:string,count:int}>}
+     */
+    private function buildMobileAppSummary(): array
+    {
+        $enabledQuery = MobileDeviceToken::query()->where('enabled', true);
+
+        $versions = (clone $enabledQuery)
+            ->selectRaw("COALESCE(NULLIF(app_version, ''), 'Unknown') as version, COUNT(*) as total")
+            ->groupBy('version')
+            ->orderByDesc('total')
+            ->limit(5)
+            ->get()
+            ->map(fn ($row): array => [
+                'version' => (string) $row->version,
+                'count' => (int) $row->total,
+            ])
+            ->values()
+            ->all();
+
+        return [
+            'installs' => $this->countDistinctMobileDevices(MobileDeviceToken::query()),
+            'enabled_devices' => $this->countDistinctMobileDevices(
+                MobileDeviceToken::query()->where('enabled', true),
+            ),
+            'active_today' => $this->countDistinctMobileDevices(
+                MobileDeviceToken::query()->where('enabled', true)->where('last_seen_at', '>=', now()->subDay()),
+            ),
+            'active_7_days' => $this->countDistinctMobileDevices(
+                MobileDeviceToken::query()->where('enabled', true)->where('last_seen_at', '>=', now()->subDays(7)),
+            ),
+            'active_30_days' => $this->countDistinctMobileDevices(
+                MobileDeviceToken::query()->where('enabled', true)->where('last_seen_at', '>=', now()->subDays(30)),
+            ),
+            'latest_version' => $versions[0]['version'] ?? 'Unknown',
+            'versions' => $versions,
+        ];
+    }
+
+    private function countDistinctMobileDevices(Builder $query): int
+    {
+        return (int) $query->selectRaw("COUNT(DISTINCT COALESCE(NULLIF(device_id, ''), token)) as aggregate")->value('aggregate');
     }
 
     /**

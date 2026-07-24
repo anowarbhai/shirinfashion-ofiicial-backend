@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\OrderController as StorefrontOrderController;
 use App\Http\Controllers\Api\ProductPageSettingsController;
 use App\Http\Controllers\Api\WishlistController;
 use App\Http\Controllers\Api\Mobile\CartController;
+use App\Http\Controllers\Api\Mobile\AppStatusController;
 use App\Http\Controllers\Api\Mobile\CategoryController;
 use App\Http\Controllers\Api\Mobile\DeviceTokenController;
 use App\Http\Controllers\Api\Mobile\HealthController;
@@ -18,6 +19,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/health', HealthController::class);
 Route::get('/media', MediaController::class);
+Route::get('/app-status', AppStatusController::class)->middleware('throttle:mobile-sync');
 
 Route::get('/home', HomeController::class);
 Route::get('/settings/customer-auth', [CustomerAuthSettingsController::class, 'show']);
