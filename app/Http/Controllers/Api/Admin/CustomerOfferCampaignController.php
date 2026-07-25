@@ -65,6 +65,7 @@ class CustomerOfferCampaignController extends Controller
             'sms_message' => $payload['sms_message'] ?? null,
             'status' => 'queued',
             'matched_customers' => $this->recipientQuery(
+                (string) $payload['channel'],
                 (string) $payload['audience'],
                 (bool) ($payload['only_marketing_opt_in'] ?? true),
             )->count(),
@@ -78,18 +79,31 @@ class CustomerOfferCampaignController extends Controller
         ], 202);
     }
 
-    private function recipientQuery(string $audience, bool $onlyMarketingOptIn): Builder
+    private function recipientQuery(string $channel, string $audience, bool $onlyMarketingOptIn): Builder
     {
         return User::query()
             ->where('role', 'customer')
             ->where('status', 'active')
             ->when($onlyMarketingOptIn, fn (Builder $query) => $query->where('marketing_opt_in', true))
             ->when(
+                $channel === 'email',
+                fn (Builder $query) => $this->whereHasUsableEmail($query),
+            )
+            ->when(
+                $channel === 'sms',
+                fn (Builder $query) => $this->whereHasUsablePhone($query),
+            )
+            ->when(
+                $channel === 'both',
+                fn (Builder $query) => $query->where(function (Builder $deliveryQuery): void {
+                    $deliveryQuery
+                        ->where(fn (Builder $emailQuery) => $this->whereHasUsableEmail($emailQuery))
+                        ->orWhere(fn (Builder $phoneQuery) => $this->whereHasUsablePhone($phoneQuery));
+                }),
+            )
+            ->when(
                 $audience === 'email_customers',
-                fn (Builder $query) => $query
-                    ->whereNotNull('email')
-                    ->where('email', 'not like', '%@guest.%')
-                    ->where('email', '!=', ''),
+                fn (Builder $query) => $this->whereHasUsableEmail($query),
             )
             ->when(
                 $audience === 'mobile_only',
@@ -103,6 +117,21 @@ class CustomerOfferCampaignController extends Controller
                             ->orWhere('email', 'like', '%@guest.%');
                     }),
             );
+    }
+
+    private function whereHasUsableEmail(Builder $query): Builder
+    {
+        return $query
+            ->whereNotNull('email')
+            ->where('email', 'not like', '%@guest.%')
+            ->where('email', '!=', '');
+    }
+
+    private function whereHasUsablePhone(Builder $query): Builder
+    {
+        return $query
+            ->whereNotNull('phone')
+            ->where('phone', '!=', '');
     }
 
     private function serializeCampaign(?CustomerOfferCampaign $campaign): array

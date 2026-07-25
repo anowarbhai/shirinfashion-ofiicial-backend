@@ -80,11 +80,24 @@ class SendCustomerOfferCampaign implements ShouldQueue
             ->where('status', 'active')
             ->when($campaign->only_marketing_opt_in, fn (Builder $query) => $query->where('marketing_opt_in', true))
             ->when(
+                $campaign->channel === 'email',
+                fn (Builder $query) => $this->whereHasUsableEmail($query),
+            )
+            ->when(
+                $campaign->channel === 'sms',
+                fn (Builder $query) => $this->whereHasUsablePhone($query),
+            )
+            ->when(
+                $campaign->channel === 'both',
+                fn (Builder $query) => $query->where(function (Builder $deliveryQuery): void {
+                    $deliveryQuery
+                        ->where(fn (Builder $emailQuery) => $this->whereHasUsableEmail($emailQuery))
+                        ->orWhere(fn (Builder $phoneQuery) => $this->whereHasUsablePhone($phoneQuery));
+                }),
+            )
+            ->when(
                 $campaign->audience === 'email_customers',
-                fn (Builder $query) => $query
-                    ->whereNotNull('email')
-                    ->where('email', 'not like', '%@guest.%')
-                    ->where('email', '!=', ''),
+                fn (Builder $query) => $this->whereHasUsableEmail($query),
             )
             ->when(
                 $campaign->audience === 'mobile_only',
@@ -100,4 +113,18 @@ class SendCustomerOfferCampaign implements ShouldQueue
             );
     }
 
+    private function whereHasUsableEmail(Builder $query): Builder
+    {
+        return $query
+            ->whereNotNull('email')
+            ->where('email', 'not like', '%@guest.%')
+            ->where('email', '!=', '');
+    }
+
+    private function whereHasUsablePhone(Builder $query): Builder
+    {
+        return $query
+            ->whereNotNull('phone')
+            ->where('phone', '!=', '');
+    }
 }
