@@ -29,6 +29,21 @@ class CustomerController extends Controller
 
         return response()->json([
             'data' => $customers,
+            'summary' => [
+                'total' => User::query()->where('role', 'customer')->count(),
+                'subscribed' => User::query()
+                    ->where('role', 'customer')
+                    ->where('marketing_opt_in', true)
+                    ->count(),
+                'with_orders' => User::query()
+                    ->where('role', 'customer')
+                    ->whereHas('orders', fn ($query) => $query->where('status', '!=', 'incomplete'))
+                    ->count(),
+                'active_wishlist' => User::query()
+                    ->where('role', 'customer')
+                    ->whereHas('wishlistItems')
+                    ->count(),
+            ],
         ]);
     }
 

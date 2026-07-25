@@ -31,6 +31,33 @@ class CustomerOfferCampaignController extends Controller
         ]);
     }
 
+    public function preview(Request $request): JsonResponse
+    {
+        $payload = $request->validate([
+            'channel' => ['required', 'string', Rule::in(['email', 'sms', 'both'])],
+            'audience' => ['required', 'string', Rule::in(['all', 'email_customers', 'mobile_only'])],
+            'only_marketing_opt_in' => ['sometimes', 'boolean'],
+        ]);
+
+        $query = $this->recipientQuery(
+            (string) $payload['channel'],
+            (string) $payload['audience'],
+            (bool) ($payload['only_marketing_opt_in'] ?? true),
+        );
+
+        return response()->json([
+            'data' => [
+                'matched' => (clone $query)->count(),
+                'email' => (clone $query)
+                    ->where(fn (Builder $emailQuery) => $this->whereHasUsableEmail($emailQuery))
+                    ->count(),
+                'sms' => (clone $query)
+                    ->where(fn (Builder $phoneQuery) => $this->whereHasUsablePhone($phoneQuery))
+                    ->count(),
+            ],
+        ]);
+    }
+
     public function send(Request $request): JsonResponse
     {
         $payload = $request->validate([

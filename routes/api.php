@@ -166,6 +166,7 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::patch('/customers/{customer}', [AdminCustomerController::class, 'update']);
         Route::delete('/customers/{customer}', [AdminCustomerController::class, 'destroy']);
         Route::get('/customer-offer-campaigns', [AdminCustomerOfferCampaignController::class, 'index']);
+        Route::post('/customer-offer-campaigns/preview', [AdminCustomerOfferCampaignController::class, 'preview']);
         Route::get('/customer-offer-campaigns/{customerOfferCampaign}', [AdminCustomerOfferCampaignController::class, 'show']);
         Route::post('/customer-offer-campaigns/send', [AdminCustomerOfferCampaignController::class, 'send']);
         Route::get('/customer-email-templates', [AdminCustomerEmailTemplateController::class, 'index']);
