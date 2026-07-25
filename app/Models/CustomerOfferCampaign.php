@@ -13,6 +13,7 @@ class CustomerOfferCampaign extends Model
         'audience',
         'only_marketing_opt_in',
         'subject',
+        'email_template',
         'message',
         'email_message',
         'sms_message',

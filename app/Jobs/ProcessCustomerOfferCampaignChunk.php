@@ -124,16 +124,51 @@ class ProcessCustomerOfferCampaignChunk implements ShouldQueue
 
     private function sendEmail(CustomerOfferCampaign $campaign, User $customer): void
     {
-        $html = '<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.7;color:#111827">'
-            .nl2br(e($this->renderMessage($campaign->email_message ?: $campaign->message, $customer)))
-            .'<p style="margin-top:24px;color:#64748b">Shirin Fashion</p>'
-            .'</div>';
+        $html = $this->renderEmailHtml($campaign, $customer);
 
         Mail::html($html, function ($message) use ($campaign, $customer): void {
             $message
                 ->to($customer->email)
                 ->subject($this->renderMessage((string) $campaign->subject, $customer));
         });
+    }
+
+    private function renderEmailHtml(CustomerOfferCampaign $campaign, User $customer): string
+    {
+        $subject = e($this->renderMessage((string) $campaign->subject, $customer));
+        $body = nl2br(e($this->renderMessage($campaign->email_message ?: $campaign->message, $customer)));
+        $template = $campaign->email_template ?: 'classic';
+
+        if ($template === 'promo') {
+            return '<div style="margin:0;padding:32px;background:#fff1f2;font-family:Arial,sans-serif;color:#111827">'
+                .'<div style="max-width:620px;margin:0 auto;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #ffe4e6">'
+                .'<div style="padding:28px;background:#e11d48;color:#ffffff">'
+                .'<div style="font-size:13px;letter-spacing:2px;text-transform:uppercase;font-weight:700">Shirin Fashion</div>'
+                .'<h1 style="margin:10px 0 0;font-size:26px;line-height:1.25">'.$subject.'</h1>'
+                .'</div>'
+                .'<div style="padding:28px;font-size:15px;line-height:1.8">'.$body
+                .'<div style="margin-top:26px"><a href="https://shirinfashion.com.bd" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">Shop Now</a></div>'
+                .'</div>'
+                .'</div></div>';
+        }
+
+        if ($template === 'minimal') {
+            return '<div style="margin:0;padding:28px;background:#f8fafc;font-family:Arial,sans-serif;color:#111827">'
+                .'<div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;padding:28px">'
+                .'<h1 style="margin:0 0 18px;font-size:22px;line-height:1.3">'.$subject.'</h1>'
+                .'<div style="font-size:15px;line-height:1.8">'.$body.'</div>'
+                .'<p style="margin-top:28px;color:#64748b;font-size:13px">Shirin Fashion</p>'
+                .'</div></div>';
+        }
+
+        return '<div style="margin:0;padding:32px;background:#eef2ff;font-family:Arial,sans-serif;color:#111827">'
+            .'<div style="max-width:620px;margin:0 auto;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #dbe4f0">'
+            .'<div style="padding:20px 28px;border-bottom:1px solid #e2e8f0;color:#e11d48;font-size:18px;font-weight:800;letter-spacing:1px">SHIRIN FASHION</div>'
+            .'<div style="padding:28px">'
+            .'<h1 style="margin:0 0 18px;font-size:24px;line-height:1.3">'.$subject.'</h1>'
+            .'<div style="font-size:15px;line-height:1.8">'.$body.'</div>'
+            .'<div style="margin-top:26px"><a href="https://shirinfashion.com.bd" style="display:inline-block;background:#e11d48;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">Visit Store</a></div>'
+            .'</div></div></div>';
     }
 
     private function renderMessage(string $message, User $customer): string
