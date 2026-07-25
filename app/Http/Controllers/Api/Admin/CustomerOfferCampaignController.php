@@ -3,25 +3,32 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\SendCustomerOfferCampaign;
+use App\Models\CustomerOfferCampaign;
 use App\Models\User;
-use App\Services\MailSetupService;
-use App\Services\SmsGatewayService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\HtmlString;
 use Illuminate\Validation\Rule;
-use RuntimeException;
-use Throwable;
 
 class CustomerOfferCampaignController extends Controller
 {
-    public function __construct(
-        private readonly MailSetupService $mailSetup,
-        private readonly SmsGatewayService $smsGateway,
-    ) {
+    public function index(): JsonResponse
+    {
+        $campaigns = CustomerOfferCampaign::query()
+            ->latest()
+            ->limit(10)
+            ->get()
+            ->map(fn (CustomerOfferCampaign $campaign): array => $this->serializeCampaign($campaign));
+
+        return response()->json(['data' => $campaigns]);
+    }
+
+    public function show(CustomerOfferCampaign $customerOfferCampaign): JsonResponse
+    {
+        return response()->json([
+            'data' => $this->serializeCampaign($customerOfferCampaign->fresh()),
+        ]);
     }
 
     public function send(Request $request): JsonResponse
@@ -34,80 +41,26 @@ class CustomerOfferCampaignController extends Controller
             'message' => ['required', 'string', 'min:5', 'max:1000'],
         ]);
 
-        $channel = (string) $payload['channel'];
-        $sendEmail = in_array($channel, ['email', 'both'], true);
-        $sendSms = in_array($channel, ['sms', 'both'], true);
+        $campaign = CustomerOfferCampaign::query()->create([
+            'created_by' => $request->user()?->id,
+            'channel' => $payload['channel'],
+            'audience' => $payload['audience'],
+            'only_marketing_opt_in' => (bool) ($payload['only_marketing_opt_in'] ?? true),
+            'subject' => $payload['subject'] ?? null,
+            'message' => $payload['message'],
+            'status' => 'queued',
+            'matched_customers' => $this->recipientQuery(
+                (string) $payload['audience'],
+                (bool) ($payload['only_marketing_opt_in'] ?? true),
+            )->count(),
+        ]);
 
-        try {
-            if ($sendEmail) {
-                $this->mailSetup->configureMailer();
-            }
-        } catch (RuntimeException $exception) {
-            return response()->json(['message' => $exception->getMessage()], 422);
-        }
-
-        $result = [
-            'matched_customers' => 0,
-            'email_sent' => 0,
-            'email_failed' => 0,
-            'sms_sent' => 0,
-            'sms_failed' => 0,
-            'skipped' => 0,
-        ];
-
-        $this->recipientQuery(
-            (string) $payload['audience'],
-            (bool) ($payload['only_marketing_opt_in'] ?? true),
-        )
-            ->orderBy('id')
-            ->chunkById(100, function ($customers) use ($payload, $sendEmail, $sendSms, &$result): void {
-                foreach ($customers as $customer) {
-                    $result['matched_customers']++;
-                    $sentSomething = false;
-
-                    if ($sendEmail && $this->hasUsableEmail($customer)) {
-                        try {
-                            $this->sendEmail($customer, (string) $payload['subject'], (string) $payload['message']);
-                            $result['email_sent']++;
-                            $sentSomething = true;
-                        } catch (Throwable $exception) {
-                            $result['email_failed']++;
-                            Log::warning('Customer offer email failed.', [
-                                'customer_id' => $customer->id,
-                                'email' => $customer->email,
-                                'error' => $exception->getMessage(),
-                            ]);
-                        }
-                    }
-
-                    if ($sendSms && $this->hasUsablePhone($customer)) {
-                        try {
-                            $this->smsGateway->sendMessage(
-                                (string) $customer->phone,
-                                $this->renderMessage((string) $payload['message'], $customer),
-                            );
-                            $result['sms_sent']++;
-                            $sentSomething = true;
-                        } catch (Throwable $exception) {
-                            $result['sms_failed']++;
-                            Log::warning('Customer offer SMS failed.', [
-                                'customer_id' => $customer->id,
-                                'phone' => $customer->phone,
-                                'error' => $exception->getMessage(),
-                            ]);
-                        }
-                    }
-
-                    if (! $sentSomething) {
-                        $result['skipped']++;
-                    }
-                }
-            });
+        SendCustomerOfferCampaign::dispatch($campaign->id);
 
         return response()->json([
-            'message' => 'Customer offer campaign processed.',
-            'data' => $result,
-        ]);
+            'message' => 'Customer offer campaign queued.',
+            'data' => $this->serializeCampaign($campaign),
+        ], 202);
     }
 
     private function recipientQuery(string $audience, bool $onlyMarketingOptIn): Builder
@@ -137,43 +90,35 @@ class CustomerOfferCampaignController extends Controller
             );
     }
 
-    private function sendEmail(User $customer, string $subject, string $message): void
+    private function serializeCampaign(?CustomerOfferCampaign $campaign): array
     {
-        $renderedMessage = $this->renderMessage($message, $customer);
-        $html = new HtmlString(
-            '<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.7;color:#111827">'
-            .nl2br(e($renderedMessage))
-            .'<p style="margin-top:24px;color:#64748b">Shirin Fashion</p>'
-            .'</div>'
-        );
+        if (! $campaign) {
+            return [];
+        }
 
-        Mail::html((string) $html, function ($mail) use ($customer, $subject): void {
-            $mail
-                ->to((string) $customer->email, (string) $customer->name)
-                ->subject($this->renderMessage($subject, $customer));
-        });
-    }
+        $matched = (int) $campaign->matched_customers;
+        $processed = (int) $campaign->processed_customers;
 
-    private function renderMessage(string $message, User $customer): string
-    {
-        return strtr($message, [
-            '{{name}}' => (string) $customer->name,
-            '{{customer_name}}' => (string) $customer->name,
-            '{{phone}}' => (string) $customer->phone,
-            '{{email}}' => (string) $customer->email,
-            '{{store_name}}' => 'Shirin Fashion',
-        ]);
-    }
-
-    private function hasUsableEmail(User $customer): bool
-    {
-        $email = trim((string) $customer->email);
-
-        return $email !== '' && ! str_contains($email, '@guest.');
-    }
-
-    private function hasUsablePhone(User $customer): bool
-    {
-        return trim((string) $customer->phone) !== '';
+        return [
+            'id' => $campaign->id,
+            'channel' => $campaign->channel,
+            'audience' => $campaign->audience,
+            'only_marketing_opt_in' => $campaign->only_marketing_opt_in,
+            'subject' => $campaign->subject,
+            'message' => $campaign->message,
+            'status' => $campaign->status,
+            'matched_customers' => $matched,
+            'processed_customers' => $processed,
+            'progress' => $matched > 0 ? round(($processed / $matched) * 100, 1) : 0,
+            'email_sent' => (int) $campaign->email_sent,
+            'email_failed' => (int) $campaign->email_failed,
+            'sms_sent' => (int) $campaign->sms_sent,
+            'sms_failed' => (int) $campaign->sms_failed,
+            'skipped' => (int) $campaign->skipped,
+            'last_error' => $campaign->last_error,
+            'started_at' => $campaign->started_at?->toIso8601String(),
+            'finished_at' => $campaign->finished_at?->toIso8601String(),
+            'created_at' => $campaign->created_at?->toIso8601String(),
+        ];
     }
 }
