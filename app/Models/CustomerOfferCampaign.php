@@ -14,6 +14,8 @@ class CustomerOfferCampaign extends Model
         'only_marketing_opt_in',
         'subject',
         'message',
+        'email_message',
+        'sms_message',
         'status',
         'matched_customers',
         'processed_customers',

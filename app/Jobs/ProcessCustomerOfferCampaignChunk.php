@@ -87,7 +87,7 @@ class ProcessCustomerOfferCampaignChunk implements ShouldQueue
                         try {
                             $smsGateway->sendMessage(
                                 $customer->phone,
-                                $this->renderMessage($campaign->message, $customer),
+                                $this->renderMessage($campaign->sms_message ?: $campaign->message, $customer),
                             );
                             $counts['sms_sent']++;
                             $sentSomething = true;
@@ -125,7 +125,7 @@ class ProcessCustomerOfferCampaignChunk implements ShouldQueue
     private function sendEmail(CustomerOfferCampaign $campaign, User $customer): void
     {
         $html = '<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.7;color:#111827">'
-            .nl2br(e($this->renderMessage($campaign->message, $customer)))
+            .nl2br(e($this->renderMessage($campaign->email_message ?: $campaign->message, $customer)))
             .'<p style="margin-top:24px;color:#64748b">Shirin Fashion</p>'
             .'</div>';
 

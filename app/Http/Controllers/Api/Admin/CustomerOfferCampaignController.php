@@ -38,8 +38,17 @@ class CustomerOfferCampaignController extends Controller
             'audience' => ['required', 'string', Rule::in(['all', 'email_customers', 'mobile_only'])],
             'only_marketing_opt_in' => ['sometimes', 'boolean'],
             'subject' => ['nullable', 'required_if:channel,email,both', 'string', 'max:150'],
-            'message' => ['required', 'string', 'min:5', 'max:1000'],
+            'message' => ['nullable', 'string', 'min:5', 'max:1000'],
+            'email_message' => ['nullable', 'required_if:channel,email,both', 'string', 'min:5', 'max:2000'],
+            'sms_message' => ['nullable', 'required_if:channel,sms,both', 'string', 'min:5', 'max:500'],
         ]);
+
+        $fallbackMessage = (string) (
+            $payload['message']
+            ?? $payload['email_message']
+            ?? $payload['sms_message']
+            ?? ''
+        );
 
         $campaign = CustomerOfferCampaign::query()->create([
             'created_by' => $request->user()?->id,
@@ -47,7 +56,9 @@ class CustomerOfferCampaignController extends Controller
             'audience' => $payload['audience'],
             'only_marketing_opt_in' => (bool) ($payload['only_marketing_opt_in'] ?? true),
             'subject' => $payload['subject'] ?? null,
-            'message' => $payload['message'],
+            'message' => $fallbackMessage,
+            'email_message' => $payload['email_message'] ?? null,
+            'sms_message' => $payload['sms_message'] ?? null,
             'status' => 'queued',
             'matched_customers' => $this->recipientQuery(
                 (string) $payload['audience'],
@@ -106,6 +117,8 @@ class CustomerOfferCampaignController extends Controller
             'only_marketing_opt_in' => $campaign->only_marketing_opt_in,
             'subject' => $campaign->subject,
             'message' => $campaign->message,
+            'email_message' => $campaign->email_message,
+            'sms_message' => $campaign->sms_message,
             'status' => $campaign->status,
             'matched_customers' => $matched,
             'processed_customers' => $processed,
