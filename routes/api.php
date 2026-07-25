@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\Admin\AiCallingSettingsController as AdminAiCalling
 use App\Http\Controllers\Api\Admin\CheckoutGuardSettingsController as AdminCheckoutGuardSettingsController;
 use App\Http\Controllers\Api\Admin\CouponController as AdminCouponController;
 use App\Http\Controllers\Api\Admin\ContactMessageController as AdminContactMessageController;
+use App\Http\Controllers\Api\Admin\CustomerOfferCampaignController as AdminCustomerOfferCampaignController;
 use App\Http\Controllers\Api\Admin\CustomerController as AdminCustomerController;
 use App\Http\Controllers\Api\Admin\CustomerAuthSettingsController as AdminCustomerAuthSettingsController;
 use App\Http\Controllers\Api\Admin\DatabaseBackupController as AdminDatabaseBackupController;
@@ -163,6 +164,7 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::get('/customers/{customer}', [AdminCustomerController::class, 'show']);
         Route::patch('/customers/{customer}', [AdminCustomerController::class, 'update']);
         Route::delete('/customers/{customer}', [AdminCustomerController::class, 'destroy']);
+        Route::post('/customer-offer-campaigns/send', [AdminCustomerOfferCampaignController::class, 'send']);
         Route::apiResource('team-members', AdminTeamMemberController::class);
         Route::get('/audit-logs', [AdminAuditLogController::class, 'index']);
         Route::get('/contact-messages', [AdminContactMessageController::class, 'index']);
