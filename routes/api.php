@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\Admin\AiCallingSettingsController as AdminAiCalling
 use App\Http\Controllers\Api\Admin\CheckoutGuardSettingsController as AdminCheckoutGuardSettingsController;
 use App\Http\Controllers\Api\Admin\CouponController as AdminCouponController;
 use App\Http\Controllers\Api\Admin\ContactMessageController as AdminContactMessageController;
+use App\Http\Controllers\Api\Admin\CustomerEmailTemplateController as AdminCustomerEmailTemplateController;
 use App\Http\Controllers\Api\Admin\CustomerOfferCampaignController as AdminCustomerOfferCampaignController;
 use App\Http\Controllers\Api\Admin\CustomerController as AdminCustomerController;
 use App\Http\Controllers\Api\Admin\CustomerAuthSettingsController as AdminCustomerAuthSettingsController;
@@ -167,6 +168,10 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::get('/customer-offer-campaigns', [AdminCustomerOfferCampaignController::class, 'index']);
         Route::get('/customer-offer-campaigns/{customerOfferCampaign}', [AdminCustomerOfferCampaignController::class, 'show']);
         Route::post('/customer-offer-campaigns/send', [AdminCustomerOfferCampaignController::class, 'send']);
+        Route::get('/customer-email-templates', [AdminCustomerEmailTemplateController::class, 'index']);
+        Route::post('/customer-email-templates', [AdminCustomerEmailTemplateController::class, 'store']);
+        Route::patch('/customer-email-templates/{customerEmailTemplate}', [AdminCustomerEmailTemplateController::class, 'update']);
+        Route::delete('/customer-email-templates/{customerEmailTemplate}', [AdminCustomerEmailTemplateController::class, 'destroy']);
         Route::apiResource('team-members', AdminTeamMemberController::class);
         Route::get('/audit-logs', [AdminAuditLogController::class, 'index']);
         Route::get('/contact-messages', [AdminContactMessageController::class, 'index']);

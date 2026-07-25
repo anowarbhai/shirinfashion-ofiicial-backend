@@ -41,6 +41,7 @@ class CustomerOfferCampaignController extends Controller
             'email_template' => ['nullable', 'string', Rule::in(['classic', 'promo', 'minimal'])],
             'message' => ['nullable', 'string', 'min:5', 'max:1000'],
             'email_message' => ['nullable', 'required_if:channel,email,both', 'string', 'min:5', 'max:2000'],
+            'email_html' => ['nullable', 'string', 'max:20000'],
             'sms_message' => ['nullable', 'required_if:channel,sms,both', 'string', 'min:5', 'max:500'],
         ]);
 
@@ -60,6 +61,7 @@ class CustomerOfferCampaignController extends Controller
             'email_template' => $payload['email_template'] ?? 'classic',
             'message' => $fallbackMessage,
             'email_message' => $payload['email_message'] ?? null,
+            'email_html' => isset($payload['email_html']) ? $this->sanitizeEmailHtml((string) $payload['email_html']) : null,
             'sms_message' => $payload['sms_message'] ?? null,
             'status' => 'queued',
             'matched_customers' => $this->recipientQuery(
@@ -121,6 +123,7 @@ class CustomerOfferCampaignController extends Controller
             'email_template' => $campaign->email_template,
             'message' => $campaign->message,
             'email_message' => $campaign->email_message,
+            'email_html' => $campaign->email_html,
             'sms_message' => $campaign->sms_message,
             'status' => $campaign->status,
             'matched_customers' => $matched,
@@ -136,5 +139,14 @@ class CustomerOfferCampaignController extends Controller
             'finished_at' => $campaign->finished_at?->toIso8601String(),
             'created_at' => $campaign->created_at?->toIso8601String(),
         ];
+    }
+
+    private function sanitizeEmailHtml(string $html): string
+    {
+        $html = preg_replace('/<\s*(script|style|iframe|object|embed|form|input|button)[^>]*>.*?<\s*\/\s*\1\s*>/is', '', $html) ?? '';
+        $html = preg_replace('/\son[a-z]+\s*=\s*(".*?"|\'.*?\'|[^\s>]+)/i', '', $html) ?? '';
+        $html = preg_replace('/(href|src)\s*=\s*([\'"])\s*javascript:.*?\2/i', '$1="#"', $html) ?? '';
+
+        return trim(strip_tags($html, '<p><br><strong><b><em><i><u><small><h1><h2><h3><ul><ol><li><a><img><div><span><blockquote><hr>'));
     }
 }

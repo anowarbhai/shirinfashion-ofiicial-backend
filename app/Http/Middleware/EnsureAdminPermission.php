@@ -59,6 +59,7 @@ class EnsureAdminPermission
             str_starts_with($adminPath, 'orders') && $method === 'POST' => ['orders.create', 'orders.manage'],
             str_starts_with($adminPath, 'orders') && $method === 'DELETE' => ['orders.delete', 'orders.manage'],
             str_starts_with($adminPath, 'orders') => ['orders.edit', 'orders.manage'],
+            str_starts_with($adminPath, 'customer-email-templates') => 'customers.manage',
             str_starts_with($adminPath, 'customer-offer-campaigns') => 'customers.manage',
             str_starts_with($adminPath, 'customers') => $isRead ? 'customers.view' : 'customers.manage',
             str_starts_with($adminPath, 'product-page-settings'),

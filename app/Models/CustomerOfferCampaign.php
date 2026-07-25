@@ -16,6 +16,7 @@ class CustomerOfferCampaign extends Model
         'email_template',
         'message',
         'email_message',
+        'email_html',
         'sms_message',
         'status',
         'matched_customers',

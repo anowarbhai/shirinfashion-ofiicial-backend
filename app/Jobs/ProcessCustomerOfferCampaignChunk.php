@@ -136,7 +136,9 @@ class ProcessCustomerOfferCampaignChunk implements ShouldQueue
     private function renderEmailHtml(CustomerOfferCampaign $campaign, User $customer): string
     {
         $subject = e($this->renderMessage((string) $campaign->subject, $customer));
-        $body = nl2br(e($this->renderMessage($campaign->email_message ?: $campaign->message, $customer)));
+        $body = $campaign->email_html
+            ? $this->renderMessage((string) $campaign->email_html, $customer)
+            : nl2br(e($this->renderMessage($campaign->email_message ?: $campaign->message, $customer)));
         $template = $campaign->email_template ?: 'classic';
 
         if ($template === 'promo') {
