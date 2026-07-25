@@ -137,16 +137,17 @@ class ProcessCustomerOfferCampaignChunk implements ShouldQueue
     {
         $subject = e($this->renderMessage((string) $campaign->subject, $customer));
         $body = $campaign->email_html
-            ? $this->renderMessage((string) $campaign->email_html, $customer)
+            ? $this->normalizeEmailHtmlUrls($this->renderMessage((string) $campaign->email_html, $customer))
             : nl2br(e($this->renderMessage($campaign->email_message ?: $campaign->message, $customer)));
         $template = $campaign->email_template ?: 'classic';
+        $subjectHeading = $campaign->email_html ? '' : '<h1 style="margin:0 0 18px;font-size:24px;line-height:1.3">'.$subject.'</h1>';
 
         if ($template === 'promo') {
             return '<div style="margin:0;padding:32px;background:#fff1f2;font-family:Arial,sans-serif;color:#111827">'
                 .'<div style="max-width:620px;margin:0 auto;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #ffe4e6">'
                 .'<div style="padding:28px;background:#e11d48;color:#ffffff">'
                 .'<div style="font-size:13px;letter-spacing:2px;text-transform:uppercase;font-weight:700">Shirin Fashion</div>'
-                .'<h1 style="margin:10px 0 0;font-size:26px;line-height:1.25">'.$subject.'</h1>'
+                .($campaign->email_html ? '' : '<h1 style="margin:10px 0 0;font-size:26px;line-height:1.25">'.$subject.'</h1>')
                 .'</div>'
                 .'<div style="padding:28px;font-size:15px;line-height:1.8">'.$body
                 .'<div style="margin-top:26px"><a href="https://shirinfashion.com.bd" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">Shop Now</a></div>'
@@ -157,7 +158,7 @@ class ProcessCustomerOfferCampaignChunk implements ShouldQueue
         if ($template === 'minimal') {
             return '<div style="margin:0;padding:28px;background:#f8fafc;font-family:Arial,sans-serif;color:#111827">'
                 .'<div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;padding:28px">'
-                .'<h1 style="margin:0 0 18px;font-size:22px;line-height:1.3">'.$subject.'</h1>'
+                .($campaign->email_html ? '' : '<h1 style="margin:0 0 18px;font-size:22px;line-height:1.3">'.$subject.'</h1>')
                 .'<div style="font-size:15px;line-height:1.8">'.$body.'</div>'
                 .'<p style="margin-top:28px;color:#64748b;font-size:13px">Shirin Fashion</p>'
                 .'</div></div>';
@@ -167,10 +168,42 @@ class ProcessCustomerOfferCampaignChunk implements ShouldQueue
             .'<div style="max-width:620px;margin:0 auto;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #dbe4f0">'
             .'<div style="padding:20px 28px;border-bottom:1px solid #e2e8f0;color:#e11d48;font-size:18px;font-weight:800;letter-spacing:1px">SHIRIN FASHION</div>'
             .'<div style="padding:28px">'
-            .'<h1 style="margin:0 0 18px;font-size:24px;line-height:1.3">'.$subject.'</h1>'
+            .$subjectHeading
             .'<div style="font-size:15px;line-height:1.8">'.$body.'</div>'
             .'<div style="margin-top:26px"><a href="https://shirinfashion.com.bd" style="display:inline-block;background:#e11d48;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">Visit Store</a></div>'
             .'</div></div></div>';
+    }
+
+    private function normalizeEmailHtmlUrls(string $html): string
+    {
+        return preg_replace_callback(
+            '/\s(src|href)=([\'"])(.*?)\2/i',
+            function (array $matches): string {
+                return ' '.$matches[1].'='.$matches[2].e($this->absoluteEmailUrl((string) $matches[3]), false).$matches[2];
+            },
+            $html,
+        ) ?? $html;
+    }
+
+    private function absoluteEmailUrl(string $url): string
+    {
+        $url = trim($url);
+
+        if ($url === '' || str_starts_with($url, 'data:') || preg_match('#^https?://#i', $url) === 1) {
+            return $url;
+        }
+
+        if (str_starts_with($url, '//')) {
+            return 'https:'.$url;
+        }
+
+        if (str_starts_with($url, '/storage/')) {
+            return rtrim((string) config('filesystems.disks.public.url'), '/').'/'.ltrim(substr($url, 9), '/');
+        }
+
+        $frontendUrl = rtrim((string) env('FRONTEND_URL', config('app.url')), '/');
+
+        return $frontendUrl.'/'.ltrim($url, '/');
     }
 
     private function renderMessage(string $message, User $customer): string
