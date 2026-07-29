@@ -15,7 +15,7 @@ class ThemeHeaderUpdateRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'active_style' => ['required', Rule::in(['style-1', 'style-2', 'style-3', 'style-4'])],
+            'active_style' => ['required', Rule::in(['style-1', 'style-2', 'style-3', 'style-4', 'style-5'])],
             'sticky' => ['required', 'boolean'],
             'sticky_on_banner' => ['required', 'boolean'],
             'show_top_bar' => ['required', 'boolean'],

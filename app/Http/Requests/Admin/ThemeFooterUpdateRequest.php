@@ -15,7 +15,7 @@ class ThemeFooterUpdateRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'active_style' => ['required', Rule::in(['style-1', 'style-2', 'style-3'])],
+            'active_style' => ['required', Rule::in(['style-1', 'style-2', 'style-3', 'style-4'])],
             'logo_url' => ['nullable', 'string', 'max:2048'],
             'about_text' => ['nullable', 'string', 'max:5000'],
             'copyright_text' => ['required', 'string', 'max:255'],
