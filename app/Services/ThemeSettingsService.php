@@ -227,6 +227,7 @@ class ThemeSettingsService
                 'text_color' => '#eadfd7',
                 'columns' => 4,
                 'show_social_links' => true,
+                'show_mobile_app' => true,
             ],
             'templates' => [
                 'home' => 'classic',

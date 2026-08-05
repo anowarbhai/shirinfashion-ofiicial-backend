@@ -25,6 +25,7 @@ class ThemeFooterUpdateRequest extends FormRequest
             'text_color' => ['required', 'string', 'max:20'],
             'columns' => ['required', 'integer', 'min:1', 'max:6'],
             'show_social_links' => ['required', 'boolean'],
+            'show_mobile_app' => ['nullable', 'boolean'],
         ];
     }
 }
