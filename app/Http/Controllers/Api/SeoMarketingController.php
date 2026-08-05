@@ -15,11 +15,11 @@ class SeoMarketingController extends Controller
             ->value('value');
 
         $settings = array_merge([
-            'home_title' => 'Shirin Fashion | Premium Cosmetics & Beauty',
-            'meta_description' => 'Discover premium cosmetics and beauty products at Shirin Fashion. Shop skincare, makeup, fragrance and more.',
-            'meta_keywords' => 'cosmetics, beauty, skincare, makeup, fragrance, fashion',
-            'canonical_url' => 'https://shirinfashion.com.bd',
-            'robots_content' => "User-agent: *\nAllow: /\nSitemap: https://shirinfashion.com.bd/sitemap.xml",
+            'home_title' => 'Shirin Fashion BD | Exclusive Fashion & Lifestyle Store',
+            'meta_description' => 'Discover premium saree, three-piece, cosmetics, and lifestyle products at Shirin Fashion BD. Shop skincare, makeup, apparel and more.',
+            'meta_keywords' => 'shirin fashion, fashion, saree, three piece, cosmetics, beauty, bdcaliph, online shopping bangladesh',
+            'canonical_url' => 'https://bdcaliph.com',
+            'robots_content' => "User-agent: *\nAllow: /\nSitemap: https://bdcaliph.com/sitemap.xml",
         ], is_array($stored) ? $stored : []);
 
         return response()->json([
