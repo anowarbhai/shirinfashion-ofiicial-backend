@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Controllers\Api\Admin\CategoryController as AdminCategoryController;
+use App\Http\Controllers\Api\Admin\BlogCategoryController as AdminBlogCategoryController;
+use App\Http\Controllers\Api\Admin\BlogPostController as AdminBlogPostController;
+use App\Http\Controllers\Api\PublicBlogController;
 use App\Http\Controllers\Api\Admin\AiCallingSettingsController as AdminAiCallingSettingsController;
 use App\Http\Controllers\Api\Admin\CheckoutGuardSettingsController as AdminCheckoutGuardSettingsController;
 use App\Http\Controllers\Api\Admin\CouponController as AdminCouponController;
@@ -262,5 +265,11 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::post('/media', [AdminMediaController::class, 'store']);
         Route::patch('/media/{mediaAsset}', [AdminMediaController::class, 'update']);
         Route::delete('/media/{mediaAsset}', [AdminMediaController::class, 'destroy']);
+        Route::apiResource('blog/categories', AdminBlogCategoryController::class);
+        Route::apiResource('blog/posts', AdminBlogPostController::class);
     });
+
+    Route::get('/blog/posts', [PublicBlogController::class, 'posts']);
+    Route::get('/blog/posts/{slug}', [PublicBlogController::class, 'show']);
+    Route::get('/blog/categories', [PublicBlogController::class, 'categories']);
 });
