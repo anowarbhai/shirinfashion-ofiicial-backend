@@ -212,6 +212,7 @@ class ThemeSettingsService
                 'announcement_text' => '',
                 'announcement_expires_at' => '',
                 'background_color' => '#ffffff',
+                'text_color' => '#101828',
                 'menu_alignment' => 'center',
                 'logo_position' => 'left',
                 'mobile_behavior' => 'drawer',
