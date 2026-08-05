@@ -64,7 +64,7 @@ class BlogPostController extends Controller
         }
 
         if (empty($validated['author_name'])) {
-            $validated['author_name'] = 'Shirin Fashion Team';
+            $validated['author_name'] = 'DigiTrix Labs';
         }
 
         $post = BlogPost::create($validated);
