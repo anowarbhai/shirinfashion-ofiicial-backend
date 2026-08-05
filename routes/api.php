@@ -63,6 +63,7 @@ use App\Http\Controllers\Api\SliderController;
 use App\Http\Controllers\Api\StorefrontController;
 use App\Http\Controllers\Api\TagController;
 use App\Http\Controllers\Api\ThemeController;
+use App\Http\Controllers\Api\InstallerController;
 use App\Http\Controllers\Api\WishlistController;
 use Illuminate\Support\Facades\Route;
 
@@ -70,6 +71,15 @@ Route::get('/health', fn () => response()->json([
     'status' => 'ok',
     'app' => config('app.name'),
 ]));
+
+Route::prefix('installer')->group(function (): void {
+    Route::get('/status', [InstallerController::class, 'status']);
+    Route::get('/requirements', [InstallerController::class, 'requirements']);
+    Route::post('/environment', [InstallerController::class, 'environment']);
+    Route::post('/migrate', [InstallerController::class, 'migrate']);
+    Route::post('/admin', [InstallerController::class, 'admin']);
+    Route::post('/complete', [InstallerController::class, 'complete']);
+});
 
 Route::prefix('auth')->group(function (): void {
     Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:auth-login');

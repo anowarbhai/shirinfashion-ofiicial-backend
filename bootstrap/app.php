@@ -18,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(\App\Http\Middleware\AddSecurityHeaders::class);
+        $middleware->append(\App\Http\Middleware\EnsureInstalled::class);
         $middleware->alias([
             'jwt.auth' => \App\Http\Middleware\AuthenticateWithJwt::class,
             'admin' => \App\Http\Middleware\EnsureAdmin::class,
