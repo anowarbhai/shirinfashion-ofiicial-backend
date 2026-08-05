@@ -230,6 +230,9 @@ class ThemeSettingsService
                 'columns' => 4,
                 'show_social_links' => true,
                 'show_mobile_app' => true,
+                'show_developer_credit' => true,
+                'developer_credit_text' => 'Design and Development By DigiTrix Labs',
+                'developer_credit_url' => 'https://digitrixlabs.io/',
             ],
             'templates' => [
                 'home' => 'classic',

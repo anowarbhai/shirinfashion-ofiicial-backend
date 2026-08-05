@@ -26,6 +26,9 @@ class ThemeFooterUpdateRequest extends FormRequest
             'columns' => ['required', 'integer', 'min:1', 'max:6'],
             'show_social_links' => ['required', 'boolean'],
             'show_mobile_app' => ['nullable', 'boolean'],
+            'show_developer_credit' => ['nullable', 'boolean'],
+            'developer_credit_text' => ['nullable', 'string', 'max:255'],
+            'developer_credit_url' => ['nullable', 'string', 'max:2048'],
         ];
     }
 }
