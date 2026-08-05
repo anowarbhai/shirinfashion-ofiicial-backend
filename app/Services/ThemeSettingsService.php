@@ -155,9 +155,9 @@ class ThemeSettingsService
             'appearance' => [
                 'logo_url' => '',
                 'favicon_url' => '',
-                'company_name' => 'Digitrix Labs',
-                'tagline' => 'Premium digital commerce and software solutions',
-                'company_details' => 'Welcome to Digitrix Labs, your trusted destination for digital commerce and software solutions.',
+                'company_name' => 'Shirin Fashion BD',
+                'tagline' => 'Exclusive Fashion & Lifestyle Store',
+                'company_details' => 'Welcome to Shirin Fashion BD, your trusted destination for premium fashion & lifestyle collections.',
                 'contact' => [
                     'phone' => '+8801901856510',
                     'email' => 'hello@digitrixlabs.com',
@@ -221,8 +221,8 @@ class ThemeSettingsService
             'footer' => [
                 'active_style' => 'style-1',
                 'logo_url' => '',
-                'about_text' => 'Welcome to Digitrix Labs, your trusted destination for digital commerce and software solutions.',
-                'copyright_text' => '© 2026 Digitrix Labs. All rights reserved.',
+                'about_text' => 'Welcome to Shirin Fashion BD, your trusted destination for premium fashion & lifestyle collections.',
+                'copyright_text' => '© 2026 Shirin Fashion BD. All rights reserved.',
                 'newsletter_enabled' => true,
                 'payment_icons_enabled' => false,
                 'background_color' => '#2b211f',
