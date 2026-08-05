@@ -23,6 +23,7 @@ class MobilePushSettingsController extends Controller
     public function update(Request $request): JsonResponse
     {
         $payload = $request->validate([
+            'dashboard_widget_enabled' => ['sometimes', 'boolean'],
             'firebase_project_id' => ['nullable', 'string', 'max:255'],
             'firebase_client_email' => ['nullable', 'email', 'max:255'],
             'firebase_private_key' => ['nullable', 'string', 'max:12000'],
@@ -46,6 +47,7 @@ class MobilePushSettingsController extends Controller
 
         $payload = array_replace($this->settings->getGroup('mobile_push'), $payload);
 
+        $payload['dashboard_widget_enabled'] = (bool) ($payload['dashboard_widget_enabled'] ?? true);
         $payload['firebase_project_id'] = trim((string) $payload['firebase_project_id']);
         $payload['firebase_client_email'] = trim((string) $payload['firebase_client_email']);
         $payload['firebase_private_key'] = trim((string) $payload['firebase_private_key']);
