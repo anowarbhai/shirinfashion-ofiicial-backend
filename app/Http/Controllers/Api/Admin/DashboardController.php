@@ -618,6 +618,7 @@ class DashboardController extends Controller
      */
     private function buildMobileAppSummary(): array
     {
+        $mobilePushSettings = app(\App\Services\AdminSettingsService::class)->getGroup('mobile_push');
         $enabledQuery = MobileDeviceToken::query()->where('enabled', true);
 
         $versions = (clone $enabledQuery)
@@ -634,6 +635,7 @@ class DashboardController extends Controller
             ->all();
 
         return [
+            'enabled' => (bool) ($mobilePushSettings['dashboard_widget_enabled'] ?? true),
             'installs' => $this->countDistinctMobileDevices(MobileDeviceToken::query()),
             'enabled_devices' => $this->countDistinctMobileDevices(
                 MobileDeviceToken::query()->where('enabled', true),
