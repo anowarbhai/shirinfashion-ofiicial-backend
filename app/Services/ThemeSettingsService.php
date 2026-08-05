@@ -159,11 +159,11 @@ class ThemeSettingsService
                 'tagline' => 'Exclusive Fashion & Lifestyle Store',
                 'company_details' => 'Welcome to Shirin Fashion BD, your trusted destination for premium fashion & lifestyle collections.',
                 'contact' => [
-                    'phone' => '+8801901856510',
-                    'email' => 'hello@digitrixlabs.com',
-                    'address' => 'Ashulia, Savar, Dhaka - 1341',
-                    'hotline' => '+8801901856510',
-                    'whatsapp' => '+8801901856510',
+                    'phone' => '',
+                    'email' => '',
+                    'address' => '',
+                    'hotline' => '',
+                    'whatsapp' => '',
                 ],
                 'social_links' => [
                     'facebook' => '',
