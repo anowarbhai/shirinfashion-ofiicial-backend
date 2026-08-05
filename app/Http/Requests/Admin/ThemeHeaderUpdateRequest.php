@@ -28,6 +28,7 @@ class ThemeHeaderUpdateRequest extends FormRequest
             'announcement_expires_at' => ['nullable', 'string', 'max:40'],
             'background_color' => ['required', 'string', 'max:20'],
             'text_color' => ['sometimes', 'nullable', 'string', 'max:20'],
+            'hover_color' => ['sometimes', 'nullable', 'string', 'max:20'],
             'menu_alignment' => ['required', Rule::in(['left', 'center', 'right'])],
             'logo_position' => ['required', Rule::in(['left', 'center'])],
             'mobile_behavior' => ['required', Rule::in(['drawer', 'bottom-nav'])],
