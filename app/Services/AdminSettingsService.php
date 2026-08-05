@@ -78,17 +78,17 @@ class AdminSettingsService
     {
         return [
             'general' => [
-                'store_name' => 'Shirin Fashion',
-                'store_tagline' => 'Premium cosmetics and beauty products',
-                'support_email' => 'hello@shirinfashionbd.com',
+                'store_name' => 'Digitrix Labs',
+                'store_tagline' => 'Premium digital commerce and software solutions',
+                'support_email' => 'hello@digitrixlabs.com',
                 'support_phone' => '+8801901856510',
-                'order_prefix' => 'SBA',
+                'order_prefix' => 'DTX',
                 'default_currency' => 'BDT',
                 'timezone' => 'Asia/Dhaka',
                 'maintenance_mode' => false,
                 'maintenance_message' => 'We are performing a quick update. Please check back shortly.',
                 'maintenance_until' => null,
-                'invoice_note' => 'Thank you for shopping with Shirin Fashion.',
+                'invoice_note' => 'Thank you for shopping with Digitrix Labs.',
                 'cookie_consent' => [
                     'enabled' => false,
                     'message' => 'We use cookies to improve your shopping experience, keep your cart working, and understand website performance.',
