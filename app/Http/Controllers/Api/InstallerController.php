@@ -194,8 +194,9 @@ class InstallerController extends Controller
         }
 
         // Build key value pairs to update
+        $appName = $validated['app_name'] ?? 'Digitrix Labs';
         $envUpdates = [
-            'APP_NAME' => '"' . ($validated['app_name'] ?? 'Shirin Beauty Atelier') . '"',
+            'APP_NAME' => '"' . $appName . '"',
             'APP_URL' => $validated['app_url'] ?? 'http://127.0.0.1:8000',
             'FRONTEND_URL' => $validated['frontend_url'] ?? 'http://localhost:3000',
             'DB_CONNECTION' => $connection,

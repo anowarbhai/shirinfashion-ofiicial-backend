@@ -108,7 +108,7 @@
                         </div>
                         <div>
                             <label class="block font-semibold text-slate-300 mb-1 uppercase tracking-wider text-[10px]">Database Name</label>
-                            <input type="text" id="db_name" value="shirinfashionbd" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono">
+                            <input type="text" id="db_name" value="digitrixlabs" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono">
                         </div>
                         <div class="grid grid-cols-2 gap-2">
                             <div>
