@@ -97,7 +97,7 @@ return [
 
     'cipher' => 'AES-256-CBC',
 
-    'key' => env('APP_KEY'),
+    'key' => env('APP_KEY', 'base64:' . base64_encode('shirinfashionbd_installer_key32!')),
 
     'previous_keys' => [
         ...array_filter(
