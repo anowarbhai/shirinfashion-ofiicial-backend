@@ -57,11 +57,11 @@ class SeoMarketingController extends Controller
     private function defaults(): array
     {
         return [
-            'home_title' => 'Shirin Fashion BD | Exclusive Fashion & Lifestyle Store',
-            'meta_description' => 'Discover premium saree, three-piece, cosmetics, and lifestyle products at Shirin Fashion BD. Shop skincare, makeup, apparel and more.',
-            'meta_keywords' => 'shirin fashion, fashion, saree, three piece, cosmetics, beauty, bdcaliph, online shopping bangladesh',
-            'canonical_url' => 'https://bdcaliph.com',
-            'robots_content' => "User-agent: *\nAllow: /\nSitemap: https://bdcaliph.com/sitemap.xml",
+            'home_title' => '',
+            'meta_description' => '',
+            'meta_keywords' => '',
+            'canonical_url' => '',
+            'robots_content' => "User-agent: *\nAllow: /\nSitemap: /sitemap.xml",
         ];
     }
 }
