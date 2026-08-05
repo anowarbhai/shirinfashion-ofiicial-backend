@@ -25,7 +25,53 @@ class DemoBlogPostSeeder extends Seeder
             ['name' => 'Festive Collection', 'description' => 'Special outfits for weddings, Eid, and festivals.', 'is_active' => true]
         );
 
-        // Update existing or create post with BD Caliph name
+        // Men's fashion trend post
+        BlogPost::updateOrCreate(
+            ['slug' => 'top-5-mens-fashion-trends-for-2026-elevate-your-style-with-bd-caliph'],
+            [
+                'title' => 'Top 5 Men\'s Fashion Trends for 2026: Elevate Your Style with BD Caliph',
+                'category_id' => $catFashion->id,
+                'author_name' => 'DigiTrix Labs',
+                'status' => 'published',
+                'is_featured' => true,
+                'views_count' => 285,
+                'featured_image' => '/images/bd_caliph_blog_cover.jpg',
+                'excerpt' => 'Discover the latest Bangladeshi men\'s fashion trends for 2026 with BD Caliph. From tailored panjabis to modern casual shirts, elevate your everyday look effortlessly.',
+                'content' => '
+<h2>Redefining Men\'s Style &amp; Elegance in 2026 with BD Caliph</h2>
+<p>Modern men’s fashion in Bangladesh is undergoing an unprecedented transformation. Today’s man demands clothes that blend crisp tailored elegance with relaxed daily comfort. Whether you are dressing for a corporate meeting, a weekend hanging out, or a festive celebration, <strong>BD Caliph</strong> brings you the top 5 men’s fashion trends dominating 2026.</p>
+
+<img src="https://images.unsplash.com/photo-1617137984095-74e4e5e3613f?q=80&w=1000" alt="BD Caliph Men Fashion Trends 2026" />
+
+<h2>1. Minimalist Tailored Panjabis with Metallic Accents</h2>
+<p>Traditional panjabis are receiving a contemporary upgrade. Clean cuts, breathable cotton-viscose fabrics, subtle collar embroidery, and sleek metallic buttons define 2026 festive Panjabi trends.</p>
+
+<h2>2. Cuban Collar &amp; Textured Linen Shirts</h2>
+<p>For casual &amp; smart-casual outings, Cuban collar shirts in textured linen and soft pastel shades provide an effortlessly stylish, breathable look perfect for South Asian weather.</p>
+
+<blockquote>
+<p>"Style is not just what you wear, but how you feel in it. Quality fabrics and immaculate fitting define the BD Caliph gentleman."</p>
+</blockquote>
+
+<h2>3. Tapered Chinos &amp; Tailored Trousers</h2>
+<p>Overly tight denim is out. In 2026, relaxed-tapered chinos in classic navy, olive, beige, and charcoal black are essential staples that pair seamlessly with both t-shirts and formal shirts.</p>
+
+<h2>4. Layered Overshirts &amp; Lightweight Jackets</h2>
+<p>Layering adds instant depth to any outfit. Wearing an unbuttoned utility overshirt or lightweight linen jacket over a clean solid crewneck tee elevates your look in seconds.</p>
+
+<h2>5. Premium Accessories &amp; Minimal Footwear</h2>
+<p>Complete your ensemble with handcrafted leather slide sandals or clean minimalist sneakers, paired with a classic watch.</p>
+
+<p>Explore the full 2026 Men’s Collection on <strong>BD Caliph</strong> today!</p>
+',
+                'meta_title' => 'Top 5 Men\'s Fashion Trends for 2026 | BD Caliph',
+                'meta_description' => 'Explore 2026\'s top men fashion trends in Bangladesh. Premium panjabis, shirts, and trousers curated by BD Caliph.',
+                'meta_keywords' => 'mens fashion 2026, panjabi bangladesh, BD Caliph, digitrix labs',
+                'published_at' => now(),
+            ]
+        );
+
+        // Women's fashion trend post
         BlogPost::updateOrCreate(
             ['slug' => 'top-5-womens-fashion-trends-2026'],
             [
@@ -33,7 +79,7 @@ class DemoBlogPostSeeder extends Seeder
                 'category_id' => $catFashion->id,
                 'author_name' => 'DigiTrix Labs',
                 'status' => 'published',
-                'is_featured' => true,
+                'is_featured' => false,
                 'views_count' => 142,
                 'featured_image' => 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=1200',
                 'excerpt' => 'Discover the latest Bangladeshi women\'s fashion trends for 2026 with BD Caliph. From handcrafted zardosi embroidery to vibrant pastel palettes, here is your ultimate guide to looking effortlessly elegant.',
@@ -44,33 +90,12 @@ class DemoBlogPostSeeder extends Seeder
 <img src="https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=80&w=1000" alt="BD Caliph Fashion Trends 2026" />
 
 <h2>1. Pastel Palettes &amp; Soft Earthy Tones</h2>
-<p>Soft pastel shades such as powder blue, blush pink, mint green, and warm beige are taking center stage at BD Caliph this year. These colors not only offer a fresh, soothing visual appeal but also allow intricate embroidery details to stand out naturally.</p>
+<p>Soft pastel shades such as powder blue, blush pink, mint green, and warm beige are taking center stage at BD Caliph this year.</p>
 
 <h2>2. Handcrafted Zardosi &amp; Thread Embroidery</h2>
-<p>Delicate embroidery never goes out of style. In 2026, heavy printed designs are taking a backseat to detailed hand embroidery around necklines, cuffs, and dupattas. Fine zardosi work and thread embroidery add a subtle touch of luxury to BD Caliph traditional outfits.</p>
+<p>Delicate embroidery never goes out of style. Fine zardosi work and thread embroidery add a subtle touch of luxury to BD Caliph traditional outfits.</p>
 
-<blockquote>
-<p>"True style is about expressing your unique personality with confidence and grace. Our 2026 BD Caliph collection celebrates every woman\'s authentic beauty."</p>
-</blockquote>
-
-<h2>3. Versatile Fusion Wear &amp; Flowy Silhouettes</h2>
-<p>Modern fashion lovers appreciate comfort just as much as style. Flowy kaftans, asymmetrical kurtis, and layered three-piece sets are becoming wardrobe essentials for young professionals and fashion-forward women.</p>
-
-<h2>4. Statement Dupattas &amp; Dupatta Draping Techniques</h2>
-<p>A regal organza or silk dupatta can instantly transform a simple outfit into an ethnic masterpiece. Adding a heavily embroidered dupatta over a minimal solid salwar kameez is one of the easiest ways to make an effortless style statement.</p>
-
-<h2>5. Sustainable &amp; Breathable Fabrics</h2>
-<p>With a growing focus on comfort and quality, premium breathable fabrics like pure georgette, organza, lawn cotton, and tissue silk are preferred choices for long event days.</p>
-
-<h3>Summary Checklist for Your 2026 Wardrobe:</h3>
-<ul>
-  <li>Invest in versatile neutral &amp; pastel shades from BD Caliph.</li>
-  <li>Pair minimal dresses with statement dupattas.</li>
-  <li>Choose lightweight, breathable fabrics for all-day comfort.</li>
-  <li>Accessorize with minimal gold or pearl jewelry for a polished look.</li>
-</ul>
-
-<p>Explore the full 2026 collection on <strong>BD Caliph</strong> today and elevate your wardrobe with high-quality, authentic fashion crafted just for you!</p>
+<p>Explore the full 2026 collection on <strong>BD Caliph</strong> today!</p>
 ',
                 'meta_title' => 'Top 5 Women\'s Fashion Trends for 2026 | BD Caliph',
                 'meta_description' => 'Explore 2026\'s top women fashion trends in Bangladesh. Premium salwar kameez, sarees, and modern fusion wear curated by BD Caliph.',

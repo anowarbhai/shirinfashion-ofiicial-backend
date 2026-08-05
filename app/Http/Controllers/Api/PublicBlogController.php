@@ -41,11 +41,20 @@ class PublicBlogController extends Controller
 
     public function show(string $slug): JsonResponse
     {
+        $decodedSlug = urldecode($slug);
+
         $post = BlogPost::query()
             ->published()
             ->with('category')
-            ->where('slug', $slug)
-            ->firstOrFail();
+            ->where(function ($q) use ($slug, $decodedSlug) {
+                $q->where('slug', $slug)
+                  ->orWhere('slug', $decodedSlug);
+            })
+            ->first();
+
+        if (!$post) {
+            return response()->json(['message' => 'Blog post not found.'], 404);
+        }
 
         $post->increment('views_count');
 
