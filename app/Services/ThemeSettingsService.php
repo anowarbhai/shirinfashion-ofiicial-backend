@@ -213,6 +213,7 @@ class ThemeSettingsService
                 'announcement_expires_at' => '',
                 'background_color' => '#ffffff',
                 'text_color' => '#101828',
+                'hover_color' => '#ff2b61',
                 'menu_alignment' => 'center',
                 'logo_position' => 'left',
                 'mobile_behavior' => 'drawer',
