@@ -47,7 +47,7 @@ class ProductController extends Controller
         $perPage = min(max((int) $request->integer('per_page', 20), 1), 500);
 
         return response()->json([
-            'data' => Product::with(['category', 'categories', 'tags', 'attributeTerms.attribute'])
+            'data' => Product::with(['category', 'categories', 'tags', 'attributeTerms.attribute', 'variations'])
                 ->latest()
                 ->paginate($perPage),
         ]);
@@ -61,6 +61,9 @@ class ProductController extends Controller
         $product->categories()->sync($validated['category_ids']);
         $product->tags()->sync($validated['tag_ids']);
         $product->attributeTerms()->sync($validated['attribute_term_ids']);
+        if (isset($validated['variations'])) {
+            $this->syncVariations($product, $validated['variations']);
+        }
 
         $this->auditLogger->log(
             $request,
@@ -72,7 +75,7 @@ class ProductController extends Controller
 
         return response()->json([
             'message' => 'Product created successfully.',
-            'data' => $product->load(['category', 'categories', 'tags', 'attributeTerms.attribute']),
+            'data' => $product->load(['category', 'categories', 'tags', 'attributeTerms.attribute', 'variations']),
         ], 201);
     }
 
@@ -291,7 +294,7 @@ class ProductController extends Controller
     public function show(Product $product): JsonResponse
     {
         return response()->json([
-            'data' => $product->load('category', 'categories', 'reviews', 'tags', 'attributeTerms.attribute'),
+            'data' => $product->load('category', 'categories', 'reviews', 'tags', 'attributeTerms.attribute', 'variations'),
         ]);
     }
 
@@ -303,6 +306,9 @@ class ProductController extends Controller
         $product->categories()->sync($validated['category_ids']);
         $product->tags()->sync($validated['tag_ids']);
         $product->attributeTerms()->sync($validated['attribute_term_ids']);
+        if (isset($validated['variations'])) {
+            $this->syncVariations($product, $validated['variations']);
+        }
         $updated = $product->fresh();
 
         $this->auditLogger->log(
@@ -318,7 +324,7 @@ class ProductController extends Controller
 
         return response()->json([
             'message' => 'Product updated successfully.',
-            'data' => $updated->load(['category', 'categories', 'tags', 'attributeTerms.attribute']),
+            'data' => $updated->load(['category', 'categories', 'tags', 'attributeTerms.attribute', 'variations']),
         ]);
     }
 
@@ -493,6 +499,18 @@ class ProductController extends Controller
             'tag_ids.*' => ['integer', 'exists:tags,id'],
             'attribute_term_ids' => ['nullable', 'array'],
             'attribute_term_ids.*' => ['integer', 'exists:attribute_terms,id'],
+            'variations' => ['nullable', 'array'],
+            'variations.*.id' => ['nullable', 'integer'],
+            'variations.*.title' => ['required', 'string', 'max:255'],
+            'variations.*.sku' => ['nullable', 'string', 'max:255'],
+            'variations.*.attribute_values' => ['nullable', 'array'],
+            'variations.*.price' => ['required', 'numeric'],
+            'variations.*.compare_price' => ['nullable', 'numeric'],
+            'variations.*.image_url' => ['nullable', 'string'],
+            'variations.*.color_code' => ['nullable', 'string', 'max:30'],
+            'variations.*.inventory' => ['nullable', 'integer'],
+            'variations.*.is_active' => ['sometimes', 'boolean'],
+            'variations.*.sort_order' => ['nullable', 'integer'],
         ]);
 
         $this->validateShortDescriptionLength($validated['short_description'] ?? null);
@@ -523,12 +541,48 @@ class ProductController extends Controller
 
         return [
             'attributes' => collect($validated)
-                ->except(['category_ids', 'tag_ids', 'attribute_term_ids'])
+                ->except(['category_ids', 'tag_ids', 'attribute_term_ids', 'variations'])
                 ->all(),
             'category_ids' => $validated['category_ids'] ?? [],
             'tag_ids' => $validated['tag_ids'] ?? [],
             'attribute_term_ids' => $validated['attribute_term_ids'] ?? [],
+            'variations' => $validated['variations'] ?? null,
         ];
+    }
+
+    protected function syncVariations(Product $product, array $variationsData): void
+    {
+        $existingIds = [];
+
+        foreach ($variationsData as $index => $item) {
+            $data = [
+                'sku' => trim((string) ($item['sku'] ?? '')) ?: null,
+                'title' => trim((string) ($item['title'] ?? '')),
+                'attribute_values' => is_array($item['attribute_values'] ?? null) ? $item['attribute_values'] : null,
+                'price' => (float) ($item['price'] ?? 0),
+                'compare_price' => isset($item['compare_price']) && $item['compare_price'] !== '' && $item['compare_price'] !== null ? (float) $item['compare_price'] : null,
+                'image_url' => trim((string) ($item['image_url'] ?? '')) ?: null,
+                'color_code' => trim((string) ($item['color_code'] ?? '')) ?: null,
+                'inventory' => (int) ($item['inventory'] ?? 0),
+                'is_active' => (bool) ($item['is_active'] ?? true),
+                'sort_order' => (int) ($item['sort_order'] ?? $index),
+            ];
+
+            if (! empty($item['id'])) {
+                $variation = $product->variations()->find($item['id']);
+                if ($variation) {
+                    $variation->update($data);
+                    $existingIds[] = $variation->id;
+
+                    continue;
+                }
+            }
+
+            $created = $product->variations()->create($data);
+            $existingIds[] = $created->id;
+        }
+
+        $product->variations()->whereNotIn('id', $existingIds)->delete();
     }
 
     protected function validateShortDescriptionLength(?string $value): void

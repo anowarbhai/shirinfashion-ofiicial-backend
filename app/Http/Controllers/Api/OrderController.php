@@ -806,20 +806,32 @@ class OrderController extends Controller
         foreach ($orderItems as $item) {
             /** @var Product $product */
             $product = $item['product'];
+            $variantId = $item['variant_id'] ?? $item['variantId'] ?? null;
+            $variantTitle = $item['variant_title'] ?? $item['variantTitle'] ?? null;
+            $variantAttributes = $item['variant_attributes'] ?? $item['variantAttributes'] ?? null;
+            $variantImage = $item['variant_image'] ?? $item['variantImage'] ?? null;
+            $customPrice = isset($item['price']) && (float) $item['price'] > 0 ? (float) $item['price'] : null;
 
-            $order->items()->create($this->orderItemPayload([
+            $itemPrice = $item['tier']
+                ? round($item['line_total'] / max(1, $item['quantity']), 2)
+                : ($customPrice ?? $product->price);
+
+            $orderItemData = [
                 'product_id' => $product->id,
+                'variant_id' => $variantId,
+                'variant_title' => $variantTitle,
+                'variant_attributes' => $variantAttributes,
                 'volume_discount_id' => $item['tier']?->id,
-                'product_name' => $product->name,
-                'sku' => $product->sku,
-                'product_image' => $this->firstProductImage($product),
-                'price' => $item['tier']
-                    ? round($item['line_total'] / max(1, $item['quantity']), 2)
-                    : $product->price,
+                'product_name' => $product->name.($variantTitle ? " ({$variantTitle})" : ''),
+                'sku' => $item['sku'] ?? $product->sku,
+                'product_image' => $variantImage ?: $this->firstProductImage($product),
+                'price' => $itemPrice,
                 'quantity' => $item['quantity'],
                 'line_total' => $item['line_total'],
                 'is_free_gift' => false,
-            ]));
+            ];
+
+            $order->items()->create($this->orderItemPayload($orderItemData));
 
             if ($decrementInventory && $product->manage_stock) {
                 $updated = Product::query()

@@ -99,6 +99,7 @@ class ProductController extends Controller
             'category',
             'categories',
             'attributeTerms.attribute',
+            'activeVariations',
             'activeVolumeDiscounts.freeProduct',
         ]);
         $product->loadCount([

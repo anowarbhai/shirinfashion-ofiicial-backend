@@ -107,6 +107,16 @@ class Product extends Model
         return $this->belongsToMany(AttributeTerm::class, 'attribute_term_product');
     }
 
+    public function variations(): HasMany
+    {
+        return $this->hasMany(ProductVariation::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function activeVariations(): HasMany
+    {
+        return $this->variations()->where('is_active', true)->orderBy('sort_order')->orderBy('id');
+    }
+
     public function volumeDiscounts(): HasMany
     {
         return $this->hasMany(ProductVolumeDiscount::class);
