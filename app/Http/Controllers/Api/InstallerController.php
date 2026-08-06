@@ -30,6 +30,20 @@ class InstallerController extends Controller
     {
         $isInstalled = File::exists($this->lockFilePath);
 
+        if (!$isInstalled) {
+            try {
+                if (DB::connection()->getPdo() && DB::table('users')->exists()) {
+                    $isInstalled = true;
+                    File::put($this->lockFilePath, json_encode([
+                        'installed_at' => now()->toIso8601String(),
+                        'auto_detected' => true,
+                    ]));
+                }
+            } catch (Throwable $e) {
+                // Ignore DB error
+            }
+        }
+
         return response()->json([
             'installed' => $isInstalled,
             'lock_file' => $this->lockFilePath,

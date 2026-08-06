@@ -3,8 +3,10 @@
 namespace App\Http\Middleware;
 
 use Closure;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpFoundation\Response;
 
 class EnsureInstalled
@@ -18,12 +20,28 @@ class EnsureInstalled
             return $next($request);
         }
 
-        // If application is not installed yet
+        // If lock file is missing, check if DB is already migrated & has users
         if (!File::exists($lockFile)) {
+            try {
+                if (Schema::hasTable('users') && User::exists()) {
+                    // Database is already installed! Auto-create storage/installed lock file
+                    File::put($lockFile, json_encode([
+                        'installed_at' => now()->toIso8601String(),
+                        'auto_detected' => true,
+                    ]));
+
+                    return $next($request);
+                }
+            } catch (\Throwable $e) {
+                // DB check failed (e.g. no DB connection or table missing)
+            }
+
+            $appName = config('app.name', 'BD Caliph');
+
             if ($request->expectsJson() || $request->is('api/*')) {
                 return response()->json([
                     'installed' => false,
-                    'message' => 'Shirin Beauty Atelier is not installed yet. Please complete setup.',
+                    'message' => "{$appName} is not installed yet. Please complete setup.",
                     'installer_url' => url('/install'),
                 ], 503);
             }
