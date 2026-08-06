@@ -129,6 +129,10 @@ Route::match(['get', 'post'], '/payments/sslcommerz/cancel', [OrderController::c
 Route::post('/payments/sslcommerz/ipn', [OrderController::class, 'sslCommerzIpn'])->middleware('throttle:public-write');
 Route::get('/database-backups/download/{token}', [AdminDatabaseBackupController::class, 'downloadByToken']);
 
+Route::get('/blog/posts', [PublicBlogController::class, 'posts']);
+Route::get('/blog/posts/{slug}', [PublicBlogController::class, 'show']);
+Route::get('/blog/categories', [PublicBlogController::class, 'categories']);
+
 Route::middleware('jwt.auth')->group(function (): void {
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
@@ -268,8 +272,4 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::apiResource('blog/categories', AdminBlogCategoryController::class);
         Route::apiResource('blog/posts', AdminBlogPostController::class);
     });
-
-    Route::get('/blog/posts', [PublicBlogController::class, 'posts']);
-    Route::get('/blog/posts/{slug}', [PublicBlogController::class, 'show']);
-    Route::get('/blog/categories', [PublicBlogController::class, 'categories']);
 });
