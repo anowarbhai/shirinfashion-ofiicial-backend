@@ -54,7 +54,12 @@ class MediaController extends Controller
     {
         if ($request->hasFile('file')) {
             $validated = $request->validate([
-                'file' => ['required', 'file', 'image', 'max:10240'],
+                'file' => [
+                    'required',
+                    'file',
+                    'mimes:jpeg,png,jpg,gif,webp,svg,mp4,webm,ogg,mov,avi,mkv,flv',
+                    'max:102400',
+                ],
                 'alt_text' => ['nullable', 'string', 'max:255'],
             ]);
 
