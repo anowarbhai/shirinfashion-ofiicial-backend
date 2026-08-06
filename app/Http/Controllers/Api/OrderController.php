@@ -623,7 +623,7 @@ class OrderController extends Controller
             'shipping_address.city' => ['nullable', 'string', 'max:120'],
             'shipping_address.country' => ['nullable', 'string', 'max:120'],
             'items' => ['required', 'array', 'min:1', 'max:50'],
-            'items.*.product_id' => ['required', 'integer', 'distinct', 'exists:products,id'],
+            'items.*.product_id' => ['required', 'integer', 'exists:products,id'],
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:100'],
             'items.*.volume_discount_id' => ['nullable', 'integer', 'exists:product_volume_discounts,id'],
         ]);
