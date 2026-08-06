@@ -557,7 +557,7 @@ class ProductController extends Controller
         foreach ($variationsData as $index => $item) {
             $data = [
                 'sku' => trim((string) ($item['sku'] ?? '')) ?: null,
-                'title' => trim((string) ($item['title'] ?? '')),
+                'title' => trim((string) ($item['title'] ?? '')) ?: 'Variation #'.($index + 1),
                 'attribute_values' => is_array($item['attribute_values'] ?? null) ? $item['attribute_values'] : null,
                 'price' => (float) ($item['price'] ?? 0),
                 'compare_price' => isset($item['compare_price']) && $item['compare_price'] !== '' && $item['compare_price'] !== null ? (float) $item['compare_price'] : null,
