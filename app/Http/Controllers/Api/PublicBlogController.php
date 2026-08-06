@@ -38,7 +38,7 @@ class PublicBlogController extends Controller
         return response()->json($posts);
     }
 
-    public function show(string $slug): JsonResponse
+    public function show(Request $request, string $slug): JsonResponse
     {
         $decodedSlug = urldecode($slug);
 
@@ -58,7 +58,10 @@ class PublicBlogController extends Controller
             return response()->json(['message' => 'Blog post not found.'], 404);
         }
 
-        $post->increment('views_count');
+        if (!$request->query('no_increment') && !$request->query('metadata')) {
+            $post->increment('views_count');
+            $post->views_count += 1;
+        }
 
         $relatedPosts = BlogPost::query()
             ->with('category')
