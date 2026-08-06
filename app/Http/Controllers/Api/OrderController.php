@@ -626,6 +626,18 @@ class OrderController extends Controller
             'items.*.product_id' => ['required', 'integer', 'exists:products,id'],
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:100'],
             'items.*.volume_discount_id' => ['nullable', 'integer', 'exists:product_volume_discounts,id'],
+            'items.*.variant_id' => ['nullable'],
+            'items.*.variantId' => ['nullable'],
+            'items.*.variant_title' => ['nullable', 'string', 'max:255'],
+            'items.*.variantTitle' => ['nullable', 'string', 'max:255'],
+            'items.*.variant_attributes' => ['nullable', 'array'],
+            'items.*.variantAttributes' => ['nullable', 'array'],
+            'items.*.variant_image' => ['nullable', 'string', 'max:2000'],
+            'items.*.variantImage' => ['nullable', 'string', 'max:2000'],
+            'items.*.variant_price' => ['nullable', 'numeric', 'min:0'],
+            'items.*.variantPrice' => ['nullable', 'numeric', 'min:0'],
+            'items.*.price' => ['nullable', 'numeric', 'min:0'],
+            'items.*.sku' => ['nullable', 'string', 'max:120'],
         ]);
 
         try {
@@ -707,15 +719,30 @@ class OrderController extends Controller
                 ]);
             }
 
+            $variantId = $item['variant_id'] ?? $item['variantId'] ?? null;
+            $variantTitle = $item['variant_title'] ?? $item['variantTitle'] ?? null;
+            $variantAttributes = $item['variant_attributes'] ?? $item['variantAttributes'] ?? null;
+            $variantImage = $item['variant_image'] ?? $item['variantImage'] ?? null;
+            $customPrice = isset($item['variant_price']) || isset($item['variantPrice']) || isset($item['price'])
+                ? (float) ($item['variant_price'] ?? $item['variantPrice'] ?? $item['price'])
+                : null;
+
             $lineTotal = $tier
                 ? $this->calculateVolumeDiscountLineTotal($tier, (int) $item['quantity'])
-                : (float) $product->price * (int) $item['quantity'];
+                : (($customPrice ?? (float) $product->price) * (int) $item['quantity']);
+
             $subtotal += $lineTotal;
             $orderItems[] = [
                 'product' => $product,
                 'tier' => $tier,
                 'quantity' => (int) $item['quantity'],
                 'line_total' => $lineTotal,
+                'variant_id' => $variantId,
+                'variant_title' => $variantTitle,
+                'variant_attributes' => $variantAttributes,
+                'variant_image' => $variantImage,
+                'price' => $customPrice,
+                'sku' => $item['sku'] ?? null,
             ];
         }
 
@@ -816,13 +843,15 @@ class OrderController extends Controller
                 ? round($item['line_total'] / max(1, $item['quantity']), 2)
                 : ($customPrice ?? $product->price);
 
+            $displayTitle = $variantTitle ? (preg_match('/^size:/i', trim($variantTitle)) ? trim($variantTitle) : "Size: ".trim($variantTitle)) : null;
+
             $orderItemData = [
                 'product_id' => $product->id,
                 'variant_id' => $variantId,
                 'variant_title' => $variantTitle,
                 'variant_attributes' => $variantAttributes,
                 'volume_discount_id' => $item['tier']?->id,
-                'product_name' => $product->name.($variantTitle ? " ({$variantTitle})" : ''),
+                'product_name' => $product->name.($displayTitle ? " ({$displayTitle})" : ''),
                 'sku' => $item['sku'] ?? $product->sku,
                 'product_image' => $variantImage ?: $this->firstProductImage($product),
                 'price' => $itemPrice,
