@@ -13,7 +13,6 @@ class PublicBlogController extends Controller
     public function posts(Request $request): JsonResponse
     {
         $query = BlogPost::query()
-            ->published()
             ->with('category');
 
         if ($search = $request->query('search')) {
@@ -34,7 +33,7 @@ class PublicBlogController extends Controller
             $query->featured();
         }
 
-        $posts = $query->latest('published_at')->paginate($request->query('per_page', 9));
+        $posts = $query->latest('id')->paginate($request->query('per_page', 9));
 
         return response()->json($posts);
     }
@@ -43,14 +42,17 @@ class PublicBlogController extends Controller
     {
         $decodedSlug = urldecode($slug);
 
-        $post = BlogPost::query()
-            ->published()
-            ->with('category')
-            ->where(function ($q) use ($slug, $decodedSlug) {
-                $q->where('slug', $slug)
-                  ->orWhere('slug', $decodedSlug);
-            })
-            ->first();
+        $query = BlogPost::query()->with('category');
+
+        $post = (clone $query)->where('slug', $slug)->first()
+            ?? (clone $query)->where('slug', $decodedSlug)->first()
+            ?? (clone $query)->whereRaw('LOWER(slug) = ?', [strtolower($slug)])->first()
+            ?? (clone $query)->whereRaw('LOWER(slug) = ?', [strtolower($decodedSlug)])->first()
+            ?? (clone $query)->where('slug', 'like', "%{$slug}%")->first();
+
+        if (!$post && is_numeric($slug)) {
+            $post = (clone $query)->where('id', (int) $slug)->first();
+        }
 
         if (!$post) {
             return response()->json(['message' => 'Blog post not found.'], 404);
@@ -59,13 +61,12 @@ class PublicBlogController extends Controller
         $post->increment('views_count');
 
         $relatedPosts = BlogPost::query()
-            ->published()
             ->with('category')
             ->where('id', '!=', $post->id)
             ->when($post->category_id, function ($q) use ($post) {
                 $q->where('category_id', $post->category_id);
             })
-            ->latest('published_at')
+            ->latest('id')
             ->limit(3)
             ->get();
 
@@ -79,12 +80,7 @@ class PublicBlogController extends Controller
     {
         $categories = BlogCategory::query()
             ->where('is_active', true)
-            ->whereHas('posts', function ($q) {
-                $q->published();
-            })
-            ->withCount(['posts' => function ($q) {
-                $q->published();
-            }])
+            ->withCount('posts')
             ->orderBy('name')
             ->get();
 
