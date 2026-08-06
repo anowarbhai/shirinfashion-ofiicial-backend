@@ -15,7 +15,9 @@ class Slider extends Model
         'eyebrow',
         'title',
         'subtitle',
+        'media_type',
         'image_url',
+        'video_url',
         'floating_image_url',
         'badge_text',
         'primary_button_label',
@@ -35,6 +37,14 @@ class Slider extends Model
     }
 
     protected function imageUrl(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value) => MediaUrl::toPublic($value),
+            set: fn (?string $value) => MediaUrl::normalizeStored($value),
+        );
+    }
+
+    protected function videoUrl(): Attribute
     {
         return Attribute::make(
             get: fn (?string $value) => MediaUrl::toPublic($value),
