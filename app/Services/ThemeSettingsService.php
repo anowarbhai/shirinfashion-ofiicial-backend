@@ -179,6 +179,7 @@ class ThemeSettingsService
                     'secondary' => '#d08969',
                     'accent' => '#1b2775',
                     'background' => '#fffaf7',
+                    'body_background' => '#fffaf7',
                     'text' => '#2f2523',
                 ],
                 'fonts' => [
@@ -197,6 +198,7 @@ class ThemeSettingsService
                     'line_height' => '1.7',
                     'font_weight' => '400',
                     'color' => '#2f2523',
+                    'background_color' => '#fffaf7',
                 ],
             ],
             'header' => [
