@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\Admin\AdminAuditLogController as AdminAuditLogContr
 use App\Http\Controllers\Api\Admin\AdminRoleController as AdminRoleController;
 use App\Http\Controllers\Api\Admin\SeoMarketingController as AdminSeoMarketingController;
 use App\Http\Controllers\Api\Admin\SmsIntegrationSettingsController as AdminSmsIntegrationSettingsController;
+use App\Http\Controllers\Api\Admin\AdminBrandController;
 use App\Http\Controllers\Api\Admin\AttributeController as AdminAttributeController;
 use App\Http\Controllers\Api\Admin\MediaController as AdminMediaController;
 use App\Http\Controllers\Api\Admin\ModeratorController as AdminModeratorController;
@@ -115,6 +116,7 @@ Route::get('/product-page-settings', [ProductPageSettingsController::class, 'sho
 Route::get('/reviews', [ReviewController::class, 'index']);
 Route::post('/reviews', [ReviewController::class, 'store'])->middleware('throttle:public-write');
 Route::get('/tags', [TagController::class, 'index']);
+Route::get('/brands', [AdminBrandController::class, 'publicIndex']);
 Route::post('/coupons/validate', [CouponController::class, 'validateCode'])->middleware('throttle:public-write');
 Route::post('/orders', [OrderController::class, 'store'])->middleware('throttle:checkout');
 Route::post('/orders/incomplete', [OrderController::class, 'storeIncomplete'])->middleware('throttle:checkout');
@@ -160,6 +162,7 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::apiResource('categories', AdminCategoryController::class);
         Route::apiResource('tags', AdminTagController::class);
         Route::apiResource('attributes', AdminAttributeController::class);
+        Route::apiResource('brands', AdminBrandController::class);
         Route::post('/attributes/{attribute}/terms', [AdminAttributeController::class, 'storeTerm']);
         Route::patch('/attribute-terms/{term}', [AdminAttributeController::class, 'updateTerm']);
         Route::delete('/attribute-terms/{term}', [AdminAttributeController::class, 'destroyTerm']);
