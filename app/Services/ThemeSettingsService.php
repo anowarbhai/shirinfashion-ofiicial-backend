@@ -207,6 +207,7 @@ class ThemeSettingsService
                 'sticky_on_banner' => false,
                 'show_top_bar' => false,
                 'show_search' => true,
+                'search_style' => 'popup',
                 'show_cart' => true,
                 'show_account' => true,
                 'show_wishlist' => true,
