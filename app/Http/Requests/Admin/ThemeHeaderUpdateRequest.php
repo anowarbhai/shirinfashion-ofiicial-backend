@@ -20,6 +20,7 @@ class ThemeHeaderUpdateRequest extends FormRequest
             'sticky_on_banner' => ['required', 'boolean'],
             'show_top_bar' => ['required', 'boolean'],
             'show_search' => ['required', 'boolean'],
+            'search_style' => ['sometimes', 'nullable', Rule::in(['popup', 'header_overlay'])],
             'show_cart' => ['required', 'boolean'],
             'show_account' => ['required', 'boolean'],
             'show_wishlist' => ['required', 'boolean'],
