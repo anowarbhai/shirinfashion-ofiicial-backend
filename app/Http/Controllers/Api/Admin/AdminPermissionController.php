@@ -87,6 +87,7 @@ class AdminPermissionController extends Controller
         }
 
         $role->permissions()->sync($request->validated('permission_ids', []));
+        $role->load('permissions');
         $this->auditLogger->log(
             $request,
             'role.permissions.updated',
@@ -98,8 +99,18 @@ class AdminPermissionController extends Controller
         return response()->json([
             'message' => 'Role permissions updated successfully.',
             'data' => [
+                'role' => [
+                    'id' => $role->id,
+                    'name' => $role->name,
+                    'slug' => $role->slug,
+                    'description' => $role->description,
+                    'is_system' => $role->is_system,
+                    'is_active' => $role->is_active,
+                    'permissions_count' => $role->permissions->count(),
+                    'permission_ids' => $role->permissions->pluck('id')->values(),
+                ],
                 'role_id' => $role->id,
-                'permission_ids' => $role->permissions()->pluck('admin_permissions.id')->values(),
+                'permission_ids' => $role->permissions->pluck('id')->values(),
             ],
         ]);
     }
