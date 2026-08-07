@@ -97,9 +97,26 @@ class CustomerController extends Controller
         ]);
     }
 
-    public function update(Request $request, User $customer): JsonResponse
+    protected function resolveCustomer(mixed $param): User
     {
-        abort_unless($customer->role === 'customer', 404);
+        if ($param instanceof User && $param->exists && $param->id) {
+            return $param;
+        }
+
+        $id = is_numeric($param) ? (int) $param : null;
+        if (! $id) {
+            $routeParam = request()->route('customer');
+            $id = is_numeric($routeParam) ? (int) $routeParam : null;
+        }
+
+        return User::query()
+            ->where('role', 'customer')
+            ->findOrFail($id);
+    }
+
+    public function update(Request $request, mixed $customer): JsonResponse
+    {
+        $targetCustomer = $this->resolveCustomer($customer);
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -112,7 +129,7 @@ class CustomerController extends Controller
                 'nullable',
                 'email',
                 'max:255',
-                Rule::unique('users', 'email')->ignore($customer->id),
+                Rule::unique('users', 'email')->ignore($targetCustomer->id),
             ],
             'address' => ['nullable', 'string', 'max:500'],
             'marketing_opt_in' => ['boolean'],
@@ -120,16 +137,16 @@ class CustomerController extends Controller
 
         $validated['phone'] = BangladeshPhone::normalizeToLocal($validated['phone']);
 
-        $this->ensureUniqueCustomerPhone($validated['phone'], $customer->id);
+        $this->ensureUniqueCustomerPhone($validated['phone'], $targetCustomer->id);
 
-        $customer->update($validated);
+        $targetCustomer->update($validated);
 
-        $customer->loadCount(['wishlistItems']);
-        $this->enrichCustomerActivity($customer);
+        $targetCustomer->loadCount(['wishlistItems']);
+        $this->enrichCustomerActivity($targetCustomer);
 
         return response()->json([
             'message' => 'Customer updated successfully.',
-            'data' => $customer,
+            'data' => $targetCustomer,
         ]);
     }
 

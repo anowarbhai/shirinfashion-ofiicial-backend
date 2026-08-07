@@ -67,29 +67,46 @@ class TeamMemberController extends Controller
         ], 201);
     }
 
-    public function show(User $teamMember): JsonResponse
+    protected function resolveTeamMember(mixed $param): User
     {
-        abort_unless($teamMember->role === 'admin', 404);
+        if ($param instanceof User && $param->exists && $param->id) {
+            return $param;
+        }
+
+        $id = is_numeric($param) ? (int) $param : null;
+        if (! $id) {
+            $routeParam = request()->route('team_member') ?? request()->route('teamMember');
+            $id = is_numeric($routeParam) ? (int) $routeParam : null;
+        }
+
+        return User::query()
+            ->where('role', 'admin')
+            ->findOrFail($id);
+    }
+
+    public function show(mixed $teamMember): JsonResponse
+    {
+        $member = $this->resolveTeamMember($teamMember);
 
         return response()->json([
-            'data' => $teamMember->load('adminRole:id,name,slug'),
+            'data' => $member->load('adminRole:id,name,slug'),
         ]);
     }
 
-    public function update(Request $request, User $teamMember): JsonResponse
+    public function update(Request $request, mixed $teamMember): JsonResponse
     {
-        abort_unless($teamMember->role === 'admin', 404);
+        $member = $this->resolveTeamMember($teamMember);
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore($teamMember->id)],
-            'phone' => ['required', 'string', 'max:30', Rule::unique('users', 'phone')->ignore($teamMember->id)],
+            'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore($member->id)],
+            'phone' => ['required', 'string', 'max:30', Rule::unique('users', 'phone')->ignore($member->id)],
             'password' => ['nullable', 'string', 'min:8', 'max:100'],
             'admin_role_id' => ['required', 'integer', 'exists:admin_roles,id'],
             'status' => ['required', Rule::in(['active', 'inactive', 'pending', 'blocked'])],
         ]);
 
-        if ($teamMember->adminRole?->slug === 'super-admin') {
+        if ($member->adminRole?->slug === 'super-admin') {
             unset($validated['admin_role_id'], $validated['status']);
         }
 
@@ -100,9 +117,9 @@ class TeamMemberController extends Controller
             unset($validated['password']);
         }
 
-        $before = $teamMember->only(['name', 'email', 'phone', 'admin_role_id', 'status']);
-        $teamMember->update($validated);
-        $updated = $teamMember->fresh('adminRole:id,name,slug');
+        $before = $member->only(['name', 'email', 'phone', 'admin_role_id', 'status']);
+        $member->update($validated);
+        $updated = $member->fresh('adminRole:id,name,slug');
 
         $this->auditLogger->log(
             $request,
@@ -121,20 +138,20 @@ class TeamMemberController extends Controller
         ]);
     }
 
-    public function destroy(Request $request, User $teamMember): JsonResponse
+    public function destroy(Request $request, mixed $teamMember): JsonResponse
     {
-        abort_unless($teamMember->role === 'admin', 404);
+        $member = $this->resolveTeamMember($teamMember);
 
-        if ($teamMember->adminRole?->slug === 'super-admin') {
+        if ($member->adminRole?->slug === 'super-admin') {
             return response()->json([
                 'message' => 'Super Admin user cannot be deleted.',
             ], 422);
         }
 
-        $name = $teamMember->name;
-        $role = $teamMember->adminRole?->name;
-        $id = $teamMember->id;
-        $teamMember->delete();
+        $name = $member->name;
+        $role = $member->adminRole?->name;
+        $id = $member->id;
+        $member->delete();
 
         $this->auditLogger->log(
             $request,
