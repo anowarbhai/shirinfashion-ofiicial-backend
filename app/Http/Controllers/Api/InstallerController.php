@@ -56,8 +56,6 @@ class InstallerController extends Controller
      */
     public function requirements(): JsonResponse
     {
-        $this->ensureNotInstalled();
-
         $minPhpVersion = '8.2.0';
         $currentPhpVersion = PHP_VERSION;
         $phpOk = version_compare($currentPhpVersion, $minPhpVersion, '>=');
@@ -257,7 +255,7 @@ class InstallerController extends Controller
             // Re-sync dynamic config from updated .env before running artisan
             Artisan::call('config:clear');
 
-            Artisan::call('migrate:fresh', [
+            Artisan::call('migrate', [
                 '--force' => true,
             ]);
             $migrationOutput = Artisan::output();

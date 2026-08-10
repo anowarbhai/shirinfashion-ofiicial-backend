@@ -490,7 +490,7 @@ class DashboardController extends Controller
             ->copy()
             ->startOfDay();
         $aggregate = match (true) {
-            $this->isSingleDayRange($chartStart, $chartEnd) => fn (Carbon $start, Carbon $end): array => $this->aggregateOrdersByHour($start, $end, $user),
+            $this->isSingleDayRange($chartStart, $chartEnd) => fn (Carbon $start, Carbon $end): array => $this->aggregateOrdersByDay($start, $end, $user),
             $chartStart->diffInDays($chartEnd) > 370 => fn (Carbon $start, Carbon $end): array => $this->aggregateOrdersByMonth($start, $end, $user),
             default => fn (Carbon $start, Carbon $end): array => $this->aggregateOrdersByDay($start, $end, $user),
         };
