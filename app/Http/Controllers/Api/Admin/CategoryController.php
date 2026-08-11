@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Models\Product;
+use App\Services\ThemeSettingsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -12,6 +13,10 @@ use Illuminate\Validation\Rule;
 
 class CategoryController extends Controller
 {
+    public function __construct(private readonly ThemeSettingsService $themeSettings)
+    {
+    }
+
     public function index(): JsonResponse
     {
         return response()->json([
@@ -36,6 +41,7 @@ class CategoryController extends Controller
     public function store(Request $request): JsonResponse
     {
         $category = Category::create($this->validated($request));
+        $this->themeSettings->flush();
 
         return response()->json([
             'message' => 'Category created successfully.',
@@ -53,6 +59,7 @@ class CategoryController extends Controller
     public function update(Request $request, Category $category): JsonResponse
     {
         $category->update($this->validated($request, $category->id));
+        $this->themeSettings->flush();
 
         return response()->json([
             'message' => 'Category updated successfully.',
@@ -63,6 +70,7 @@ class CategoryController extends Controller
     public function destroy(Category $category): JsonResponse
     {
         $category->delete();
+        $this->themeSettings->flush();
 
         return response()->json([
             'message' => 'Category deleted successfully.',

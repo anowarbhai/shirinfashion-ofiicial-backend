@@ -116,19 +116,48 @@ class ThemeSettingsService
                     'url' => '/pages/'.$page->slug,
                 ])
                 ->values(),
-            'categories' => \App\Models\Category::query()
-                ->with('parent:id,name')
-                ->orderBy('name')
-                ->get(['id', 'name', 'slug', 'parent_id'])
-                ->map(fn (\App\Models\Category $category) => [
-                    'id' => $category->id,
-                    'label' => $category->parent_id && $category->parent
-                        ? '↳ ' . $category->name . ' (' . $category->parent->name . ')'
-                        : $category->name,
-                    'slug' => $category->slug,
-                    'url' => '/category/'.$category->slug,
-                ])
-                ->values(),
+            'categories' => (function () {
+                $all = \App\Models\Category::query()
+                    ->with('parent:id,name')
+                    ->orderBy('name')
+                    ->get(['id', 'name', 'slug', 'parent_id']);
+
+                $topCategories = $all->filter(fn ($c) => $c->parent_id === null);
+                $ordered = collect();
+
+                foreach ($topCategories as $top) {
+                    $ordered->push([
+                        'id' => $top->id,
+                        'label' => $top->name,
+                        'slug' => $top->slug,
+                        'url' => '/category/'.$top->slug,
+                    ]);
+
+                    $children = $all->filter(fn ($c) => (int) $c->parent_id === (int) $top->id);
+                    foreach ($children as $child) {
+                        $ordered->push([
+                            'id' => $child->id,
+                            'label' => '↳ ' . $child->name . ' (' . $top->name . ')',
+                            'slug' => $child->slug,
+                            'url' => '/category/'.$child->slug,
+                        ]);
+                    }
+                }
+
+                $addedIds = $ordered->pluck('id')->all();
+                foreach ($all as $cat) {
+                    if (!in_array($cat->id, $addedIds, true)) {
+                        $ordered->push([
+                            'id' => $cat->id,
+                            'label' => $cat->parent ? '↳ ' . $cat->name . ' (' . $cat->parent->name . ')' : $cat->name,
+                            'slug' => $cat->slug,
+                            'url' => '/category/'.$cat->slug,
+                        ]);
+                    }
+                }
+
+                return $ordered->values()->all();
+            })(),
             'products' => \App\Models\Product::query()
                 ->where('is_active', true)
                 ->visibleInStorefront()
