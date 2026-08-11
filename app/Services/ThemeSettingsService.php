@@ -117,14 +117,16 @@ class ThemeSettingsService
                 ])
                 ->values(),
             'categories' => \App\Models\Category::query()
-                ->whereNull('parent_id')
+                ->with('parent:id,name')
                 ->orderBy('name')
-                ->get(['id', 'name', 'slug'])
+                ->get(['id', 'name', 'slug', 'parent_id'])
                 ->map(fn (\App\Models\Category $category) => [
                     'id' => $category->id,
-                    'label' => $category->name,
+                    'label' => $category->parent_id && $category->parent
+                        ? '↳ ' . $category->name . ' (' . $category->parent->name . ')'
+                        : $category->name,
                     'slug' => $category->slug,
-                    'url' => '/shop?category='.$category->slug,
+                    'url' => '/category/'.$category->slug,
                 ])
                 ->values(),
             'products' => \App\Models\Product::query()
