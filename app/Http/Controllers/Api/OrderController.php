@@ -608,7 +608,8 @@ class OrderController extends Controller
             'email' => ['nullable', 'email', 'max:255'],
             'phone' => ['required', 'string', 'max:30'],
             'payment_method' => ['required', 'in:stripe,paypal,cod,sslcommerz'],
-            'shipping_method' => ['required', 'in:inside-dhaka,outside-dhaka'],
+            'shipping_method' => ['required', 'string', 'max:80'],
+            'shipping_charge' => ['nullable', 'numeric', 'min:0'],
             'coupon_code' => ['nullable', 'string', 'max:80'],
             'otp_session_token' => ['nullable', 'string'],
             'device_id' => ['nullable', 'string', 'max:120'],
@@ -772,7 +773,11 @@ class OrderController extends Controller
                 ?? ($payload['shipping_method'] === 'inside-dhaka' ? 'Dhaka' : 'Outside Dhaka'),
             'country' => $payload['shipping_address']['country'] ?? 'Bangladesh',
         ];
-        $shippingTotal = $this->resolveShippingTotal($payload['shipping_method'], $subtotal);
+        $shippingTotal = $this->resolveShippingTotal(
+            $payload['shipping_method'],
+            $subtotal,
+            isset($payload['shipping_charge']) ? (float) $payload['shipping_charge'] : null
+        );
 
         return [
             'order_items' => $orderItems,
@@ -1219,13 +1224,21 @@ class OrderController extends Controller
             ->count();
     }
 
-    protected function resolveShippingTotal(string $shippingMethod, float $subtotal): float
+    protected function resolveShippingTotal(string $shippingMethod, float $subtotal, ?float $customShippingTotal = null): float
     {
         if ($subtotal <= 0) {
             return 0;
         }
 
-        return $shippingMethod === 'outside-dhaka' ? 120 : 80;
+        if ($customShippingTotal !== null && $customShippingTotal >= 0) {
+            return $customShippingTotal;
+        }
+
+        return match ($shippingMethod) {
+            'outside-dhaka' => 120,
+            'sub-dhaka' => 100,
+            default => 80,
+        };
     }
 
     protected function resolveFraudCheck(string $phone): ?array
