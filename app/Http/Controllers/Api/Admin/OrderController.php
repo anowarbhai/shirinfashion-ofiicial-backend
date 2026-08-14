@@ -513,15 +513,31 @@ class OrderController extends Controller
         $payload = $request->validate([
             'order_ids' => ['required', 'array', 'min:1'],
             'order_ids.*' => ['integer', 'exists:orders,id'],
-            'moderator_id' => ['required', 'integer', 'exists:moderators,id'],
+            'moderator_id' => ['nullable', 'integer', 'exists:moderators,id'],
+            'moderator_ids' => ['nullable', 'array', 'min:1'],
+            'moderator_ids.*' => ['integer', 'exists:moderators,id'],
             'note' => ['nullable', 'string', 'max:1000'],
         ]);
+
+        $moderatorIds = [];
+        if (! empty($payload['moderator_ids'])) {
+            $moderatorIds = array_map('intval', array_values(array_unique($payload['moderator_ids'])));
+        } elseif (! empty($payload['moderator_id'])) {
+            $moderatorIds = [(int) $payload['moderator_id']];
+        }
+
+        if (empty($moderatorIds)) {
+            return response()->json(['message' => 'Please select at least one moderator to reassign orders.'], 422);
+        }
 
         $allowedQuery = Order::query()->whereIn('id', $payload['order_ids']);
         $this->applyAssignmentVisibility($allowedQuery, $request);
         abort_if($allowedQuery->count() !== count(array_unique($payload['order_ids'])), 403, 'You do not have permission to reassign one or more selected orders.');
 
-        $this->ensureCanReassignToModerator($request, (int) $payload['moderator_id'], true);
+        foreach ($moderatorIds as $modId) {
+            $this->ensureCanReassignToModerator($request, $modId, true);
+        }
+
         $orders = Order::query()->whereIn('id', $payload['order_ids'])->get()->keyBy('id');
         $previousModeratorIds = $orders->mapWithKeys(fn (Order $order): array => [
             $order->id => $order->assignments()
@@ -533,7 +549,7 @@ class OrderController extends Controller
 
         $assignments = $this->orderAssignmentService->bulkReassignOrders(
             $payload['order_ids'],
-            (int) $payload['moderator_id'],
+            $moderatorIds,
             $request->user()?->id,
             $payload['note'] ?? null,
         );

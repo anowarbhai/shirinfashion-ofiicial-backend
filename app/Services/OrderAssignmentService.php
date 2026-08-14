@@ -338,12 +338,27 @@ class OrderAssignmentService
      * @param array<int, int> $orderIds
      * @return array<int, OrderAssignment>
      */
-    public function bulkReassignOrders(array $orderIds, int $newModeratorId, ?int $changedBy, ?string $note = null): array
+    /**
+     * @param  array<int, int>  $orderIds
+     * @param  array<int, int>|int  $newModeratorIds
+     * @return array<int, OrderAssignment>
+     */
+    public function bulkReassignOrders(array $orderIds, array|int $newModeratorIds, ?int $changedBy, ?string $note = null): array
     {
         $assignments = [];
+        $targetModeratorIds = is_array($newModeratorIds)
+            ? array_values(array_unique(array_map('intval', $newModeratorIds)))
+            : [(int) $newModeratorIds];
 
-        foreach (array_values(array_unique($orderIds)) as $orderId) {
-            $assignments[] = $this->reassignOrder((int) $orderId, $newModeratorId, $changedBy, $note);
+        if (empty($targetModeratorIds)) {
+            return [];
+        }
+
+        $moderatorCount = count($targetModeratorIds);
+
+        foreach (array_values(array_unique($orderIds)) as $index => $orderId) {
+            $moderatorId = $targetModeratorIds[$index % $moderatorCount];
+            $assignments[] = $this->reassignOrder((int) $orderId, $moderatorId, $changedBy, $note);
         }
 
         return $assignments;
