@@ -79,7 +79,7 @@ class OrderAssignmentController extends Controller
                 ->whereIn('status', ['processing', 'incomplete']));
         }
 
-        $perPage = min(max((int) $request->integer('per_page', 30), 1), 100);
+        $perPage = min(max((int) $request->integer('per_page', 100), 1), 500);
 
         return response()->json(['data' => $query->paginate($perPage)]);
     }
