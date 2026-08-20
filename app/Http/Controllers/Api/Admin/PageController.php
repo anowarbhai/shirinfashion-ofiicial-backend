@@ -36,6 +36,8 @@ class PageController extends Controller
             'excerpt' => $this->nullableString($validated['excerpt'] ?? null),
             'seo_title' => $this->nullableString($validated['seo_title'] ?? null),
             'seo_description' => $this->nullableString($validated['seo_description'] ?? null),
+            'campaign_facebook_pixel_ids' => $validated['campaign_facebook_pixel_ids'] ?? [],
+            'campaign_google_tag_ids' => $validated['campaign_google_tag_ids'] ?? [],
             'builder_json' => $validated['builder_json'] ?? [],
         ]);
 
@@ -68,6 +70,8 @@ class PageController extends Controller
             'excerpt' => $this->nullableString($validated['excerpt'] ?? null),
             'seo_title' => $this->nullableString($validated['seo_title'] ?? null),
             'seo_description' => $this->nullableString($validated['seo_description'] ?? null),
+            'campaign_facebook_pixel_ids' => $validated['campaign_facebook_pixel_ids'] ?? [],
+            'campaign_google_tag_ids' => $validated['campaign_google_tag_ids'] ?? [],
             'builder_json' => $validated['builder_json'] ?? [],
         ]);
 
@@ -102,6 +106,10 @@ class PageController extends Controller
             'excerpt' => ['nullable', 'string', 'max:500'],
             'seo_title' => ['nullable', 'string', 'max:180'],
             'seo_description' => ['nullable', 'string', 'max:320'],
+            'campaign_facebook_pixel_ids' => ['nullable', 'array'],
+            'campaign_facebook_pixel_ids.*' => ['string', 'max:80', 'distinct'],
+            'campaign_google_tag_ids' => ['nullable', 'array'],
+            'campaign_google_tag_ids.*' => ['string', 'max:80', 'distinct'],
             'builder_json' => ['nullable', 'array'],
         ]);
     }
@@ -144,6 +152,8 @@ class PageController extends Controller
             'excerpt' => $page->excerpt,
             'seo_title' => $page->seo_title,
             'seo_description' => $page->seo_description,
+            'campaign_facebook_pixel_ids' => $page->campaign_facebook_pixel_ids ?? [],
+            'campaign_google_tag_ids' => $page->campaign_google_tag_ids ?? [],
             'builder_json' => $page->builder_json ?? [],
             'updated_at' => optional($page->updated_at)?->toIso8601String(),
             'created_at' => optional($page->created_at)?->toIso8601String(),

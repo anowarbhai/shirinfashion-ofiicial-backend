@@ -16,8 +16,18 @@ class StorefrontPage extends Model
         'excerpt',
         'seo_title',
         'seo_description',
+        'campaign_facebook_pixel_ids',
+        'campaign_google_tag_ids',
         'builder_json',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'campaign_facebook_pixel_ids' => 'array',
+            'campaign_google_tag_ids' => 'array',
+        ];
+    }
 
     protected function builderJson(): Attribute
     {
