@@ -272,7 +272,8 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::post('/media', [AdminMediaController::class, 'store']);
         Route::patch('/media/{mediaAsset}', [AdminMediaController::class, 'update']);
         Route::delete('/media/{mediaAsset}', [AdminMediaController::class, 'destroy']);
-        Route::apiResource('blog/categories', AdminBlogCategoryController::class);
+        Route::apiResource('blog/categories', AdminBlogCategoryController::class)
+            ->names('blog.categories');
         Route::apiResource('blog/posts', AdminBlogPostController::class);
     });
 });
