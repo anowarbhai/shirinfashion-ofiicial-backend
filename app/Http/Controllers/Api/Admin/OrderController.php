@@ -570,7 +570,7 @@ class OrderController extends Controller
                 [
                     'bulk' => true,
                     'previous_moderator_id' => $previousModeratorId ? (int) $previousModeratorId : null,
-                    'new_moderator_id' => (int) $payload['moderator_id'],
+                    'new_moderator_id' => (int) $assignment->moderator_id,
                     'note' => $payload['note'] ?? null,
                 ],
             );

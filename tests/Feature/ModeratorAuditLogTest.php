@@ -80,6 +80,33 @@ class ModeratorAuditLogTest extends TestCase
         $this->assertSame($second->id, $log->metadata['new_moderator_id']);
     }
 
+    public function test_bulk_order_reassignment_records_the_actual_target_moderator(): void
+    {
+        $admin = $this->admin();
+        $first = $this->moderator('Moderator Five');
+        $second = $this->moderator('Moderator Six', 2);
+        $order = $this->order();
+        app(OrderAssignmentService::class)->reassignOrder($order->id, $first->id, null);
+
+        $this->asAdmin($admin)
+            ->postJson('/api/admin/orders/bulk-reassign', [
+                'order_ids' => [$order->id],
+                'moderator_ids' => [$second->id],
+                'note' => 'Bulk load balancing',
+            ])
+            ->assertOk()
+            ->assertJsonPath('message', '1 orders reassigned successfully.');
+
+        $log = AdminAuditLog::query()
+            ->where('action', 'order.reassigned')
+            ->where('subject_id', $order->id)
+            ->firstOrFail();
+
+        $this->assertTrue($log->metadata['bulk']);
+        $this->assertSame($first->id, $log->metadata['previous_moderator_id']);
+        $this->assertSame($second->id, $log->metadata['new_moderator_id']);
+    }
+
     private function asAdmin(User $admin): static
     {
         return $this->withHeader(
