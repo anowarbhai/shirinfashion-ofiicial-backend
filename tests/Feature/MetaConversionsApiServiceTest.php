@@ -11,6 +11,7 @@ use App\Services\MetaConversionsApiService;
 use App\Support\SensitiveSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -107,6 +108,7 @@ class MetaConversionsApiServiceTest extends TestCase
         ]);
         $order = $this->createOrder([
             'meta_event_source_url' => 'https://shirinfashion.com.bd/products/night-cream?fbclid=click-id',
+            'meta_campaign_facebook_pixel_ids' => ['campaign-night'],
         ]);
         $order->items()->update(['product_id' => $product->id]);
 
@@ -127,6 +129,57 @@ class MetaConversionsApiServiceTest extends TestCase
         app(MetaConversionsApiService::class)->sendPurchase($order->load('items'));
 
         $this->assertNull($order->fresh()->meta_purchase_sent_at);
+        $this->assertSame(1, $order->fresh()->meta_purchase_attempts);
+        $this->assertNotNull($order->fresh()->meta_purchase_last_attempt_at);
+    }
+
+    public function test_it_never_sends_purchase_for_an_unconfirmed_order(): void
+    {
+        Http::fake(['graph.facebook.com/*' => Http::response(['events_received' => 1])]);
+        $this->storeFacebookSettings();
+        $order = $this->createOrder([
+            'status' => 'pending',
+            'payment_method' => 'sslcommerz',
+            'payment_status' => 'pending',
+            'placed_at' => null,
+        ]);
+
+        app(MetaConversionsApiService::class)->sendPurchase($order->load('items'));
+
+        Http::assertNothingSent();
+        $this->assertSame(0, $order->fresh()->meta_purchase_attempts);
+    }
+
+    public function test_tracking_context_is_not_exposed_when_an_order_is_serialized(): void
+    {
+        $order = $this->createOrder([
+            'meta_fbp' => 'fb.1.1712345678.123456789',
+            'meta_fbc' => 'fb.1.1712345678.click-id',
+            'meta_user_agent' => 'Secret Browser Context',
+        ]);
+
+        $serialized = $order->toArray();
+
+        $this->assertArrayNotHasKey('meta_fbp', $serialized);
+        $this->assertArrayNotHasKey('meta_fbc', $serialized);
+        $this->assertArrayNotHasKey('meta_user_agent', $serialized);
+    }
+
+    public function test_retry_command_resends_a_recent_failed_purchase(): void
+    {
+        Http::fake(['graph.facebook.com/*' => Http::response(['events_received' => 1])]);
+        $this->storeFacebookSettings();
+        $order = $this->createOrder([
+            'meta_user_agent' => 'Mozilla/5.0',
+            'meta_purchase_attempts' => 1,
+            'meta_purchase_last_attempt_at' => now()->subMinutes(20),
+        ]);
+
+        Artisan::call('meta:retry-purchases');
+
+        Http::assertSentCount(1);
+        $this->assertNotNull($order->fresh()->meta_purchase_sent_at);
+        $this->assertSame(2, $order->fresh()->meta_purchase_attempts);
     }
 
     private function storeFacebookSettings(): void

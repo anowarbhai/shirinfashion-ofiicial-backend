@@ -11,6 +11,18 @@ class Order extends Model
 {
     use HasFactory;
 
+    protected $hidden = [
+        'meta_fbp',
+        'meta_fbc',
+        'meta_campaign_facebook_pixel_ids',
+        'meta_event_source_url',
+        'meta_landing_page_slug',
+        'meta_user_agent',
+        'meta_purchase_attempts',
+        'meta_purchase_last_attempt_at',
+        'meta_purchase_sent_at',
+    ];
+
     protected $fillable = [
         'order_number',
         'user_id',
@@ -29,9 +41,12 @@ class Order extends Model
         'utm_source',
         'meta_fbp',
         'meta_fbc',
+        'meta_campaign_facebook_pixel_ids',
         'meta_event_source_url',
         'meta_landing_page_slug',
         'meta_user_agent',
+        'meta_purchase_attempts',
+        'meta_purchase_last_attempt_at',
         'meta_purchase_sent_at',
         'status',
         'assignment_status',
@@ -66,11 +81,13 @@ class Order extends Model
             'shipping_total' => 'decimal:2',
             'grand_total' => 'decimal:2',
             'shipping_address' => 'array',
+            'meta_campaign_facebook_pixel_ids' => 'array',
             'fraud_check' => 'array',
             'placed_at' => 'datetime',
             'last_activity_at' => 'datetime',
             'completed_at' => 'datetime',
             'meta_purchase_sent_at' => 'datetime',
+            'meta_purchase_last_attempt_at' => 'datetime',
             'ai_call_response' => 'array',
             'ai_call_last_attempt_at' => 'datetime',
             'ai_call_callback_at' => 'datetime',

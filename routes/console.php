@@ -10,3 +10,4 @@ Artisan::command('inspire', function () {
 
 Schedule::command('backup:database-monthly')->hourly();
 Schedule::command('mobile:send-cart-reminders')->everyTenMinutes()->withoutOverlapping();
+Schedule::command('meta:retry-purchases')->everyFiveMinutes()->withoutOverlapping();

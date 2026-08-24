@@ -8,6 +8,7 @@ use App\Models\StorefrontPage;
 use App\Models\StorefrontSetting;
 use App\Support\SensitiveSettings;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -16,60 +17,88 @@ class MetaConversionsApiService
 {
     public function sendPurchase(Order $order): void
     {
-        if ($order->meta_purchase_sent_at) {
-            return;
-        }
+        try {
+            Cache::lock('meta-capi-purchase:'.$order->id, 60)->block(1, function () use ($order): void {
+                $order = Order::query()->with('items')->find($order->id);
 
-        $settings = $this->settings();
-        $targets = $this->resolveTargets($order, $settings);
-
-        if ($targets === []) {
-            return;
-        }
-
-        $payload = $this->purchasePayload($order);
-        $allSucceeded = true;
-
-        foreach ($targets as $target) {
-            try {
-                $request = Http::asJson()
-                    ->acceptJson()
-                    ->timeout(max(2, (int) config('services.meta.request_timeout', 8)))
-                    ->retry(2, 250, fn (Throwable $exception): bool => $exception instanceof ConnectionException);
-
-                $body = [
-                    'data' => [$payload],
-                    'access_token' => $target['access_token'],
-                ];
-
-                if ($target['test_event_code'] !== '') {
-                    $body['test_event_code'] = $target['test_event_code'];
+                if (! $order || ! $this->isEligiblePurchase($order)) {
+                    return;
                 }
 
-                $response = $request->post($this->eventsUrl($target['pixel_id']), $body);
+                $targets = $this->resolveTargets($order, $this->settings());
 
-                if (! $response->successful()) {
-                    $allSucceeded = false;
-                    Log::warning('Meta CAPI Purchase request was rejected.', [
-                        'order_id' => $order->id,
-                        'pixel_id' => $target['pixel_id'],
-                        'status' => $response->status(),
-                        'error' => $response->json('error.message'),
-                    ]);
+                if ($targets === []) {
+                    return;
                 }
-            } catch (Throwable $exception) {
-                $allSucceeded = false;
-                Log::warning('Meta CAPI Purchase request failed.', [
-                    'order_id' => $order->id,
-                    'pixel_id' => $target['pixel_id'],
-                    'reason' => $exception->getMessage(),
-                ]);
-            }
+
+                $order->forceFill([
+                    'meta_purchase_attempts' => ((int) $order->meta_purchase_attempts) + 1,
+                    'meta_purchase_last_attempt_at' => now(),
+                ])->save();
+
+                $payload = $this->purchasePayload($order);
+                $allSucceeded = true;
+
+                foreach ($targets as $target) {
+                    try {
+                        $request = Http::asJson()
+                            ->acceptJson()
+                            ->timeout(max(2, (int) config('services.meta.request_timeout', 8)))
+                            ->retry(2, 250, fn (Throwable $exception): bool => $exception instanceof ConnectionException);
+
+                        $body = [
+                            'data' => [$payload],
+                            'access_token' => $target['access_token'],
+                        ];
+
+                        if ($target['test_event_code'] !== '') {
+                            $body['test_event_code'] = $target['test_event_code'];
+                        }
+
+                        $response = $request->post($this->eventsUrl($target['pixel_id']), $body);
+
+                        if (! $response->successful()) {
+                            $allSucceeded = false;
+                            Log::warning('Meta CAPI Purchase request was rejected.', [
+                                'order_id' => $order->id,
+                                'pixel_id' => $target['pixel_id'],
+                                'status' => $response->status(),
+                                'error_code' => $response->json('error.code'),
+                            ]);
+                        }
+                    } catch (Throwable $exception) {
+                        $allSucceeded = false;
+                        Log::warning('Meta CAPI Purchase request failed.', [
+                            'order_id' => $order->id,
+                            'pixel_id' => $target['pixel_id'],
+                            'exception' => $exception::class,
+                        ]);
+                    }
+                }
+
+                if ($allSucceeded) {
+                    $order->forceFill(['meta_purchase_sent_at' => now()])->save();
+                }
+            });
+        } catch (Throwable $exception) {
+            Log::warning('Meta CAPI Purchase processing was skipped safely.', [
+                'order_id' => $order->id,
+                'exception' => $exception::class,
+            ]);
+        }
+    }
+
+    private function isEligiblePurchase(Order $order): bool
+    {
+        if ($order->meta_purchase_sent_at || ! $order->placed_at) {
+            return false;
         }
 
-        if ($allSucceeded) {
-            $order->forceFill(['meta_purchase_sent_at' => now()])->save();
+        if (in_array($order->status, ['pending', 'incomplete', 'cancelled', 'refunded'], true)) {
+            return false;
         }
+
+        return $order->payment_method !== 'sslcommerz' || $order->payment_status === 'paid';
     }
 
     private function purchasePayload(Order $order): array
@@ -116,12 +145,14 @@ class MetaConversionsApiService
         return array_filter([
             'em' => $email ? [$this->hash($email)] : null,
             'ph' => $phone ? [$this->hash($phone)] : null,
-            'fn' => $firstName ? [$this->hash($firstName)] : null,
-            'ln' => $lastName ? [$this->hash($lastName)] : null,
-            'ct' => $city ? [$this->hash((string) $city)] : null,
+            'fn' => $firstName ? [$this->hashIdentity($firstName)] : null,
+            'ln' => $lastName ? [$this->hashIdentity($lastName)] : null,
+            'ct' => $city ? [$this->hashIdentity((string) $city)] : null,
             'country' => [$this->hash('bd')],
-            'external_id' => $phone ? [$this->hash($phone)] : null,
-            'client_ip_address' => $order->client_ip ?: null,
+            'external_id' => $order->user_id
+                ? [$this->hash('customer:'.$order->user_id)]
+                : ($phone ? [$this->hash($phone)] : null),
+            'client_ip_address' => $this->validIpAddress($order->client_ip),
             'client_user_agent' => $order->meta_user_agent ?: null,
             'fbp' => $this->validBrowserId($order->meta_fbp),
             'fbc' => $this->validBrowserId($order->meta_fbc),
@@ -161,6 +192,8 @@ class MetaConversionsApiService
 
     private function campaignPixelIds(Order $order)
     {
+        $sourceIds = collect();
+
         if ($order->meta_landing_page_slug) {
             $page = StorefrontPage::query()
                 ->where('slug', $order->meta_landing_page_slug)
@@ -168,18 +201,29 @@ class MetaConversionsApiService
                 ->first();
 
             if ($page) {
-                return collect($page->campaign_facebook_pixel_ids ?? [])->map(fn ($id): string => (string) $id)->filter()->unique();
+                $sourceIds = collect($page->campaign_facebook_pixel_ids ?? [])
+                    ->map(fn ($id): string => (string) $id)
+                    ->filter()->unique()->values();
             }
         }
 
-        $productIds = $order->items->pluck('product_id')->filter()->unique();
+        if ($sourceIds->isEmpty()) {
+            $productIds = $order->items->pluck('product_id')->filter()->unique();
+            $sourceIds = Product::query()
+                ->whereIn('id', $productIds)
+                ->get(['campaign_facebook_pixel_ids'])
+                ->flatMap(fn (Product $product): array => $product->campaign_facebook_pixel_ids ?? [])
+                ->map(fn ($id): string => (string) $id)
+                ->filter()->unique()->values();
+        }
 
-        return Product::query()
-            ->whereIn('id', $productIds)
-            ->get(['campaign_facebook_pixel_ids'])
-            ->flatMap(fn (Product $product): array => $product->campaign_facebook_pixel_ids ?? [])
+        $selectedIds = collect($order->meta_campaign_facebook_pixel_ids ?? [])
             ->map(fn ($id): string => (string) $id)
-            ->filter()->unique()->values();
+            ->filter()->unique();
+
+        return $selectedIds->isNotEmpty()
+            ? $sourceIds->intersect($selectedIds)->values()
+            : $sourceIds;
     }
 
     private function target(array $settings): array
@@ -221,27 +265,64 @@ class MetaConversionsApiService
     {
         $email = mb_strtolower(trim((string) $email));
 
-        return $email !== '' && ! str_ends_with($email, '@guest.checkout') ? $email : null;
+        return $email !== ''
+            && filter_var($email, FILTER_VALIDATE_EMAIL)
+            && ! str_ends_with($email, '@guest.checkout')
+                ? $email
+                : null;
     }
 
     private function normalizePhone(?string $phone): ?string
     {
         $digits = preg_replace('/\D+/', '', (string) $phone) ?: '';
 
-        if (str_starts_with($digits, '880')) {
+        if (str_starts_with($digits, '00880')) {
+            $digits = substr($digits, 2);
+        }
+
+        if (str_starts_with($digits, '8800')) {
+            $digits = '880'.substr($digits, 4);
+        }
+
+        if (preg_match('/^8801\d{9}$/', $digits)) {
             return $digits;
         }
 
-        if (str_starts_with($digits, '0')) {
+        if (preg_match('/^01\d{9}$/', $digits)) {
             return '88'.$digits;
         }
 
-        return $digits !== '' ? $digits : null;
+        if (preg_match('/^1\d{9}$/', $digits)) {
+            return '880'.$digits;
+        }
+
+        return null;
     }
 
     private function hash(string $value): string
     {
         return hash('sha256', mb_strtolower(trim($value)));
+    }
+
+    private function hashIdentity(string $value): string
+    {
+        $normalized = mb_strtolower(trim($value));
+        $normalized = preg_replace('/[^\pL\pN]/u', '', $normalized) ?: $normalized;
+
+        return hash('sha256', $normalized);
+    }
+
+    private function validIpAddress(?string $value): ?string
+    {
+        foreach (explode(',', (string) $value) as $candidate) {
+            $candidate = trim($candidate);
+
+            if (filter_var($candidate, FILTER_VALIDATE_IP)) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 
     private function validPixelId(mixed $pixelId): bool
@@ -253,6 +334,6 @@ class MetaConversionsApiService
     {
         $value = trim((string) $value);
 
-        return $value !== '' && preg_match('/^[A-Za-z0-9._-]{5,255}$/', $value) ? $value : null;
+        return $value !== '' && preg_match('/^[\x21-\x7E]{5,255}$/', $value) ? $value : null;
     }
 }
