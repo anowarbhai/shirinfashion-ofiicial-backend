@@ -119,9 +119,7 @@ class ProductController extends Controller
         $product = $this->productReviews->applyApprovedReviewMetrics($product);
         $this->productReviews->loadApprovedReviews($product);
 
-        if ($product->hide_from_storefront) {
-            $product->setAttribute('campaign_tracking', $this->campaignTrackingFor($product));
-        }
+        $product->setAttribute('campaign_tracking', $this->campaignTrackingFor($product));
 
         $product->setAttribute('image_alt_texts', $this->imageAltTextsFor($product));
 

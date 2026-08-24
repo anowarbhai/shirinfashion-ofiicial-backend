@@ -517,11 +517,6 @@ class ProductController extends Controller
         $validated['highlights'] = $this->normalizeStringList($validated['highlights'] ?? []);
         $validated['ingredients'] = $this->normalizeStringList($validated['ingredients'] ?? []);
 
-        if (! (bool) ($validated['hide_from_storefront'] ?? false)) {
-            $validated['campaign_facebook_pixel_ids'] = [];
-            $validated['campaign_google_tag_ids'] = [];
-        }
-
         $validated['slug'] = $this->resolveUniqueSlug(
             $validated['slug'] ?? $validated['name'],
             $productId,

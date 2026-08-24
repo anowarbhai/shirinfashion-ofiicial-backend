@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Category;
 use App\Models\Order;
+use App\Models\Product;
 use App\Models\StorefrontPage;
 use App\Models\StorefrontSetting;
 use App\Services\MetaConversionsApiService;
@@ -82,6 +84,37 @@ class MetaConversionsApiServiceTest extends TestCase
 
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://graph.facebook.com/v24.0/111111111111111/events'
             && $request['access_token'] === 'global-secret'
+        );
+    }
+
+    public function test_it_uses_the_selected_campaign_pixel_for_a_single_product_page_order(): void
+    {
+        Http::fake(['graph.facebook.com/*' => Http::response(['events_received' => 1])]);
+        $this->storeFacebookSettings();
+        $category = Category::query()->create(['name' => 'Skincare', 'slug' => 'skincare']);
+        $product = Product::query()->create([
+            'category_id' => $category->id,
+            'name' => 'Night Cream',
+            'slug' => 'night-cream',
+            'sku' => 'NIGHT-001',
+            'brand' => 'Shirin Fashion',
+            'price' => 600,
+            'inventory' => 10,
+            'gallery' => [],
+            'is_active' => true,
+            'hide_from_storefront' => false,
+            'campaign_facebook_pixel_ids' => ['campaign-night'],
+        ]);
+        $order = $this->createOrder([
+            'meta_event_source_url' => 'https://shirinfashion.com.bd/products/night-cream?fbclid=click-id',
+        ]);
+        $order->items()->update(['product_id' => $product->id]);
+
+        app(MetaConversionsApiService::class)->sendPurchase($order->fresh('items'));
+
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://graph.facebook.com/v24.0/222222222222222/events'
+            && $request['access_token'] === 'campaign-secret'
+            && $request['data'][0]['event_source_url'] === 'https://shirinfashion.com.bd/products/night-cream?fbclid=click-id'
         );
     }
 

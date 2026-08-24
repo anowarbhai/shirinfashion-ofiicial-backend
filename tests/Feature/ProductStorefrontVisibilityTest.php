@@ -71,6 +71,41 @@ class ProductStorefrontVisibilityTest extends TestCase
             ->assertJsonMissing(['pixel_id' => '99999999999']);
     }
 
+    public function test_visible_product_exposes_selected_product_page_tracking(): void
+    {
+        $category = Category::query()->create([
+            'name' => 'Skincare',
+            'slug' => 'skincare',
+        ]);
+        StorefrontSetting::query()->create([
+            'key' => 'facebook_marketing',
+            'value' => [
+                'campaign_pixels' => [
+                    ['id' => 'fb_product', 'name' => 'Product Pixel', 'pixel_id' => '12345678901', 'enabled' => true],
+                ],
+            ],
+        ]);
+        StorefrontSetting::query()->create([
+            'key' => 'google_marketing',
+            'value' => [
+                'campaign_tags' => [
+                    ['id' => 'gg_product', 'name' => 'Product GTM', 'type' => 'gtm', 'tracking_id' => 'GTM-PRODUCT', 'enabled' => true],
+                ],
+            ],
+        ]);
+
+        $product = $this->createProduct($category, 'Visible Serum', 'visible-serum');
+        $product->update([
+            'campaign_facebook_pixel_ids' => ['fb_product'],
+            'campaign_google_tag_ids' => ['gg_product'],
+        ]);
+
+        $this->getJson('/api/products/'.$product->slug)
+            ->assertOk()
+            ->assertJsonPath('data.campaign_tracking.facebook_pixels.0.pixel_id', '12345678901')
+            ->assertJsonPath('data.campaign_tracking.google_tags.0.tracking_id', 'GTM-PRODUCT');
+    }
+
     public function test_inactive_product_detail_is_not_publicly_visible(): void
     {
         $category = Category::query()->create([
