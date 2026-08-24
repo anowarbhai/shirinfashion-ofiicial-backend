@@ -123,6 +123,7 @@ Route::post('/orders/incomplete', [OrderController::class, 'storeIncomplete'])->
 Route::post('/orders/send-otp', [OrderController::class, 'sendOtp'])->middleware('throttle:otp-send');
 Route::post('/orders/verify-otp', [OrderController::class, 'verifyOtp'])->middleware('throttle:otp-verify');
 Route::post('/orders/track', [OrderController::class, 'track'])->middleware('throttle:order-track');
+Route::post('/orders/verify-purchase', [OrderController::class, 'verifyPurchase'])->middleware('throttle:order-track');
 Route::match(['get', 'post'], '/ai-calling/order-confirmation/{order}', [AiCallingCallbackController::class, 'orderConfirmation'])->middleware('throttle:public-write');
 Route::match(['get', 'post'], '/ai-calling/test-callback', [AiCallingCallbackController::class, 'testCallback'])->middleware('throttle:public-write');
 Route::match(['get', 'post'], '/payments/sslcommerz/success', [OrderController::class, 'sslCommerzSuccess'])->middleware('throttle:public-write');

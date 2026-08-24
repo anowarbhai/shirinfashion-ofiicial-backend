@@ -142,6 +142,7 @@ class OrderController extends Controller
         return response()->json([
             'message' => 'Order created successfully.',
             'data' => $order,
+            'purchase_verification_token' => $this->purchaseVerificationToken($order),
             'checkout_guard' => $this->resolveNextCheckoutGuardState($order),
         ], 201);
     }
@@ -258,6 +259,7 @@ class OrderController extends Controller
         return response()->json([
             'message' => 'SSLCommerz payment session created successfully.',
             'data' => $order,
+            'purchase_verification_token' => $this->purchaseVerificationToken($order),
             'payment' => [
                 'provider' => 'sslcommerz',
                 'redirect_url' => $paymentSession['GatewayPageURL'],
@@ -602,6 +604,56 @@ class OrderController extends Controller
                 ])->values(),
             ],
         ]);
+    }
+
+    public function verifyPurchase(Request $request): JsonResponse
+    {
+        $payload = $request->validate([
+            'order_number' => ['required', 'string', 'max:80'],
+            'verification_token' => ['required', 'string', 'size:64'],
+        ]);
+        $order = Order::query()
+            ->where('order_number', $payload['order_number'])
+            ->with('items')
+            ->first();
+
+        if (! $order || ! hash_equals(
+            $this->purchaseVerificationToken($order),
+            $payload['verification_token'],
+        )) {
+            return response()->json(['confirmed' => false], 404);
+        }
+
+        $confirmed = $order->placed_at
+            && ! in_array($order->status, ['pending', 'incomplete', 'cancelled', 'refunded'], true)
+            && ($order->payment_method !== 'sslcommerz' || $order->payment_status === 'paid');
+
+        return response()->json([
+            'confirmed' => (bool) $confirmed,
+            'data' => $confirmed ? [
+                'order_number' => $order->order_number,
+                'subtotal' => $order->subtotal,
+                'shipping_total' => $order->shipping_total,
+                'discount_total' => $order->discount_total,
+                'grand_total' => $order->grand_total,
+                'items' => $order->items->map(fn ($item): array => [
+                    'product_name' => $item->product_name,
+                    'sku' => $item->sku,
+                    'price' => $item->price,
+                    'quantity' => $item->quantity,
+                    'line_total' => $item->line_total,
+                ]),
+            ] : null,
+        ]);
+    }
+
+    protected function purchaseVerificationToken(Order $order): string
+    {
+        return hash_hmac(
+            'sha256',
+            'purchase|'.$order->id.'|'.$order->order_number,
+            (string) config('app.key'),
+        );
     }
 
     protected function validateOrderPayload(Request $request): array
