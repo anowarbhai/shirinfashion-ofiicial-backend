@@ -14,6 +14,7 @@ use App\Services\CustomerNotificationService;
 use App\Services\CouponEligibilityService;
 use App\Services\FraudCheckerService;
 use App\Services\JwtService;
+use App\Services\MetaConversionsApiService;
 use App\Services\OrderAssignmentService;
 use App\Services\SmsGatewayService;
 use App\Services\SmsOtpService;
@@ -44,6 +45,7 @@ class OrderController extends Controller
         protected CustomerNotificationService $customerNotificationService,
         protected CouponEligibilityService $couponEligibility,
         protected SslCommerzService $sslCommerzService,
+        protected MetaConversionsApiService $metaConversionsApi,
     ) {
     }
 
@@ -618,6 +620,11 @@ class OrderController extends Controller
             'order_source_detail' => ['nullable', 'string', 'max:255'],
             'referrer_url' => ['nullable', 'string', 'max:2000'],
             'utm_source' => ['nullable', 'string', 'max:120'],
+            'meta_fbp' => ['nullable', 'string', 'max:255', 'regex:/^[A-Za-z0-9._-]+$/'],
+            'meta_fbc' => ['nullable', 'string', 'max:255', 'regex:/^[A-Za-z0-9._-]+$/'],
+            'meta_event_source_url' => ['nullable', 'url:http,https', 'max:2000'],
+            'meta_landing_page_slug' => ['nullable', 'string', 'max:180', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/'],
+            'meta_user_agent' => ['nullable', 'string', 'max:1000'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'shipping_address' => ['required', 'array'],
             'shipping_address.address' => ['required', 'string', 'max:1000'],
@@ -817,6 +824,11 @@ class OrderController extends Controller
             'order_source_detail' => $payload['order_source_detail'] ?? null,
             'referrer_url' => $payload['referrer_url'] ?? null,
             'utm_source' => $payload['utm_source'] ?? null,
+            'meta_fbp' => $payload['meta_fbp'] ?? null,
+            'meta_fbc' => $payload['meta_fbc'] ?? null,
+            'meta_event_source_url' => $payload['meta_event_source_url'] ?? null,
+            'meta_landing_page_slug' => $payload['meta_landing_page_slug'] ?? null,
+            'meta_user_agent' => $payload['meta_user_agent'] ?? null,
             'status' => $status,
             'payment_method' => $payload['payment_method'],
             'subtotal' => $prepared['subtotal'],
@@ -1552,6 +1564,7 @@ class OrderController extends Controller
             }
 
             $this->sendOrderNotification($order);
+            $this->metaConversionsApi->sendPurchase($order->loadMissing('items'));
             $this->aiOrderCallingService->triggerForOrder($order);
 
             if ($order->user_id) {
@@ -1584,6 +1597,7 @@ class OrderController extends Controller
                 return;
             }
 
+            $this->metaConversionsApi->sendPurchase($order->loadMissing('items'));
             $this->runPostResponseFraudCheck($order);
         });
     }

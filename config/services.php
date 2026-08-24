@@ -26,6 +26,11 @@ return [
         'client_id' => env('GOOGLE_CLIENT_ID'),
     ],
 
+    'meta' => [
+        'graph_api_version' => env('META_GRAPH_API_VERSION', 'v24.0'),
+        'request_timeout' => (int) env('META_CAPI_TIMEOUT', 8),
+    ],
+
     'ses' => [
         'key' => env('AWS_ACCESS_KEY_ID'),
         'secret' => env('AWS_SECRET_ACCESS_KEY'),
