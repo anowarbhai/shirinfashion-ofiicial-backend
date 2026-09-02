@@ -163,6 +163,42 @@ class AdminSettingsService
                 'frontend_url' => '',
                 'callback_base_url' => '',
             ],
+            'mfs_gateway' => [
+                'enabled' => false,
+                'base_url' => 'https://mfs.digitrixlabs.io',
+                'api_key' => '',
+                'api_secret' => '',
+                'accounts' => [
+                    'bkash' => [
+                        'enabled' => true,
+                        'account_id' => '',
+                        'number' => '',
+                        'type' => 'personal',
+                        'instruction' => 'Go to your bKash app, select "Send Money", send the exact amount to our bKash number, and enter the Transaction ID (TrxID) below.',
+                    ],
+                    'nagad' => [
+                        'enabled' => true,
+                        'account_id' => '',
+                        'number' => '',
+                        'type' => 'personal',
+                        'instruction' => 'Go to your Nagad app, select "Send Money", send the exact amount to our Nagad number, and enter the Transaction ID (TrxID) below.',
+                    ],
+                    'rocket' => [
+                        'enabled' => false,
+                        'account_id' => '',
+                        'number' => '',
+                        'type' => 'personal',
+                        'instruction' => 'Go to your Rocket app, send the exact amount to our Rocket number, and enter the Transaction ID (TrxID) below.',
+                    ],
+                    'upay' => [
+                        'enabled' => false,
+                        'account_id' => '',
+                        'number' => '',
+                        'type' => 'personal',
+                        'instruction' => 'Go to your Upay app, send the exact amount to our Upay number, and enter the Transaction ID (TrxID) below.',
+                    ],
+                ],
+            ],
             'mobile_push' => [
                 'dashboard_widget_enabled' => true,
                 'firebase_project_id' => '',
@@ -215,6 +251,30 @@ class AdminSettingsService
                         'name' => 'Cash on Delivery',
                         'description' => 'Pay after delivery confirmation at your doorstep.',
                         'active' => true,
+                    ],
+                    [
+                        'id' => 'bkash',
+                        'name' => 'bKash (Auto Verify)',
+                        'description' => 'Pay instantly with bKash and verify via TrxID.',
+                        'active' => true,
+                    ],
+                    [
+                        'id' => 'nagad',
+                        'name' => 'Nagad (Auto Verify)',
+                        'description' => 'Pay instantly with Nagad and verify via TrxID.',
+                        'active' => true,
+                    ],
+                    [
+                        'id' => 'rocket',
+                        'name' => 'Rocket (Auto Verify)',
+                        'description' => 'Pay instantly with Rocket and verify via TrxID.',
+                        'active' => false,
+                    ],
+                    [
+                        'id' => 'upay',
+                        'name' => 'Upay (Auto Verify)',
+                        'description' => 'Pay instantly with Upay and verify via TrxID.',
+                        'active' => false,
                     ],
                     [
                         'id' => 'sslcommerz',

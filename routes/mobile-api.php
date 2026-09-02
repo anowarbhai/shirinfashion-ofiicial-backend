@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CouponController;
 use App\Http\Controllers\Api\CustomerAuthSettingsController;
+use App\Http\Controllers\Api\PublicMfsGatewaySettingsController;
 use App\Http\Controllers\Api\OrderController as StorefrontOrderController;
 use App\Http\Controllers\Api\ProductPageSettingsController;
 use App\Http\Controllers\Api\WishlistController;
@@ -23,6 +24,7 @@ Route::get('/app-status', AppStatusController::class)->middleware('throttle:mobi
 
 Route::get('/home', HomeController::class);
 Route::get('/settings/customer-auth', [CustomerAuthSettingsController::class, 'show']);
+Route::get('/settings/mfs-gateway/public', [PublicMfsGatewaySettingsController::class, 'show']);
 Route::get('/settings/product-page', [ProductPageSettingsController::class, 'show']);
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/products', [ProductController::class, 'index']);

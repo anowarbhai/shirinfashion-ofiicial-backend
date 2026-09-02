@@ -16,6 +16,7 @@ class SensitiveSettings
         'mail_setup' => ['smtp_password'],
         'mobile_push' => ['firebase_private_key'],
         'payment_gateway' => ['store_password'],
+        'mfs_gateway' => ['api_secret'],
         'sms_integration' => ['api_key', 'api_secret'],
     ];
 

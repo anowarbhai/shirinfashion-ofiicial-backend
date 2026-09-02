@@ -17,6 +17,7 @@ use App\Services\JwtService;
 use App\Services\MetaConversionsApiService;
 use App\Services\OrderAssignmentService;
 use App\Services\SmsGatewayService;
+use App\Services\MfsVerifyService;
 use App\Services\SmsOtpService;
 use App\Services\SslCommerzService;
 use App\Support\BangladeshPhone;
@@ -46,6 +47,7 @@ class OrderController extends Controller
         protected CouponEligibilityService $couponEligibility,
         protected SslCommerzService $sslCommerzService,
         protected MetaConversionsApiService $metaConversionsApi,
+        protected MfsVerifyService $mfsVerifyService,
     ) {
     }
 
@@ -101,7 +103,74 @@ class OrderController extends Controller
             return $this->storeSslCommerzOrder($payload, $customer, $clientIp);
         }
 
-        $order = DB::transaction(function () use ($customer, $payload, $clientIp) {
+        $isMfs = in_array($payload['payment_method'], ['bkash', 'nagad', 'rocket', 'upay', 'mfs'], true);
+        $mfsPaymentStatus = 'authorized';
+        $mfsPaymentDetails = null;
+
+        if ($isMfs) {
+            $provider = in_array($payload['payment_method'], ['bkash', 'nagad', 'rocket', 'upay'], true)
+                ? $payload['payment_method']
+                : ($payload['mfs_provider'] ?? 'bkash');
+            $trxId = strtoupper(trim((string) ($payload['trx_id'] ?? '')));
+
+            if ($trxId === '') {
+                throw ValidationException::withMessages([
+                    'trx_id' => ['Please enter the Transaction ID (TrxID) after completing your mobile payment.'],
+                ]);
+            }
+
+            $preCalculation = $this->prepareOrderPayload($payload, false, false, $customer, false);
+            $expectedAmount = (float) $preCalculation['grand_total'];
+            $mfsEnabled = (bool) $this->settings->getSetting('mfs_gateway.enabled', false);
+
+            if ($mfsEnabled) {
+                $verification = $this->mfsVerifyService->verifyTransaction(
+                    $provider,
+                    $trxId,
+                    $expectedAmount,
+                    null,
+                    $payload['mfs_account_id'] ?? null
+                );
+
+                if ($verification['status'] === 'pending_sync') {
+                    return response()->json([
+                        'message' => $verification['message'],
+                        'status' => 'pending_sync',
+                        'retry_after_seconds' => $verification['retry_after_seconds'] ?? 30,
+                        'code' => $verification['code'] ?? 'TRANSACTION_PENDING_SYNC',
+                    ], 202);
+                }
+
+                if ($verification['status'] === 'failed' || ! ($verification['verified'] ?? false)) {
+                    throw ValidationException::withMessages([
+                        'trx_id' => [$verification['message'] ?: 'Transaction ID verification failed. Please check your payment SMS and try again.'],
+                    ]);
+                }
+
+                $mfsPaymentStatus = 'paid';
+                $mfsPaymentDetails = [
+                    'gateway' => 'mfs_verify',
+                    'provider' => $provider,
+                    'trx_id' => $verification['transaction']['trx_id'] ?? $trxId,
+                    'usage_id' => $verification['usage_id'] ?? null,
+                    'sender' => $verification['transaction']['sender'] ?? null,
+                    'amount' => $verification['transaction']['amount'] ?? $expectedAmount,
+                    'verified_at' => Carbon::now()->toIso8601String(),
+                    'status' => 'consumed',
+                    'raw' => $verification['data'] ?? [],
+                ];
+            } else {
+                $mfsPaymentStatus = 'pending_verification';
+                $mfsPaymentDetails = [
+                    'gateway' => 'manual_mfs',
+                    'provider' => $provider,
+                    'trx_id' => $trxId,
+                    'submitted_at' => Carbon::now()->toIso8601String(),
+                ];
+            }
+        }
+
+        $order = DB::transaction(function () use ($customer, $payload, $clientIp, $isMfs, $mfsPaymentStatus, $mfsPaymentDetails) {
             $prepared = $this->prepareOrderPayload($payload, true, false, $customer);
             $order = $this->findMatchingIncompleteOrder($customer, $prepared)
                 ?? new Order(['order_number' => $this->generateOrderNumber()]);
@@ -115,7 +184,10 @@ class OrderController extends Controller
                 $clientIp,
                 'processing',
             );
-            $order->payment_status = $payload['payment_method'] === 'cod' ? 'pending_collection' : 'authorized';
+            $order->payment_status = $isMfs ? $mfsPaymentStatus : ($payload['payment_method'] === 'cod' ? 'pending_collection' : 'authorized');
+            if ($isMfs && $mfsPaymentDetails) {
+                $order->payment_details = $mfsPaymentDetails;
+            }
             $order->tracking_number = $order->tracking_number ?: 'TRK-'.random_int(100000, 999999);
             $order->placed_at = Carbon::now();
             $order->completed_at = Carbon::now();
@@ -662,7 +734,10 @@ class OrderController extends Controller
             'customer_name' => ['required', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255'],
             'phone' => ['required', 'string', 'max:30'],
-            'payment_method' => ['required', 'in:stripe,paypal,cod,sslcommerz'],
+            'payment_method' => ['required', 'in:stripe,paypal,cod,sslcommerz,bkash,nagad,rocket,upay,mfs'],
+            'mfs_provider' => ['nullable', 'string', 'in:bkash,nagad,rocket,upay'],
+            'trx_id' => ['nullable', 'string', 'max:100'],
+            'mfs_account_id' => ['nullable', 'string', 'max:255'],
             'shipping_method' => ['required', 'string', 'max:80'],
             'shipping_charge' => ['nullable', 'numeric', 'min:0'],
             'coupon_code' => ['nullable', 'string', 'max:80'],

@@ -22,6 +22,8 @@ use App\Http\Controllers\Api\Admin\MailSetupSettingsController as AdminMailSetup
 use App\Http\Controllers\Api\Admin\MobileNotificationController as AdminMobileNotificationController;
 use App\Http\Controllers\Api\Admin\MobilePushSettingsController as AdminMobilePushSettingsController;
 use App\Http\Controllers\Api\Admin\PaymentGatewaySettingsController as AdminPaymentGatewaySettingsController;
+use App\Http\Controllers\Api\Admin\MfsGatewaySettingsController as AdminMfsGatewaySettingsController;
+use App\Http\Controllers\Api\PublicMfsGatewaySettingsController;
 use App\Http\Controllers\Api\Admin\AdminPermissionController as AdminPermissionController;
 use App\Http\Controllers\Api\Admin\AdminAuditLogController as AdminAuditLogController;
 use App\Http\Controllers\Api\Admin\AdminRoleController as AdminRoleController;
@@ -131,6 +133,7 @@ Route::match(['get', 'post'], '/payments/sslcommerz/fail', [OrderController::cla
 Route::match(['get', 'post'], '/payments/sslcommerz/cancel', [OrderController::class, 'sslCommerzCancel'])->middleware('throttle:public-write');
 Route::post('/payments/sslcommerz/ipn', [OrderController::class, 'sslCommerzIpn'])->middleware('throttle:public-write');
 Route::get('/database-backups/download/{token}', [AdminDatabaseBackupController::class, 'downloadByToken']);
+Route::get('/settings/mfs-gateway/public', [PublicMfsGatewaySettingsController::class, 'show']);
 
 Route::get('/blog/posts', [PublicBlogController::class, 'posts']);
 Route::get('/blog/posts/{slug}', [PublicBlogController::class, 'show']);
@@ -225,6 +228,9 @@ Route::middleware('jwt.auth')->group(function (): void {
         Route::patch('/settings/customer-auth', [AdminCustomerAuthSettingsController::class, 'update']);
         Route::get('/settings/payment-gateway', [AdminPaymentGatewaySettingsController::class, 'show']);
         Route::patch('/settings/payment-gateway', [AdminPaymentGatewaySettingsController::class, 'update']);
+        Route::get('/settings/mfs-gateway', [AdminMfsGatewaySettingsController::class, 'show']);
+        Route::patch('/settings/mfs-gateway', [AdminMfsGatewaySettingsController::class, 'update']);
+        Route::post('/settings/mfs-gateway/test', [AdminMfsGatewaySettingsController::class, 'test']);
         Route::get('/settings/mobile-push', [AdminMobilePushSettingsController::class, 'show']);
         Route::patch('/settings/mobile-push', [AdminMobilePushSettingsController::class, 'update']);
         Route::get('/settings/fraud-checker', [AdminFraudCheckerSettingsController::class, 'show']);
