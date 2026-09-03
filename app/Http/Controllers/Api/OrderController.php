@@ -29,6 +29,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
 use Throwable;
@@ -1377,10 +1378,37 @@ class OrderController extends Controller
             return $customShippingTotal;
         }
 
+        $productPageSettings = $this->settings->getGroup('product_page');
+
+        // 1. Check dynamic free shipping
+        $freeShippingEnabled = filter_var($productPageSettings['freeShippingEnabled'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $freeShippingThreshold = (float) ($productPageSettings['freeShippingThreshold'] ?? 0);
+        if ($freeShippingEnabled && $freeShippingThreshold > 0 && $subtotal >= $freeShippingThreshold) {
+            return 0.0;
+        }
+
+        // 2. Look up in dynamic shipping methods
+        $shippingMethods = $productPageSettings['shippingMethods'] ?? [];
+        if (is_array($shippingMethods) && ! empty($shippingMethods)) {
+            $methodKey = strtolower(trim($shippingMethod));
+            foreach ($shippingMethods as $method) {
+                if (! ($method['isActive'] ?? true)) {
+                    continue;
+                }
+                $id = (string) ($method['id'] ?? '');
+                $name = strtolower(trim((string) ($method['name'] ?? '')));
+                $slug = Str::slug($name);
+
+                if ($methodKey === $id || $methodKey === $name || $methodKey === $slug) {
+                    return (float) ($method['cost'] ?? 0);
+                }
+            }
+        }
+
         return match ($shippingMethod) {
-            'outside-dhaka' => 120,
-            'sub-dhaka' => 100,
-            default => 80,
+            'outside-dhaka', 'Outside Dhaka' => 120.0,
+            'sub-dhaka', 'Sub Dhaka' => 100.0,
+            default => 80.0,
         };
     }
 
