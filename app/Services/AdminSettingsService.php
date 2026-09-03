@@ -165,7 +165,8 @@ class AdminSettingsService
             ],
             'mfs_gateway' => [
                 'enabled' => false,
-                'base_url' => 'https://mfs.digitrixlabs.io',
+                'base_url' => 'https://mfsapi.digitrixlabs.io',
+                'key_version' => '1',
                 'api_key' => '',
                 'api_secret' => '',
                 'accounts' => [

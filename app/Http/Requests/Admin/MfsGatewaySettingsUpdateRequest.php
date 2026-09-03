@@ -16,6 +16,7 @@ class MfsGatewaySettingsUpdateRequest extends FormRequest
         return [
             'enabled' => ['required', 'boolean'],
             'base_url' => ['required', 'string', 'url'],
+            'key_version' => ['nullable', 'string', 'max:50'],
             'api_key' => ['nullable', 'string', 'max:255'],
             'api_secret' => ['nullable', 'string', 'max:255'],
             'accounts' => ['required', 'array'],

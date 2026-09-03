@@ -48,7 +48,8 @@ class MfsVerifyService
 
         $apiKey = trim((string) ($mfsSettings['api_key'] ?? ''));
         $apiSecret = trim((string) ($mfsSettings['api_secret'] ?? ''));
-        $baseUrl = rtrim((string) ($mfsSettings['base_url'] ?? 'https://mfs.digitrixlabs.io'), '/');
+        $baseUrl = rtrim((string) ($mfsSettings['base_url'] ?? 'https://mfsapi.digitrixlabs.io'), '/');
+        $keyVersion = trim((string) ($mfsSettings['key_version'] ?? '1')) ?: '1';
 
         if ($apiKey === '' || $apiSecret === '') {
             throw new RuntimeException('MFS Gateway credentials (API Key or Secret) are missing.');
@@ -71,21 +72,24 @@ class MfsVerifyService
         $formattedAmount = number_format($amount, 2, '.', '');
         $path = '/api/v1/transactions/verify';
         $method = 'POST';
+        $timestamp = Carbon::now('UTC')->toIso8601ZuluString();
+        $nonce = bin2hex(random_bytes(16));
+        $idempotencyKey = 'shirin_'.bin2hex(random_bytes(12));
 
         $payload = [
             'provider' => $providerKey,
             'account_id' => $resolvedAccountId,
             'trx_id' => $normalizedTrxId,
             'amount' => $formattedAmount,
-            'reference' => $reference ?: ('ORDER-'.Str::upper(Str::random(6))),
-            'payment_initiated_at' => Carbon::now('UTC')->toIso8601ZuluString(),
+            'payment_initiated_at' => $timestamp,
         ];
+
+        if ($reference) {
+            $payload['reference'] = $reference;
+        }
 
         $rawBody = json_encode($payload, JSON_UNESCAPED_SLASHES);
         $bodyHash = hash('sha256', $rawBody);
-        $timestamp = Carbon::now('UTC')->toIso8601ZuluString();
-        $nonce = bin2hex(random_bytes(16));
-        $idempotencyKey = 'chk_'.bin2hex(random_bytes(12));
 
         // 1. Build Canonical String: METHOD\nPATH\nBODY_HASH\nTIMESTAMP\nNONCE
         $canonicalString = implode("\n", [
@@ -96,8 +100,9 @@ class MfsVerifyService
             $nonce,
         ]);
 
-        // 2. Compute HMAC-SHA256 Signature
-        $signature = hash_hmac('sha256', $canonicalString, $apiSecret);
+        // 2. Compute HMAC-SHA256 Signature with Base64URL decoded secret buffer
+        $secretBuffer = self::decodeBase64Url($apiSecret);
+        $signature = hash_hmac('sha256', $canonicalString, $secretBuffer);
 
         try {
             $response = Http::timeout(25)
@@ -105,6 +110,7 @@ class MfsVerifyService
                     'Content-Type' => 'application/json',
                     'Accept' => 'application/json',
                     'X-API-Key' => $apiKey,
+                    'X-Key-Version' => $keyVersion,
                     'X-Timestamp' => $timestamp,
                     'X-Nonce' => $nonce,
                     'X-Signature' => $signature,
@@ -189,7 +195,8 @@ class MfsVerifyService
 
         $apiKey = trim((string) ($settings['api_key'] ?? ''));
         $apiSecret = trim((string) ($settings['api_secret'] ?? ''));
-        $baseUrl = rtrim((string) ($settings['base_url'] ?? 'https://mfs.digitrixlabs.io'), '/');
+        $baseUrl = rtrim((string) ($settings['base_url'] ?? 'https://mfsapi.digitrixlabs.io'), '/');
+        $keyVersion = trim((string) ($settings['key_version'] ?? '1')) ?: '1';
 
         if ($apiKey === '' || $apiSecret === '') {
             return [
@@ -200,23 +207,25 @@ class MfsVerifyService
 
         $path = '/api/v1/transactions/verify';
         $method = 'POST';
+        $timestamp = Carbon::now('UTC')->toIso8601ZuluString();
+        $nonce = bin2hex(random_bytes(16));
+        $idempotencyKey = 'ping_'.bin2hex(random_bytes(12));
+
         $payload = [
             'provider' => 'bkash',
             'account_id' => 'test_account',
             'trx_id' => 'TEST000000',
             'amount' => '1.00',
             'reference' => 'TEST-PING',
-            'payment_initiated_at' => Carbon::now('UTC')->toIso8601ZuluString(),
+            'payment_initiated_at' => $timestamp,
         ];
 
         $rawBody = json_encode($payload, JSON_UNESCAPED_SLASHES);
         $bodyHash = hash('sha256', $rawBody);
-        $timestamp = Carbon::now('UTC')->toIso8601ZuluString();
-        $nonce = bin2hex(random_bytes(16));
-        $idempotencyKey = 'ping_'.bin2hex(random_bytes(12));
 
         $canonicalString = implode("\n", [$method, $path, $bodyHash, $timestamp, $nonce]);
-        $signature = hash_hmac('sha256', $canonicalString, $apiSecret);
+        $secretBuffer = self::decodeBase64Url($apiSecret);
+        $signature = hash_hmac('sha256', $canonicalString, $secretBuffer);
 
         try {
             $response = Http::timeout(10)
@@ -224,6 +233,7 @@ class MfsVerifyService
                     'Content-Type' => 'application/json',
                     'Accept' => 'application/json',
                     'X-API-Key' => $apiKey,
+                    'X-Key-Version' => $keyVersion,
                     'X-Timestamp' => $timestamp,
                     'X-Nonce' => $nonce,
                     'X-Signature' => $signature,
@@ -254,5 +264,25 @@ class MfsVerifyService
                 'message' => 'Connection failed: '.$e->getMessage(),
             ];
         }
+    }
+
+    /**
+     * Decode a base64url-encoded string (RFC 4648 § 5) to raw binary bytes, matching Node.js Buffer.from(str, 'base64url').
+     */
+    private static function decodeBase64Url(string $data): string
+    {
+        $b64 = strtr(trim($data), '-_', '+/');
+        $remainder = strlen($b64) % 4;
+        if ($remainder === 1) {
+            $b64 = substr($b64, 0, -1);
+        } elseif ($remainder === 2) {
+            $b64 .= '==';
+        } elseif ($remainder === 3) {
+            $b64 .= '=';
+        }
+
+        $decoded = base64_decode($b64, false);
+
+        return ($decoded !== false && $decoded !== '') ? $decoded : trim($data);
     }
 }
