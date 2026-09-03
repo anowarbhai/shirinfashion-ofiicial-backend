@@ -21,9 +21,10 @@ class AdminSettingsService
                     ->where('key', $this->groupKey($group))
                     ->value('value');
 
-                return array_replace_recursive(
+                return $this->mergeGroupWithDefaults(
+                    $group,
                     $this->defaults()[$group] ?? [],
-                    SensitiveSettings::revealGroup($group, is_array($stored) ? $stored : []),
+                    SensitiveSettings::revealGroup($group, is_array($stored) ? $stored : [])
                 );
             }
         );
@@ -31,7 +32,7 @@ class AdminSettingsService
 
     public function saveGroup(string $group, array $data, bool $isPublic = false): array
     {
-        $merged = array_replace_recursive($this->defaults()[$group] ?? [], $data);
+        $merged = $this->mergeGroupWithDefaults($group, $this->defaults()[$group] ?? [], $data);
 
         StorefrontSetting::query()->updateOrCreate(
             ['key' => $this->groupKey($group)],
@@ -44,6 +45,25 @@ class AdminSettingsService
         );
 
         $this->flush($group);
+
+        return $merged;
+    }
+
+    protected function mergeGroupWithDefaults(string $group, array $defaults, array $data): array
+    {
+        $merged = array_replace_recursive($defaults, $data);
+
+        if ($group === 'product_page') {
+            if (isset($data['shippingMethods']) && is_array($data['shippingMethods'])) {
+                $merged['shippingMethods'] = array_values($data['shippingMethods']);
+            }
+            if (isset($data['paymentMethods']) && is_array($data['paymentMethods'])) {
+                $merged['paymentMethods'] = array_values($data['paymentMethods']);
+            }
+            if (isset($data['trustBadges']['items']) && is_array($data['trustBadges']['items'])) {
+                $merged['trustBadges']['items'] = array_values($data['trustBadges']['items']);
+            }
+        }
 
         return $merged;
     }
