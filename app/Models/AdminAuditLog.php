@@ -21,8 +21,25 @@ class AdminAuditLog extends Model
         'metadata',
         'ip_address',
         'user_agent',
+        'device',
+        'location',
         'created_at',
     ];
+
+    protected $appends = [
+        'device_display',
+        'location_display',
+    ];
+
+    public function getDeviceDisplayAttribute(): ?string
+    {
+        return $this->device ?? ($this->metadata['device'] ?? null);
+    }
+
+    public function getLocationDisplayAttribute(): ?string
+    {
+        return $this->location ?? ($this->metadata['location'] ?? null);
+    }
 
     protected function casts(): array
     {

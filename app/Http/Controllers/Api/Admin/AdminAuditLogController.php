@@ -47,6 +47,8 @@ class AdminAuditLogController extends Controller
                         ->orWhere('subject_name', 'like', "%{$search}%")
                         ->orWhere('subject_type', 'like', "%{$search}%")
                         ->orWhere('ip_address', 'like', "%{$search}%")
+                        ->orWhere('device', 'like', "%{$search}%")
+                        ->orWhere('location', 'like', "%{$search}%")
                         ->orWhere('action', 'like', "%{$search}%");
                 });
             })
