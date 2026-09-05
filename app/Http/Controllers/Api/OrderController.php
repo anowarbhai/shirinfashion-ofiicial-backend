@@ -186,8 +186,11 @@ class OrderController extends Controller
                 'processing',
             );
             $order->payment_status = $isMfs ? $mfsPaymentStatus : ($payload['payment_method'] === 'cod' ? 'pending_collection' : 'authorized');
-            if ($isMfs && $mfsPaymentDetails) {
-                $order->payment_details = $mfsPaymentDetails;
+            if ($isMfs) {
+                $order->payment_method = $provider;
+                if ($mfsPaymentDetails) {
+                    $order->payment_details = $mfsPaymentDetails;
+                }
             }
             $order->tracking_number = $order->tracking_number ?: 'TRK-'.random_int(100000, 999999);
             $order->placed_at = Carbon::now();
