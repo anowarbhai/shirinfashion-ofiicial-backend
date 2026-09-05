@@ -15,13 +15,23 @@ use Illuminate\Validation\ValidationException;
 
 class CustomerController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $customers = User::query()
+        $query = User::query()
             ->where('role', 'customer')
-            ->withCount(['wishlistItems'])
-            ->latest()
-            ->paginate(20);
+            ->withCount(['wishlistItems']);
+
+        if ($search = trim((string) $request->input('q', $request->input('search', '')))) {
+            $query->where(function ($q) use ($search): void {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('phone', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('address', 'like', "%{$search}%");
+            });
+        }
+
+        $perPage = max(1, min(100, (int) $request->input('per_page', 20)));
+        $customers = $query->latest('id')->paginate($perPage);
 
         $customers->getCollection()->transform(
             fn (User $customer): User => $this->enrichCustomerActivity($customer),
