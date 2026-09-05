@@ -19,8 +19,25 @@ class MfsGatewaySettingsController extends Controller
 
     public function show(): JsonResponse
     {
+        $data = $this->settings->getGroup('mfs_gateway');
+        $baseUrl = rtrim((string) ($data['base_url'] ?? 'https://mfsapi.digitrixlabs.io'), '/');
+        $brandColors = [
+            'bkash' => '#e2136e',
+            'nagad' => '#f7931e',
+            'rocket' => '#8c3494',
+            'upay' => '#005696',
+        ];
+
+        if (isset($data['accounts']) && is_array($data['accounts'])) {
+            foreach ($data['accounts'] as $key => &$account) {
+                $account['logo_url'] = "{$baseUrl}/images/providers/{$key}.png";
+                $account['brand_color'] = $brandColors[$key] ?? '#0f172a';
+            }
+            unset($account);
+        }
+
         return response()->json([
-            'data' => $this->settings->getGroup('mfs_gateway'),
+            'data' => $data,
         ]);
     }
 
