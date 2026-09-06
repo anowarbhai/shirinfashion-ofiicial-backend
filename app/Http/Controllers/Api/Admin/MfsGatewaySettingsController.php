@@ -61,8 +61,20 @@ class MfsGatewaySettingsController extends Controller
     {
         $payload = $request->all();
 
-        if (($payload['api_secret'] ?? '') === '') {
+        if (blank($payload['api_key'] ?? null)) {
+            $payload['api_key'] = $this->settings->getSetting('mfs_gateway.api_key', '');
+        }
+
+        if (blank($payload['api_secret'] ?? null)) {
             $payload['api_secret'] = $this->settings->getSetting('mfs_gateway.api_secret', '');
+        }
+
+        if (blank($payload['key_version'] ?? null)) {
+            $payload['key_version'] = $this->settings->getSetting('mfs_gateway.key_version', '1');
+        }
+
+        if (blank($payload['base_url'] ?? null)) {
+            $payload['base_url'] = $this->settings->getSetting('mfs_gateway.base_url', 'https://mfsapi.digitrixlabs.io');
         }
 
         $result = $this->mfsVerifyService->testConnection($payload);

@@ -205,58 +205,148 @@ class MfsVerifyService
             ];
         }
 
-        $path = '/api/v1/transactions/verify';
-        $method = 'POST';
+        // 1. Health check: verify gateway server is reachable
+        try {
+            $healthResponse = Http::timeout(8)->get($baseUrl.'/');
+            if (! $healthResponse->successful()) {
+                return [
+                    'success' => false,
+                    'message' => "MFS Gateway server responded with HTTP {$healthResponse->status()} at {$baseUrl}. Please check the Base URL.",
+                ];
+            }
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'message' => "Unable to connect to MFS Gateway at {$baseUrl}: ".$e->getMessage(),
+            ];
+        }
+
+        // 2. Authentication check: send authenticated request to verify API credentials
+        $path = '/api/v1/transactions';
+        $method = 'GET';
         $timestamp = Carbon::now('UTC')->toIso8601ZuluString();
         $nonce = bin2hex(random_bytes(16));
-        $idempotencyKey = 'ping_'.bin2hex(random_bytes(12));
-
-        $payload = [
-            'provider' => 'bkash',
-            'account_id' => 'test_account',
-            'trx_id' => 'TEST000000',
-            'amount' => '1.00',
-            'reference' => 'TEST-PING',
-            'payment_initiated_at' => $timestamp,
-        ];
-
-        $rawBody = json_encode($payload, JSON_UNESCAPED_SLASHES);
-        $bodyHash = hash('sha256', $rawBody);
-
+        $bodyHash = hash('sha256', '');
         $canonicalString = implode("\n", [$method, $path, $bodyHash, $timestamp, $nonce]);
         $secretBuffer = self::decodeBase64Url($apiSecret);
         $signature = hash_hmac('sha256', $canonicalString, $secretBuffer);
 
         try {
-            $response = Http::timeout(10)
+            $response = Http::timeout(12)
                 ->withHeaders([
-                    'Content-Type' => 'application/json',
                     'Accept' => 'application/json',
                     'X-API-Key' => $apiKey,
                     'X-Key-Version' => $keyVersion,
                     'X-Timestamp' => $timestamp,
                     'X-Nonce' => $nonce,
                     'X-Signature' => $signature,
-                    'Idempotency-Key' => $idempotencyKey,
                 ])
-                ->withBody($rawBody, 'application/json')
-                ->post($baseUrl.$path);
+                ->get($baseUrl.$path);
 
             $status = $response->status();
             $body = $response->json() ?? [];
 
-            if ($status === 401 || $status === 403 || ($body['error']['code'] ?? '') === 'UNAUTHORIZED') {
+            if ($status === 200) {
+                return [
+                    'success' => true,
+                    'message' => 'Successfully connected to MFS Gateway API. Authentication signature verified and active.',
+                    'http_status' => $status,
+                    'server_response' => $body,
+                ];
+            }
+
+            $errorCode = $body['error']['code'] ?? '';
+            $rawMsg = $body['error']['message'] ?? ($body['message'] ?? '');
+
+            if ($status === 401) {
+                $friendlyMessage = match ($errorCode) {
+                    'INVALID_API_KEY' => "Authentication failed: API Key was rejected by Digitrix MFS (INVALID_API_KEY). Either the API Key ('{$apiKey}') does not exist, the API client is inactive/revoked, or Key Version ('{$keyVersion}') does not match in your Digitrix MFS dashboard.",
+                    'INVALID_SIGNATURE' => 'Authentication failed: Invalid API Secret or HMAC signature mismatch (INVALID_SIGNATURE). Please re-copy the API Secret from your Digitrix MFS dashboard and ensure your server clock is synchronized.',
+                    'API_REQUEST_REPLAYED' => 'Authentication failed: API request replayed. Please retry in a few seconds.',
+                    default => 'Authentication failed: '.($rawMsg ?: 'Please verify your API Key, Secret and Key Version.'),
+                };
+
                 return [
                     'success' => false,
-                    'message' => $body['error']['message'] ?? 'Authentication failed. Please check your API Key and Secret.',
+                    'message' => $friendlyMessage,
+                    'code' => $errorCode,
+                ];
+            }
+
+            if ($status === 403) {
+                $friendlyMessage = match ($errorCode) {
+                    'TENANT_SUSPENDED' => 'Authentication failed: Merchant account is suspended on Digitrix MFS. Please renew subscription.',
+                    'FEATURE_BLOCKED' => 'Authentication failed: The API Verification feature is disabled for your tenant on Digitrix MFS.',
+                    'IP_PROHIBITED' => 'Authentication failed: Origin IP address is not permitted for this API client in Digitrix MFS.',
+                    default => 'Access forbidden by Digitrix MFS gateway: '.($rawMsg ?: 'HTTP 403 Forbidden'),
+                };
+
+                return [
+                    'success' => false,
+                    'message' => $friendlyMessage,
+                    'code' => $errorCode,
+                ];
+            }
+
+            // If 404/405 on GET /api/v1/transactions, fallback to testing POST /api/v1/transactions/verify
+            if ($status === 404 || $status === 405) {
+                $verifyPath = '/api/v1/transactions/verify';
+                $verifyMethod = 'POST';
+                $verifyNonce = bin2hex(random_bytes(16));
+                $verifyPayload = [
+                    'provider' => 'bkash',
+                    'account_id' => 'test_account',
+                    'trx_id' => 'TEST000000',
+                    'amount' => '1.00',
+                    'reference' => 'TEST-PING',
+                    'payment_initiated_at' => $timestamp,
+                ];
+                $verifyRawBody = json_encode($verifyPayload, JSON_UNESCAPED_SLASHES);
+                $verifyBodyHash = hash('sha256', $verifyRawBody);
+                $verifyCanonical = implode("\n", [$verifyMethod, $verifyPath, $verifyBodyHash, $timestamp, $verifyNonce]);
+                $verifySig = hash_hmac('sha256', $verifyCanonical, $secretBuffer);
+
+                $verifyResp = Http::timeout(12)
+                    ->withHeaders([
+                        'Content-Type' => 'application/json',
+                        'Accept' => 'application/json',
+                        'X-API-Key' => $apiKey,
+                        'X-Key-Version' => $keyVersion,
+                        'X-Timestamp' => $timestamp,
+                        'X-Nonce' => $verifyNonce,
+                        'X-Signature' => $verifySig,
+                        'Idempotency-Key' => 'ping_'.bin2hex(random_bytes(12)),
+                    ])
+                    ->withBody($verifyRawBody, 'application/json')
+                    ->post($baseUrl.$verifyPath);
+
+                $vStatus = $verifyResp->status();
+                $vBody = $verifyResp->json() ?? [];
+
+                if ($vStatus !== 401 && $vStatus !== 403) {
+                    return [
+                        'success' => true,
+                        'message' => 'Successfully connected to MFS Gateway API. Authentication signature verified and active.',
+                        'http_status' => $vStatus,
+                    ];
+                }
+
+                $vErrorCode = $vBody['error']['code'] ?? '';
+                $vRawMsg = $vBody['error']['message'] ?? '';
+
+                return [
+                    'success' => false,
+                    'message' => $vErrorCode === 'INVALID_API_KEY'
+                        ? "Authentication failed: API Key was rejected by Digitrix MFS (INVALID_API_KEY). Either the API Key ('{$apiKey}') does not exist, the API client is inactive, or Key Version ('{$keyVersion}') does not match."
+                        : ($vRawMsg ?: 'Authentication failed.'),
+                    'code' => $vErrorCode,
                 ];
             }
 
             return [
-                'success' => true,
-                'message' => 'Successfully connected to MFS Gateway API. Authentication signature verified.',
-                'http_status' => $status,
-                'server_response' => $body,
+                'success' => false,
+                'message' => "MFS Gateway returned HTTP {$status}: ".($rawMsg ?: 'Unexpected response'),
+                'code' => $errorCode,
             ];
         } catch (Exception $e) {
             return [
