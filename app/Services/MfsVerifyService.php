@@ -74,7 +74,7 @@ class MfsVerifyService
         $method = 'POST';
         $timestamp = Carbon::now('UTC')->toIso8601ZuluString();
         $nonce = bin2hex(random_bytes(16));
-        $idempotencyKey = 'shirin_'.bin2hex(random_bytes(12));
+        $idempotencyKey = 'shirin_'.substr(hash('sha256', "{$providerKey}_{$normalizedTrxId}_{$formattedAmount}_{$resolvedAccountId}"), 0, 32);
 
         $payload = [
             'provider' => $providerKey,
@@ -183,6 +183,87 @@ class MfsVerifyService
                 'code' => 'MFS_NETWORK_ERROR',
                 'message' => 'Could not connect to MFS Verification server: '.$e->getMessage(),
             ];
+        }
+    }
+
+    /**
+     * Search an MFS transaction without consuming it.
+     *
+     * @param  string  $provider  'bkash' | 'nagad' | 'rocket' | 'upay'
+     * @param  string  $trxId  Alphanumeric transaction ID
+     * @param  float|null  $amount  Optional expected amount
+     * @param  string|null  $accountId  Optional account ID override
+     * @return array<string, mixed>|null
+     */
+    public function searchTransaction(
+        string $provider,
+        string $trxId,
+        ?float $amount = null,
+        ?string $accountId = null
+    ): ?array {
+        $mfsSettings = $this->settings->getGroup('mfs_gateway');
+
+        $apiKey = trim((string) ($mfsSettings['api_key'] ?? ''));
+        $apiSecret = trim((string) ($mfsSettings['api_secret'] ?? ''));
+        $baseUrl = rtrim((string) ($mfsSettings['base_url'] ?? 'https://mfsapi.digitrixlabs.io'), '/');
+        $keyVersion = trim((string) ($mfsSettings['key_version'] ?? '1')) ?: '1';
+
+        if ($apiKey === '' || $apiSecret === '') {
+            return null;
+        }
+
+        $providerKey = strtolower(trim($provider));
+        $providerAccount = $mfsSettings['accounts'][$providerKey] ?? [];
+        $resolvedAccountId = $accountId ?: trim((string) ($providerAccount['account_id'] ?? ''));
+
+        if ($resolvedAccountId === '') {
+            return null;
+        }
+
+        $path = '/api/v1/transactions/search';
+        $method = 'POST';
+        $timestamp = Carbon::now('UTC')->toIso8601ZuluString();
+        $nonce = bin2hex(random_bytes(16));
+
+        $payload = [
+            'account_id' => $resolvedAccountId,
+            'provider' => $providerKey,
+            'trx_id' => strtoupper(trim($trxId)),
+        ];
+
+        if ($amount !== null && $amount > 0) {
+            $payload['amount'] = number_format($amount, 2, '.', '');
+        }
+
+        $rawBody = json_encode($payload, JSON_UNESCAPED_SLASHES);
+        $bodyHash = hash('sha256', $rawBody);
+        $canonicalString = implode("\n", [$method, $path, $bodyHash, $timestamp, $nonce]);
+        $secretBuffer = self::decodeBase64Url($apiSecret);
+        $signature = hash_hmac('sha256', $canonicalString, $secretBuffer);
+
+        try {
+            $response = Http::timeout(15)
+                ->withHeaders([
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
+                    'X-API-Key' => $apiKey,
+                    'X-Key-Version' => $keyVersion,
+                    'X-Timestamp' => $timestamp,
+                    'X-Nonce' => $nonce,
+                    'X-Signature' => $signature,
+                ])
+                ->withBody($rawBody, 'application/json')
+                ->post($baseUrl.$path);
+
+            if ($response->successful()) {
+                return $response->json('data') ?? $response->json();
+            }
+
+            return null;
+        } catch (Exception $e) {
+            Log::warning('MFS searchTransaction exception', ['error' => $e->getMessage()]);
+
+            return null;
         }
     }
 

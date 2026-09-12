@@ -107,6 +107,7 @@ class OrderController extends Controller
         $isMfs = in_array($payload['payment_method'], ['bkash', 'nagad', 'rocket', 'upay', 'mfs'], true);
         $mfsPaymentStatus = 'authorized';
         $mfsPaymentDetails = null;
+        $provider = null;
 
         if ($isMfs) {
             $provider = in_array($payload['payment_method'], ['bkash', 'nagad', 'rocket', 'upay'], true)
@@ -143,9 +144,47 @@ class OrderController extends Controller
                 }
 
                 if ($verification['status'] === 'failed' || ! ($verification['verified'] ?? false)) {
-                    throw ValidationException::withMessages([
-                        'trx_id' => [$verification['message'] ?: 'Transaction ID verification failed. Please check your payment SMS and try again.'],
-                    ]);
+                    $isAlreadyConsumed = ($verification['code'] ?? '') === 'TRANSACTION_ALREADY_USED';
+
+                    // If Digitrix reports already consumed, check if it's already used on another order or needs recovery
+                    if ($isAlreadyConsumed) {
+                        $existingOrder = Order::whereJsonContains('payment_details->trx_id', $trxId)->first();
+                        if ($existingOrder) {
+                            throw ValidationException::withMessages([
+                                'trx_id' => ["এই Transaction ID ({$trxId}) দিয়ে ইতোমধ্যে অর্ডার #{$existingOrder->order_number} সম্পন্ন করা হয়েছে।"],
+                            ]);
+                        }
+
+                        // Try non-consuming search on Digitrix MFS to verify the transaction was indeed received
+                        $search = $this->mfsVerifyService->searchTransaction(
+                            $provider,
+                            $trxId,
+                            $expectedAmount,
+                            $payload['mfs_account_id'] ?? null
+                        );
+
+                        if ($search && in_array(strtolower((string) ($search['status'] ?? '')), ['consumed', 'verified'], true)) {
+                            $verification = [
+                                'status' => 'verified',
+                                'verified' => true,
+                                'usage_id' => $search['usage']['public_id'] ?? ($search['id'] ?? null),
+                                'transaction' => [
+                                    'trx_id' => $search['trx_id'] ?? $trxId,
+                                    'amount' => $search['amount'] ?? $expectedAmount,
+                                    'sender' => $search['sender_masked'] ?? null,
+                                ],
+                                'data' => $search,
+                            ];
+                        } else {
+                            throw ValidationException::withMessages([
+                                'trx_id' => [$verification['message'] ?: 'Transaction ID verification failed. Please check your payment SMS and try again.'],
+                            ]);
+                        }
+                    } else {
+                        throw ValidationException::withMessages([
+                            'trx_id' => [$verification['message'] ?: 'Transaction ID verification failed. Please check your payment SMS and try again.'],
+                        ]);
+                    }
                 }
 
                 $mfsPaymentStatus = 'paid';
@@ -171,7 +210,7 @@ class OrderController extends Controller
             }
         }
 
-        $order = DB::transaction(function () use ($customer, $payload, $clientIp, $isMfs, $mfsPaymentStatus, $mfsPaymentDetails) {
+        $order = DB::transaction(function () use ($customer, $payload, $clientIp, $isMfs, $provider, $mfsPaymentStatus, $mfsPaymentDetails) {
             $prepared = $this->prepareOrderPayload($payload, true, false, $customer);
             $order = $this->findMatchingIncompleteOrder($customer, $prepared)
                 ?? new Order(['order_number' => $this->generateOrderNumber()]);
