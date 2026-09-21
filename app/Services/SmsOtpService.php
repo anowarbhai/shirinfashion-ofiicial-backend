@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\SmsOtp;
 use App\Models\User;
 use App\Support\BangladeshPhone;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -16,8 +15,7 @@ class SmsOtpService
     public function __construct(
         private readonly AdminSettingsService $settings,
         private readonly SmsGatewayService $smsGateway,
-    ) {
-    }
+    ) {}
 
     /**
      * @param  array<string, mixed>  $context
@@ -122,9 +120,18 @@ class SmsOtpService
             'customer_login' => (bool) ($settings['enable_customer_login_otp'] ?? false),
             'customer_register' => (bool) ($settings['enable_customer_login_otp'] ?? false),
             'admin_login' => (bool) ($settings['enable_admin_login_otp'] ?? false),
-            'order' => (bool) ($settings['enable_order_otp'] ?? false),
+            'order' => $this->isRequiredForEveryOrder()
+                || (bool) $this->settings->getSetting('checkout_guard.suspicious_otp_enabled', false),
             default => false,
         };
+    }
+
+    public function isRequiredForEveryOrder(): bool
+    {
+        $settings = $this->settings->getGroup('sms_integration');
+
+        return (bool) ($settings['enabled'] ?? false)
+            && (bool) ($settings['enable_order_otp'] ?? false);
     }
 
     /**

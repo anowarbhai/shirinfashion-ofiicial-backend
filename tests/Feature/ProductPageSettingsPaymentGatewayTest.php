@@ -14,7 +14,10 @@ class ProductPageSettingsPaymentGatewayTest extends TestCase
     {
         $settings = app(AdminSettingsService::class);
         $productPage = $settings->defaults()['product_page'];
-        $productPage['paymentMethods'][1]['active'] = true;
+        $sslCommerzIndex = collect($productPage['paymentMethods'])->search(
+            fn (array $method) => ($method['id'] ?? null) === 'sslcommerz'
+        );
+        $productPage['paymentMethods'][$sslCommerzIndex]['active'] = true;
 
         $settings->saveGroup('product_page', $productPage, true);
         $settings->saveGroup('payment_gateway', [
@@ -23,17 +26,21 @@ class ProductPageSettingsPaymentGatewayTest extends TestCase
             'store_password' => 'sandbox-password',
         ]);
 
-        $this->getJson('/api/product-page-settings')
-            ->assertOk()
-            ->assertJsonPath('data.paymentMethods.1.id', 'sslcommerz')
-            ->assertJsonPath('data.paymentMethods.1.active', false);
+        $response = $this->getJson('/api/product-page-settings')->assertOk();
+        $sslCommerz = collect($response->json('data.paymentMethods'))->firstWhere('id', 'sslcommerz');
+
+        $this->assertIsArray($sslCommerz);
+        $this->assertFalse($sslCommerz['active']);
     }
 
     public function test_public_settings_show_sslcommerz_when_gateway_is_enabled_and_configured(): void
     {
         $settings = app(AdminSettingsService::class);
         $productPage = $settings->defaults()['product_page'];
-        $productPage['paymentMethods'][1]['active'] = true;
+        $sslCommerzIndex = collect($productPage['paymentMethods'])->search(
+            fn (array $method) => ($method['id'] ?? null) === 'sslcommerz'
+        );
+        $productPage['paymentMethods'][$sslCommerzIndex]['active'] = true;
 
         $settings->saveGroup('product_page', $productPage, true);
         $settings->saveGroup('payment_gateway', [
@@ -42,9 +49,10 @@ class ProductPageSettingsPaymentGatewayTest extends TestCase
             'store_password' => 'sandbox-password',
         ]);
 
-        $this->getJson('/api/product-page-settings')
-            ->assertOk()
-            ->assertJsonPath('data.paymentMethods.1.id', 'sslcommerz')
-            ->assertJsonPath('data.paymentMethods.1.active', true);
+        $response = $this->getJson('/api/product-page-settings')->assertOk();
+        $sslCommerz = collect($response->json('data.paymentMethods'))->firstWhere('id', 'sslcommerz');
+
+        $this->assertIsArray($sslCommerz);
+        $this->assertTrue($sslCommerz['active']);
     }
 }

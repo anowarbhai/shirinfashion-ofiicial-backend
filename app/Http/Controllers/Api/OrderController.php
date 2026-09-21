@@ -91,25 +91,43 @@ class OrderController extends Controller
             $payload['cart_session_id'] ?? null,
         );
 
-        if ($checkoutGuard) {
+        $conditionalOtpReasons = $this->resolveConditionalOtpReasons($checkoutGuard);
+
+        if ($checkoutGuard && $conditionalOtpReasons === null) {
             return response()->json([
                 'message' => $checkoutGuard['message'],
                 'checkout_guard' => $checkoutGuard,
             ], 429);
         }
 
-        if ($this->smsOtpService->isEnabled('order')) {
+        $requiresOrderOtp = $this->smsOtpService->isRequiredForEveryOrder()
+            || $conditionalOtpReasons !== null;
+
+        if ($requiresOrderOtp) {
             if (empty($payload['otp_session_token'])) {
-                throw ValidationException::withMessages([
-                    'otp_session_token' => ['Please verify the order OTP before placing your order.'],
-                ]);
+                $settings = $this->settings->getGroup('checkout_guard');
+                $message = $conditionalOtpReasons !== null
+                    ? (string) ($settings['suspicious_otp_message'] ?? 'Please verify your phone number to complete this order.')
+                    : 'Please verify the order OTP before placing your order.';
+
+                return response()->json([
+                    'message' => $message,
+                    'requires_otp' => true,
+                    'otp_reason' => $conditionalOtpReasons !== null ? 'suspicious_order' : 'all_orders',
+                ], 428);
             }
 
-            $this->smsOtpService->consumeVerified(
-                'order',
-                $payload['otp_session_token'],
-                $payload['phone'],
-            );
+            try {
+                $this->smsOtpService->consumeVerified(
+                    'order',
+                    $payload['otp_session_token'],
+                    $payload['phone'],
+                );
+            } catch (RuntimeException $exception) {
+                throw ValidationException::withMessages([
+                    'otp_session_token' => [$exception->getMessage()],
+                ]);
+            }
         }
 
         if ($payload['payment_method'] === 'sslcommerz') {
@@ -629,9 +647,26 @@ class OrderController extends Controller
         $payload = $request->validate([
             'phone' => ['required', 'string', 'max:30'],
             'customer_name' => ['nullable', 'string', 'max:255'],
+            'device_id' => ['nullable', 'string', 'max:120'],
+            'cart_session_id' => ['nullable', 'string', 'max:120'],
         ]);
 
         try {
+            if (! $this->smsOtpService->isRequiredForEveryOrder()) {
+                $checkoutGuard = $this->resolveCheckoutGuardBlock(
+                    $payload['phone'],
+                    $this->resolveClientIp($request),
+                    $payload['device_id'] ?? null,
+                    $payload['cart_session_id'] ?? null,
+                );
+
+                if ($this->resolveConditionalOtpReasons($checkoutGuard) === null) {
+                    return response()->json([
+                        'message' => 'OTP verification is not required for this order.',
+                    ], 422);
+                }
+            }
+
             $otp = $this->smsOtpService->issue('order', $payload['phone'], null, [
                 'name' => $payload['customer_name'] ?? 'Customer',
             ]);
@@ -1616,6 +1651,42 @@ class OrderController extends Controller
         }
 
         return $this->resolveCheckoutGuardBlock($phone, $clientIp, $deviceId, $cartSessionId, true);
+    }
+
+    /**
+     * Return the matched signals that may be cleared with OTP. A null return
+     * means the normal hard checkout guard remains in force.
+     *
+     * @return array<int, string>|null
+     */
+    protected function resolveConditionalOtpReasons(?array $checkoutGuard): ?array
+    {
+        if (! $checkoutGuard || ! $this->smsOtpService->isEnabled('order')) {
+            return null;
+        }
+
+        $settings = $this->settings->getGroup('checkout_guard');
+
+        if (! ($settings['suspicious_otp_enabled'] ?? false)) {
+            return null;
+        }
+
+        $matchedBy = array_values(array_unique(array_filter(
+            $checkoutGuard['matched_by'] ?? [],
+            fn ($signal) => in_array($signal, ['phone', 'ip', 'device'], true),
+        )));
+
+        if ($matchedBy === []) {
+            return null;
+        }
+
+        $allowedSignals = array_values(array_filter([
+            ($settings['suspicious_otp_by_phone'] ?? true) ? 'phone' : null,
+            ($settings['suspicious_otp_by_ip'] ?? true) ? 'ip' : null,
+            ($settings['suspicious_otp_by_device'] ?? true) ? 'device' : null,
+        ]));
+
+        return array_diff($matchedBy, $allowedSignals) === [] ? $matchedBy : null;
     }
 
     protected function resolveLocalFraudProtectionBlock(string $phone, ?string $clientIp): ?array

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Category;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\SmsOtp;
 use App\Services\AdminSettingsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -360,6 +361,81 @@ class IncompleteOrderTest extends TestCase
         $this->assertDatabaseCount('orders', 1);
     }
 
+    public function test_suspicious_repeat_order_requires_otp_when_enabled(): void
+    {
+        $this->enableSuspiciousOrderOtp();
+        $product = $this->createProduct();
+        $payload = $this->orderPayload($product);
+
+        $this->postJson('/api/orders', $payload)->assertCreated();
+
+        $this->postJson('/api/orders', $payload)
+            ->assertStatus(428)
+            ->assertJsonPath('requires_otp', true)
+            ->assertJsonPath('otp_reason', 'suspicious_order');
+
+        $this->assertDatabaseCount('orders', 1);
+    }
+
+    public function test_verified_otp_allows_configured_suspicious_repeat_order(): void
+    {
+        $this->enableSuspiciousOrderOtp();
+        $product = $this->createProduct();
+        $payload = $this->orderPayload($product);
+
+        $this->postJson('/api/orders', $payload)->assertCreated();
+
+        SmsOtp::query()->create([
+            'session_token' => 'verified-suspicious-order-token',
+            'purpose' => 'order',
+            'phone' => '01919012186',
+            'code_hash' => bcrypt('123456'),
+            'expires_at' => now()->addMinutes(5),
+            'verified_at' => now(),
+        ]);
+
+        $payload['otp_session_token'] = 'verified-suspicious-order-token';
+        $payload['cart_session_id'] = 'second-cart-session';
+
+        $this->postJson('/api/orders', $payload)->assertCreated();
+
+        $this->assertDatabaseCount('orders', 2);
+        $this->assertNotNull(SmsOtp::query()->firstOrFail()->consumed_at);
+    }
+
+    public function test_disabled_conditional_signal_keeps_hard_checkout_block(): void
+    {
+        $this->enableSuspiciousOrderOtp([
+            'suspicious_otp_by_ip' => false,
+        ]);
+        $product = $this->createProduct();
+        $payload = $this->orderPayload($product);
+
+        $this->postJson('/api/orders', $payload)->assertCreated();
+
+        $this->postJson('/api/orders', $payload)
+            ->assertStatus(429)
+            ->assertJsonPath('checkout_guard.blocked', true);
+
+        $this->assertDatabaseCount('orders', 1);
+    }
+
+    public function test_conditional_order_otp_cannot_be_sent_without_a_suspicious_signal(): void
+    {
+        $this->enableSuspiciousOrderOtp();
+
+        $this->postJson('/api/orders/send-otp', [
+            'phone' => '01919012186',
+            'customer_name' => 'Test Customer',
+            'device_id' => 'new-device',
+            'cart_session_id' => 'new-cart-session',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'OTP verification is not required for this order.');
+
+        $this->assertDatabaseCount('sms_otps', 0);
+    }
+
     public function test_enabled_fraud_rules_enforce_daily_phone_limit(): void
     {
         app(AdminSettingsService::class)->saveGroup('checkout_guard', ['enabled' => false]);
@@ -556,6 +632,25 @@ class IncompleteOrderTest extends TestCase
                 ],
             ],
         ];
+    }
+
+    private function enableSuspiciousOrderOtp(array $overrides = []): void
+    {
+        app(AdminSettingsService::class)->saveGroup('sms_integration', [
+            'enabled' => true,
+            'enable_order_otp' => false,
+        ]);
+        app(AdminSettingsService::class)->saveGroup('checkout_guard', array_merge([
+            'enabled' => true,
+            'block_by_phone' => true,
+            'block_by_ip' => true,
+            'block_by_device' => true,
+            'cooldown_minutes' => 180,
+            'suspicious_otp_enabled' => true,
+            'suspicious_otp_by_phone' => true,
+            'suspicious_otp_by_ip' => true,
+            'suspicious_otp_by_device' => true,
+        ], $overrides));
     }
 
     private function incompleteOrderPayload(array $overrides = []): array
