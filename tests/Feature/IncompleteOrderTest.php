@@ -258,7 +258,7 @@ class IncompleteOrderTest extends TestCase
         $this->assertSame('processing', Order::query()->value('status'));
     }
 
-    public function test_incomplete_order_is_allowed_after_converted_order_completes_for_different_phone(): void
+    public function test_incomplete_order_is_blocked_for_same_device_after_completed_order_with_different_phone(): void
     {
         $product = $this->createProduct();
         $payload = $this->orderPayload($product);
@@ -274,14 +274,15 @@ class IncompleteOrderTest extends TestCase
             cartSessionId: 'test-cart-session',
         ))
             ->assertOk()
-            ->assertJsonPath('data.status', 'incomplete');
+            ->assertJsonPath('incomplete_order_skipped', true)
+            ->assertJsonPath('checkout_guard.matched_by.0', 'ip');
 
-        $this->assertDatabaseCount('orders', 2);
+        $this->assertDatabaseCount('orders', 1);
         $this->assertSame(1, Order::query()->where('status', 'processing')->count());
-        $this->assertSame(1, Order::query()->where('status', 'incomplete')->count());
+        $this->assertSame(0, Order::query()->where('status', 'incomplete')->count());
     }
 
-    public function test_order_is_allowed_after_converted_order_completes_for_different_phone_on_same_session(): void
+    public function test_order_is_blocked_after_completed_order_for_different_phone_on_same_device(): void
     {
         $product = $this->createProduct();
         $payload = $this->orderPayload($product);
@@ -296,10 +297,151 @@ class IncompleteOrderTest extends TestCase
             phone: '01829312186',
             cartSessionId: 'test-cart-session',
         ))
-            ->assertCreated()
-            ->assertJsonPath('data.status', 'processing');
+            ->assertStatus(429)
+            ->assertJsonPath('checkout_guard.blocked', true)
+            ->assertJsonPath('checkout_guard.matched_by.0', 'ip');
 
-        $this->assertDatabaseCount('orders', 2);
+        $this->assertDatabaseCount('orders', 1);
+    }
+
+    public function test_checkout_guard_checks_device_even_when_phone_blocking_is_enabled(): void
+    {
+        app(AdminSettingsService::class)->saveGroup('checkout_guard', [
+            'enabled' => true,
+            'block_by_phone' => true,
+            'block_by_ip' => false,
+            'block_by_device' => true,
+            'cooldown_minutes' => 180,
+        ]);
+
+        $product = $this->createProduct();
+
+        $this->withHeader('X-Forwarded-For', '203.0.113.10')
+            ->postJson('/api/orders', $this->orderPayload($product, phone: '01919012186'))
+            ->assertCreated();
+
+        $this->withHeader('X-Forwarded-For', '203.0.113.11')
+            ->postJson('/api/orders', $this->orderPayload(
+                $product,
+                phone: '01829312186',
+                cartSessionId: 'another-cart-session',
+            ))
+            ->assertStatus(429)
+            ->assertJsonPath('checkout_guard.matched_by.0', 'device');
+
+        $this->assertDatabaseCount('orders', 1);
+    }
+
+    public function test_checkout_guard_checks_ip_when_phone_changes(): void
+    {
+        app(AdminSettingsService::class)->saveGroup('checkout_guard', [
+            'enabled' => true,
+            'block_by_phone' => true,
+            'block_by_ip' => true,
+            'block_by_device' => false,
+            'cooldown_minutes' => 180,
+        ]);
+
+        $product = $this->createProduct();
+
+        $this->withHeader('X-Forwarded-For', '203.0.113.20')
+            ->postJson('/api/orders', $this->orderPayload($product, phone: '01919012186'))
+            ->assertCreated();
+
+        $this->withHeader('X-Forwarded-For', '203.0.113.20')
+            ->postJson('/api/orders', $this->orderPayload(
+                $product,
+                phone: '01829312186',
+                cartSessionId: 'another-cart-session',
+            ))
+            ->assertStatus(429)
+            ->assertJsonPath('checkout_guard.matched_by.0', 'ip');
+
+        $this->assertDatabaseCount('orders', 1);
+    }
+
+    public function test_enabled_fraud_rules_enforce_daily_phone_limit(): void
+    {
+        app(AdminSettingsService::class)->saveGroup('checkout_guard', ['enabled' => false]);
+        app(AdminSettingsService::class)->saveGroup('fraud_checker', [
+            'enabled' => true,
+            'max_orders_per_phone_per_day' => 1,
+            'max_orders_per_ip_per_day' => 99,
+        ]);
+
+        $product = $this->createProduct();
+        $this->postJson('/api/orders', $this->orderPayload($product))->assertCreated();
+
+        $this->postJson('/api/orders', $this->orderPayload(
+            $product,
+            phone: '+8801919012186',
+            cartSessionId: 'another-cart-session',
+        ))
+            ->assertStatus(429)
+            ->assertJsonPath('checkout_guard.matched_by.0', 'phone');
+
+        $this->assertDatabaseCount('orders', 1);
+    }
+
+    public function test_enabled_fraud_rules_block_blacklisted_phone_before_order_creation(): void
+    {
+        app(AdminSettingsService::class)->saveGroup('checkout_guard', ['enabled' => false]);
+        app(AdminSettingsService::class)->saveGroup('fraud_checker', [
+            'enabled' => true,
+            'blacklist_phones' => ['+8801919012186'],
+        ]);
+
+        $product = $this->createProduct();
+
+        $this->postJson('/api/orders', $this->orderPayload($product))
+            ->assertStatus(429)
+            ->assertJsonPath('checkout_guard.matched_by.0', 'phone');
+
+        $this->assertDatabaseCount('orders', 0);
+    }
+
+    public function test_enabled_fraud_rules_enforce_daily_ip_limit_when_phone_changes(): void
+    {
+        app(AdminSettingsService::class)->saveGroup('checkout_guard', ['enabled' => false]);
+        app(AdminSettingsService::class)->saveGroup('fraud_checker', [
+            'enabled' => true,
+            'max_orders_per_phone_per_day' => 99,
+            'max_orders_per_ip_per_day' => 1,
+        ]);
+
+        $product = $this->createProduct();
+        $this->withHeader('X-Forwarded-For', '203.0.113.40')
+            ->postJson('/api/orders', $this->orderPayload($product, phone: '01919012186'))
+            ->assertCreated();
+
+        $this->withHeader('X-Forwarded-For', '203.0.113.40')
+            ->postJson('/api/orders', $this->orderPayload(
+                $product,
+                phone: '01829312186',
+                cartSessionId: 'another-cart-session',
+            ))
+            ->assertStatus(429)
+            ->assertJsonPath('checkout_guard.matched_by.0', 'ip');
+
+        $this->assertDatabaseCount('orders', 1);
+    }
+
+    public function test_enabled_fraud_rules_block_blacklisted_ip_before_order_creation(): void
+    {
+        app(AdminSettingsService::class)->saveGroup('checkout_guard', ['enabled' => false]);
+        app(AdminSettingsService::class)->saveGroup('fraud_checker', [
+            'enabled' => true,
+            'blacklist_ips' => ['203.0.113.50'],
+        ]);
+
+        $product = $this->createProduct();
+
+        $this->withHeader('X-Forwarded-For', '203.0.113.50')
+            ->postJson('/api/orders', $this->orderPayload($product))
+            ->assertStatus(429)
+            ->assertJsonPath('checkout_guard.matched_by.0', 'ip');
+
+        $this->assertDatabaseCount('orders', 0);
     }
 
     public function test_checkout_guard_can_be_disabled_for_incomplete_orders(): void

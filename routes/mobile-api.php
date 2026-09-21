@@ -3,12 +3,8 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CouponController;
 use App\Http\Controllers\Api\CustomerAuthSettingsController;
-use App\Http\Controllers\Api\PublicMfsGatewaySettingsController;
-use App\Http\Controllers\Api\OrderController as StorefrontOrderController;
-use App\Http\Controllers\Api\ProductPageSettingsController;
-use App\Http\Controllers\Api\WishlistController;
-use App\Http\Controllers\Api\Mobile\CartController;
 use App\Http\Controllers\Api\Mobile\AppStatusController;
+use App\Http\Controllers\Api\Mobile\CartController;
 use App\Http\Controllers\Api\Mobile\CategoryController;
 use App\Http\Controllers\Api\Mobile\DeviceTokenController;
 use App\Http\Controllers\Api\Mobile\HealthController;
@@ -16,6 +12,10 @@ use App\Http\Controllers\Api\Mobile\HomeController;
 use App\Http\Controllers\Api\Mobile\MediaController;
 use App\Http\Controllers\Api\Mobile\NotificationController;
 use App\Http\Controllers\Api\Mobile\ProductController;
+use App\Http\Controllers\Api\OrderController as StorefrontOrderController;
+use App\Http\Controllers\Api\ProductPageSettingsController;
+use App\Http\Controllers\Api\PublicMfsGatewaySettingsController;
+use App\Http\Controllers\Api\WishlistController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', HealthController::class);
@@ -43,8 +43,8 @@ Route::prefix('auth')->group(function (): void {
 });
 
 Route::post('/coupons/validate', [CouponController::class, 'validateCode'])->middleware('throttle:public-write');
-Route::post('/orders', [StorefrontOrderController::class, 'store'])->middleware('throttle:checkout');
-Route::post('/orders/incomplete', [StorefrontOrderController::class, 'storeIncomplete'])->middleware('throttle:checkout');
+Route::post('/orders', [StorefrontOrderController::class, 'store'])->middleware('throttle:checkout-submit');
+Route::post('/orders/incomplete', [StorefrontOrderController::class, 'storeIncomplete'])->middleware('throttle:checkout-draft');
 Route::post('/orders/send-otp', [StorefrontOrderController::class, 'sendOtp'])->middleware('throttle:otp-send');
 Route::post('/orders/verify-otp', [StorefrontOrderController::class, 'verifyOtp'])->middleware('throttle:otp-verify');
 Route::post('/orders/track', [StorefrontOrderController::class, 'track'])->middleware('throttle:order-track');

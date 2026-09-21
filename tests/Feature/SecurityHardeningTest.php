@@ -33,4 +33,18 @@ class SecurityHardeningTest extends TestCase
 
         $this->postJson('/api/orders/track', $payload)->assertTooManyRequests();
     }
+
+    public function test_repeated_checkout_submissions_are_rate_limited_per_phone(): void
+    {
+        $payload = [
+            'phone' => '01799999999',
+            'device_id' => 'checkout-rate-limit-test',
+        ];
+
+        for ($attempt = 1; $attempt <= 4; $attempt++) {
+            $this->postJson('/api/orders', $payload)->assertUnprocessable();
+        }
+
+        $this->postJson('/api/orders', $payload)->assertTooManyRequests();
+    }
 }

@@ -97,13 +97,30 @@ return [
 
     'cipher' => 'AES-256-CBC',
 
-    'key' => env('APP_KEY', 'base64:' . base64_encode('shirinfashionbd_installer_key32!')),
+    'key' => env('APP_KEY', 'base64:'.base64_encode('shirinfashionbd_installer_key32!')),
 
     'previous_keys' => [
         ...array_filter(
             explode(',', (string) env('APP_PREVIOUS_KEYS', ''))
         ),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Checkout Trusted Proxies
+    |--------------------------------------------------------------------------
+    |
+    | Public clients must not be able to spoof their IP address with forwarding
+    | headers. Add a comma-separated proxy IP list only when the storefront and
+    | API are hosted on different servers. Local/private reverse proxies are
+    | trusted automatically.
+    |
+    */
+
+    'checkout_trusted_proxies' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('CHECKOUT_TRUSTED_PROXIES', '')),
+    ))),
 
     /*
     |--------------------------------------------------------------------------

@@ -10,27 +10,28 @@ use App\Models\ProductVolumeDiscount;
 use App\Models\User;
 use App\Services\AdminSettingsService;
 use App\Services\AiOrderCallingService;
-use App\Services\CustomerNotificationService;
 use App\Services\CouponEligibilityService;
+use App\Services\CustomerNotificationService;
 use App\Services\FraudCheckerService;
 use App\Services\JwtService;
 use App\Services\MetaConversionsApiService;
+use App\Services\MfsVerifyService;
 use App\Services\OrderAssignmentService;
 use App\Services\SmsGatewayService;
-use App\Services\MfsVerifyService;
 use App\Services\SmsOtpService;
 use App\Services\SslCommerzService;
 use App\Support\BangladeshPhone;
-use InvalidArgumentException;
+use App\Support\ClientIp;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
 
@@ -49,8 +50,7 @@ class OrderController extends Controller
         protected SslCommerzService $sslCommerzService,
         protected MetaConversionsApiService $metaConversionsApi,
         protected MfsVerifyService $mfsVerifyService,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -72,6 +72,18 @@ class OrderController extends Controller
 
         $customer = $this->resolveAuthenticatedUser($request);
         $clientIp = $this->resolveClientIp($request);
+        $fraudProtection = $this->resolveLocalFraudProtectionBlock(
+            $payload['phone'],
+            $clientIp,
+        );
+
+        if ($fraudProtection) {
+            return response()->json([
+                'message' => $fraudProtection['message'],
+                'checkout_guard' => $fraudProtection,
+            ], 429);
+        }
+
         $checkoutGuard = $this->resolveCheckoutGuardBlock(
             $payload['phone'],
             $clientIp,
@@ -389,18 +401,12 @@ class OrderController extends Controller
         $message = trim($exception->getMessage());
 
         return match (true) {
-            $message === 'SSLCommerz payment is not enabled.' =>
-                'SSLCommerz payment is not enabled yet. Please choose Cash on Delivery.',
-            $message === 'SSLCommerz credentials are not configured.' =>
-                'SSLCommerz credentials are missing. Please check payment gateway settings.',
-            str_contains($message, 'could not be created') =>
-                'SSLCommerz service is not responding right now. Please try again or choose Cash on Delivery.',
-            str_contains($message, 'did not return a payment URL') =>
-                'SSLCommerz did not return a payment link. Please check sandbox/live credential mode.',
-            $message !== '' =>
-                "SSLCommerz rejected the payment request: {$message}",
-            default =>
-                'SSLCommerz payment could not be started. Please try again or choose Cash on Delivery.',
+            $message === 'SSLCommerz payment is not enabled.' => 'SSLCommerz payment is not enabled yet. Please choose Cash on Delivery.',
+            $message === 'SSLCommerz credentials are not configured.' => 'SSLCommerz credentials are missing. Please check payment gateway settings.',
+            str_contains($message, 'could not be created') => 'SSLCommerz service is not responding right now. Please try again or choose Cash on Delivery.',
+            str_contains($message, 'did not return a payment URL') => 'SSLCommerz did not return a payment link. Please check sandbox/live credential mode.',
+            $message !== '' => "SSLCommerz rejected the payment request: {$message}",
+            default => 'SSLCommerz payment could not be started. Please try again or choose Cash on Delivery.',
         };
     }
 
@@ -1034,7 +1040,7 @@ class OrderController extends Controller
                 ? round($item['line_total'] / max(1, $item['quantity']), 2)
                 : ($customPrice ?? $product->price);
 
-            $displayTitle = $variantTitle ? (preg_match('/^size:/i', trim($variantTitle)) ? trim($variantTitle) : "Size: ".trim($variantTitle)) : null;
+            $displayTitle = $variantTitle ? (preg_match('/^size:/i', trim($variantTitle)) ? trim($variantTitle) : 'Size: '.trim($variantTitle)) : null;
 
             $orderItemData = [
                 'product_id' => $product->id,
@@ -1502,23 +1508,23 @@ class OrderController extends Controller
         $normalizedDeviceId = $deviceId ? trim($deviceId) : null;
         $normalizedCartSessionId = $cartSessionId ? trim($cartSessionId) : null;
         $normalizedClientIp = $clientIp ? trim($clientIp) : null;
-        $hasPhoneMatch = (($settings['block_by_phone'] ?? true) || $forceCustomerSignals) && trim($phone) !== '';
+        $shouldMatchPhone = (($settings['block_by_phone'] ?? true) || $forceCustomerSignals) && trim($phone) !== '';
 
-        if ($hasPhoneMatch) {
+        if ($shouldMatchPhone) {
             $matches['phone'] = trim($phone);
             $matches['normalized_phone'] = $this->normalizePhoneForMatch($phone);
             $matches['phone_variants'] = $this->phoneVariantsForMatch($phone);
         }
 
-        if (! $hasPhoneMatch && ((($settings['block_by_ip'] ?? true) || $forceCustomerSignals) && $normalizedClientIp)) {
+        if ((($settings['block_by_ip'] ?? true) || $forceCustomerSignals) && $normalizedClientIp) {
             $matches['ip'] = $normalizedClientIp;
         }
 
-        if (! $hasPhoneMatch && ((($settings['block_by_device'] ?? true) || $forceCustomerSignals) && $normalizedDeviceId)) {
+        if ((($settings['block_by_device'] ?? true) || $forceCustomerSignals) && $normalizedDeviceId) {
             $matches['device'] = $normalizedDeviceId;
         }
 
-        if (! $hasPhoneMatch && ((($settings['block_by_device'] ?? true) || $forceCustomerSignals) && $normalizedCartSessionId)) {
+        if ((($settings['block_by_device'] ?? true) || $forceCustomerSignals) && $normalizedCartSessionId) {
             $matches['cart_session'] = $normalizedCartSessionId;
         }
 
@@ -1612,6 +1618,96 @@ class OrderController extends Controller
         return $this->resolveCheckoutGuardBlock($phone, $clientIp, $deviceId, $cartSessionId, true);
     }
 
+    protected function resolveLocalFraudProtectionBlock(string $phone, ?string $clientIp): ?array
+    {
+        $settings = $this->settings->getGroup('fraud_checker');
+
+        if (! ($settings['enabled'] ?? false)) {
+            return null;
+        }
+
+        $normalizedPhone = $this->normalizePhoneForMatch($phone);
+        $normalizedClientIp = trim((string) $clientIp);
+        $blacklistedPhones = collect($settings['blacklist_phones'] ?? [])
+            ->map(fn ($value) => $this->normalizePhoneForMatch((string) $value))
+            ->filter()
+            ->unique();
+        $blacklistedIps = collect($settings['blacklist_ips'] ?? [])
+            ->map(fn ($value) => trim((string) $value))
+            ->filter()
+            ->unique();
+
+        if ($normalizedPhone !== '' && $blacklistedPhones->contains($normalizedPhone)) {
+            return $this->localFraudProtectionResponse(
+                'This phone number cannot place an order. Please contact support.',
+                ['phone'],
+            );
+        }
+
+        if ($normalizedClientIp !== '' && $blacklistedIps->contains($normalizedClientIp)) {
+            return $this->localFraudProtectionResponse(
+                'Orders from this network are currently blocked. Please contact support.',
+                ['ip'],
+            );
+        }
+
+        $businessTimezone = (string) $this->settings->getSetting('general.timezone', 'Asia/Dhaka');
+
+        try {
+            $businessNow = Carbon::now($businessTimezone);
+        } catch (Throwable) {
+            $businessNow = Carbon::now('Asia/Dhaka');
+        }
+
+        $today = $businessNow->copy()->startOfDay()->utc();
+        $nextBusinessDay = $businessNow->copy()->addDay()->startOfDay();
+        $eligibleOrders = fn () => Order::query()
+            ->where(DB::raw('COALESCE(placed_at, completed_at, created_at)'), '>=', $today)
+            ->whereNotIn('status', ['incomplete', 'cancelled', 'refunded']);
+        $maxOrdersPerPhone = max(1, (int) ($settings['max_orders_per_phone_per_day'] ?? 5));
+        $maxOrdersPerIp = max(1, (int) ($settings['max_orders_per_ip_per_day'] ?? 7));
+
+        if (
+            $normalizedPhone !== '' &&
+            $eligibleOrders()->where('normalized_phone', $normalizedPhone)->count() >= $maxOrdersPerPhone
+        ) {
+            return $this->localFraudProtectionResponse(
+                'The daily order limit for this phone number has been reached.',
+                ['phone'],
+                $nextBusinessDay,
+            );
+        }
+
+        if (
+            $normalizedClientIp !== '' &&
+            $eligibleOrders()->where('client_ip', $normalizedClientIp)->count() >= $maxOrdersPerIp
+        ) {
+            return $this->localFraudProtectionResponse(
+                'The daily order limit for this network has been reached.',
+                ['ip'],
+                $nextBusinessDay,
+            );
+        }
+
+        return null;
+    }
+
+    protected function localFraudProtectionResponse(
+        string $message,
+        array $matchedBy,
+        ?Carbon $availableAt = null,
+    ): array {
+        return [
+            'blocked' => true,
+            'message' => $message,
+            'available_at' => $availableAt?->toIso8601String(),
+            'remaining_seconds' => $availableAt
+                ? max(1, Carbon::now()->diffInSeconds($availableAt, false))
+                : null,
+            'matched_by' => $matchedBy,
+        ];
+    }
+
     protected function resolveNextCheckoutGuardState(Order $order): ?array
     {
         $settings = $this->settings->getGroup('checkout_guard');
@@ -1635,13 +1731,7 @@ class OrderController extends Controller
 
     protected function resolveClientIp(Request $request): ?string
     {
-        $forwardedFor = $request->header('x-forwarded-for');
-
-        if ($forwardedFor) {
-            return trim(explode(',', $forwardedFor)[0]) ?: null;
-        }
-
-        return $request->ip();
+        return ClientIp::resolve($request);
     }
 
     protected function formatCheckoutGuardDuration(int $seconds): string
