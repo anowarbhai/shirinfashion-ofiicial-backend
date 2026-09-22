@@ -3,17 +3,17 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
 use App\Models\SmsOtp;
-use App\Support\BangladeshPhone;
-use App\Services\JwtService;
+use App\Models\User;
 use App\Services\AdminAuditLogger;
 use App\Services\AdminSettingsService;
+use App\Services\JwtService;
 use App\Services\SmsOtpService;
+use App\Support\BangladeshPhone;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -30,8 +30,7 @@ class AuthController extends Controller
         protected SmsOtpService $smsOtpService,
         protected AdminAuditLogger $auditLogger,
         protected AdminSettingsService $settings,
-    ) {
-    }
+    ) {}
 
     public function register(Request $request): JsonResponse
     {
@@ -245,6 +244,109 @@ class AuthController extends Controller
                 'token' => $this->jwtService->issueToken($user),
                 'user' => $user,
             ],
+        ]);
+    }
+
+    public function requestCustomerPasswordReset(Request $request): JsonResponse
+    {
+        $payload = $request->validate([
+            'phone' => ['required', 'string', 'max:30'],
+        ]);
+
+        if (! $this->smsOtpService->isEnabled('customer_password_reset')) {
+            return response()->json([
+                'message' => 'Password reset by SMS is not available right now.',
+            ], 422);
+        }
+
+        $phone = $this->normalizePhoneForLookup($payload['phone']);
+        $user = $phone
+            ? User::query()
+                ->where('role', 'customer')
+                ->whereIn('phone', $this->phoneLookupVariants($phone))
+                ->first()
+            : null;
+
+        if (! $user) {
+            return response()->json([
+                'message' => 'If this phone number is registered, a password reset OTP has been sent.',
+                'data' => [
+                    'otp_session_token' => (string) Str::uuid(),
+                    'phone_masked' => $this->maskPhoneForResponse($payload['phone']),
+                    'expires_in_seconds' => 300,
+                ],
+            ]);
+        }
+
+        try {
+            $otp = $this->smsOtpService->issue(
+                'customer_password_reset',
+                $user->phone,
+                $user,
+                ['name' => $user->name],
+            );
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message' => 'If this phone number is registered, a password reset OTP has been sent.',
+            'data' => $otp,
+        ]);
+    }
+
+    public function resetCustomerPassword(Request $request): JsonResponse
+    {
+        $payload = $request->validate([
+            'phone' => ['required', 'string', 'max:30'],
+            'otp_session_token' => ['required', 'string'],
+            'code' => ['required', 'string', 'size:6'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $phone = $this->normalizePhoneForLookup($payload['phone']);
+        if (! $phone) {
+            throw ValidationException::withMessages([
+                'phone' => ['Please enter a valid Bangladesh phone number.'],
+            ]);
+        }
+
+        try {
+            $this->smsOtpService->verify(
+                'customer_password_reset',
+                $payload['otp_session_token'],
+                $payload['code'],
+                $phone,
+            );
+
+            $user = $this->resolveOtpUser(
+                $payload['otp_session_token'],
+                'customer_password_reset',
+            );
+
+            if (! $user || $user->role !== 'customer') {
+                throw new RuntimeException('Password reset session is invalid.');
+            }
+
+            $this->smsOtpService->consumeVerified(
+                'customer_password_reset',
+                $payload['otp_session_token'],
+                $phone,
+            );
+        } catch (RuntimeException $exception) {
+            throw ValidationException::withMessages([
+                'code' => [$exception->getMessage()],
+            ]);
+        }
+
+        $user->forceFill([
+            'password' => $payload['password'],
+            'password_set_at' => now(),
+            'auth_token_version' => ((int) $user->auth_token_version) + 1,
+        ])->save();
+
+        return response()->json([
+            'message' => 'Password reset successfully. You can now log in with your new password.',
         ]);
     }
 
@@ -936,6 +1038,15 @@ class AuthController extends Controller
         } catch (\InvalidArgumentException) {
             return null;
         }
+    }
+
+    protected function maskPhoneForResponse(string $value): string
+    {
+        $digits = preg_replace('/\D+/', '', $value) ?: '';
+
+        return strlen($digits) <= 4
+            ? $digits
+            : str_repeat('*', strlen($digits) - 4).substr($digits, -4);
     }
 
     /**

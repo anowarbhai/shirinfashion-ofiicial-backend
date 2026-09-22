@@ -119,6 +119,7 @@ class SmsOtpService
         return match ($purpose) {
             'customer_login' => (bool) ($settings['enable_customer_login_otp'] ?? false),
             'customer_register' => (bool) ($settings['enable_customer_login_otp'] ?? false),
+            'customer_password_reset' => true,
             'admin_login' => (bool) ($settings['enable_admin_login_otp'] ?? false),
             'order' => $this->isRequiredForEveryOrder()
                 || (bool) $this->settings->getSetting('checkout_guard.suspicious_otp_enabled', false),
@@ -186,6 +187,7 @@ class SmsOtpService
         $template = match ($purpose) {
             'customer_login' => (string) ($settings['customer_otp_template'] ?? 'Your {{brand}} OTP is {{code}}.'),
             'customer_register' => (string) ($settings['customer_otp_template'] ?? 'Your {{brand}} OTP is {{code}}.'),
+            'customer_password_reset' => (string) ($settings['customer_otp_template'] ?? 'Your {{brand}} OTP is {{code}}.'),
             'admin_login' => (string) ($settings['admin_otp_template'] ?? 'Admin login OTP for {{brand}}: {{code}}.'),
             'order' => (string) ($settings['order_otp_template'] ?? 'Your {{brand}} order OTP is {{code}}.'),
             default => 'Your OTP is {{code}}.',

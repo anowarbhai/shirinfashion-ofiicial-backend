@@ -93,6 +93,8 @@ Route::prefix('auth')->group(function (): void {
     Route::post('/google/complete-phone', [AuthController::class, 'completeGooglePhone'])->middleware('throttle:auth-login');
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:auth-login');
     Route::post('/login/verify-otp', [AuthController::class, 'verifyCustomerLoginOtp'])->middleware('throttle:otp-verify');
+    Route::post('/password/forgot', [AuthController::class, 'requestCustomerPasswordReset'])->middleware('throttle:otp-send');
+    Route::post('/password/reset', [AuthController::class, 'resetCustomerPassword'])->middleware('throttle:otp-verify');
     Route::post('/admin/login', [AuthController::class, 'adminLogin'])->middleware('throttle:auth-login');
     Route::post('/admin/google', [AuthController::class, 'adminGoogleAuth'])->middleware('throttle:auth-login');
     Route::post('/admin/login/verify-otp', [AuthController::class, 'verifyAdminLoginOtp'])->middleware('throttle:otp-verify');
