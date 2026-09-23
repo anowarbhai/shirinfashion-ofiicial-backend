@@ -120,6 +120,7 @@ class AdminSettingsService
             ],
             'fraud_checker' => [
                 'enabled' => false,
+                'local_rules_enabled' => true,
                 'provider' => 'onesoftcode',
                 'api_key' => '',
                 'onesoftcode_api_key' => '',
@@ -157,6 +158,11 @@ class AdminSettingsService
                 'suspicious_otp_by_ip' => true,
                 'suspicious_otp_by_device' => true,
                 'suspicious_otp_message' => 'Please verify your phone number to complete this order.',
+                'surge_protection_enabled' => true,
+                'surge_window_minutes' => 10,
+                'surge_order_threshold' => 10,
+                'surge_action' => 'otp_or_block',
+                'surge_message' => 'Order verification is temporarily required because unusual checkout activity was detected.',
             ],
             'ai_calling' => [
                 'enabled' => false,

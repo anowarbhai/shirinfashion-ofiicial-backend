@@ -38,6 +38,7 @@ class FraudCheckerSettingsUpdateRequest extends FormRequest
     {
         return [
             'enabled' => ['required', 'boolean'],
+            'local_rules_enabled' => ['required', 'boolean'],
             'provider' => ['required', Rule::in(['onesoftcode', 'bd_courier'])],
             'api_key' => ['nullable', 'string', 'max:500'],
             'onesoftcode_api_key' => ['nullable', 'string', 'max:500'],

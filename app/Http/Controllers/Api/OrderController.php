@@ -28,6 +28,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -100,20 +101,32 @@ class OrderController extends Controller
             ], 429);
         }
 
+        $surgeProtection = $this->resolveOrderSurgeProtection(true);
+
+        if ($surgeProtection && ! $surgeProtection['otp_available']) {
+            return response()->json([
+                'message' => $surgeProtection['message'],
+                'checkout_guard' => $surgeProtection,
+            ], 429);
+        }
+
         $requiresOrderOtp = $this->smsOtpService->isRequiredForEveryOrder()
-            || $conditionalOtpReasons !== null;
+            || $conditionalOtpReasons !== null
+            || $surgeProtection !== null;
 
         if ($requiresOrderOtp) {
             if (empty($payload['otp_session_token'])) {
                 $settings = $this->settings->getGroup('checkout_guard');
                 $message = $conditionalOtpReasons !== null
                     ? (string) ($settings['suspicious_otp_message'] ?? 'Please verify your phone number to complete this order.')
-                    : 'Please verify the order OTP before placing your order.';
+                    : ($surgeProtection['message'] ?? 'Please verify the order OTP before placing your order.');
 
                 return response()->json([
                     'message' => $message,
                     'requires_otp' => true,
-                    'otp_reason' => $conditionalOtpReasons !== null ? 'suspicious_order' : 'all_orders',
+                    'otp_reason' => $surgeProtection !== null
+                        ? 'checkout_surge'
+                        : ($conditionalOtpReasons !== null ? 'suspicious_order' : 'all_orders'),
                 ], 428);
             }
 
@@ -660,7 +673,9 @@ class OrderController extends Controller
                     $payload['cart_session_id'] ?? null,
                 );
 
-                if ($this->resolveConditionalOtpReasons($checkoutGuard) === null) {
+                $surgeProtection = $this->resolveOrderSurgeProtection();
+
+                if ($this->resolveConditionalOtpReasons($checkoutGuard) === null && ! ($surgeProtection['otp_available'] ?? false)) {
                     return response()->json([
                         'message' => 'OTP verification is not required for this order.',
                     ], 422);
@@ -1693,7 +1708,7 @@ class OrderController extends Controller
     {
         $settings = $this->settings->getGroup('fraud_checker');
 
-        if (! ($settings['enabled'] ?? false)) {
+        if (! ($settings['local_rules_enabled'] ?? true)) {
             return null;
         }
 
@@ -1761,6 +1776,46 @@ class OrderController extends Controller
         }
 
         return null;
+    }
+
+    protected function resolveOrderSurgeProtection(bool $registerAttempt = false): ?array
+    {
+        $settings = $this->settings->getGroup('checkout_guard');
+
+        if (! ($settings['surge_protection_enabled'] ?? true)) {
+            return null;
+        }
+
+        $windowMinutes = max(1, (int) ($settings['surge_window_minutes'] ?? 10));
+        $threshold = max(2, (int) ($settings['surge_order_threshold'] ?? 10));
+        $rateLimitKey = 'checkout-surge:global';
+
+        if ($registerAttempt) {
+            RateLimiter::hit($rateLimitKey, $windowMinutes * 60);
+        }
+
+        $recentAttempts = RateLimiter::attempts($rateLimitKey);
+        $recentOrders = Order::query()
+            ->where('created_at', '>=', Carbon::now()->subMinutes($windowMinutes))
+            ->whereNotIn('status', ['incomplete', 'cancelled', 'refunded'])
+            ->count();
+
+        if (max($recentAttempts, $recentOrders) <= $threshold) {
+            return null;
+        }
+
+        $otpAvailable = ($settings['surge_action'] ?? 'otp_or_block') === 'otp_or_block'
+            && $this->smsOtpService->isEnabled('order');
+        $availableAt = Carbon::now()->addMinutes($windowMinutes);
+
+        return [
+            'blocked' => ! $otpAvailable,
+            'message' => (string) ($settings['surge_message'] ?? 'Order verification is temporarily required because unusual checkout activity was detected.'),
+            'available_at' => $availableAt->toIso8601String(),
+            'remaining_seconds' => $windowMinutes * 60,
+            'matched_by' => ['store_velocity'],
+            'otp_available' => $otpAvailable,
+        ];
     }
 
     protected function localFraudProtectionResponse(

@@ -8,11 +8,19 @@ use App\Models\Product;
 use App\Models\SmsOtp;
 use App\Services\AdminSettingsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\RateLimiter;
 use Tests\TestCase;
 
 class IncompleteOrderTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        RateLimiter::clear('checkout-surge:global');
+    }
 
     public function test_incomplete_order_is_updated_instead_of_duplicated(): void
     {
@@ -518,6 +526,63 @@ class IncompleteOrderTest extends TestCase
             ->assertJsonPath('checkout_guard.matched_by.0', 'ip');
 
         $this->assertDatabaseCount('orders', 0);
+    }
+
+    public function test_local_daily_limits_stay_active_when_external_fraud_api_is_disabled(): void
+    {
+        app(AdminSettingsService::class)->saveGroup('checkout_guard', [
+            'enabled' => false,
+            'surge_protection_enabled' => false,
+        ]);
+        app(AdminSettingsService::class)->saveGroup('fraud_checker', [
+            'enabled' => false,
+            'local_rules_enabled' => true,
+            'max_orders_per_phone_per_day' => 1,
+            'max_orders_per_ip_per_day' => 99,
+        ]);
+
+        $product = $this->createProduct();
+        $this->postJson('/api/orders', $this->orderPayload($product))->assertCreated();
+
+        $this->postJson('/api/orders', $this->orderPayload(
+            $product,
+            cartSessionId: 'second-cart-session',
+        ))
+            ->assertStatus(429)
+            ->assertJsonPath('checkout_guard.matched_by.0', 'phone');
+
+        $this->assertDatabaseCount('orders', 1);
+    }
+
+    public function test_surge_protection_blocks_rotating_identity_orders_after_threshold(): void
+    {
+        app(AdminSettingsService::class)->saveGroup('checkout_guard', [
+            'enabled' => false,
+            'surge_protection_enabled' => true,
+            'surge_window_minutes' => 10,
+            'surge_order_threshold' => 2,
+            'surge_action' => 'block',
+            'surge_message' => 'Unusual checkout activity detected.',
+        ]);
+        app(AdminSettingsService::class)->saveGroup('fraud_checker', [
+            'local_rules_enabled' => false,
+        ]);
+
+        $product = $this->createProduct();
+        $this->withHeader('X-Forwarded-For', '203.0.113.1')
+            ->postJson('/api/orders', $this->orderPayload($product, phone: '01919012181', cartSessionId: 'cart-1'))
+            ->assertCreated();
+        $this->withHeader('X-Forwarded-For', '203.0.113.2')
+            ->postJson('/api/orders', $this->orderPayload($product, phone: '01919012182', cartSessionId: 'cart-2'))
+            ->assertCreated();
+
+        $this->withHeader('X-Forwarded-For', '203.0.113.3')
+            ->postJson('/api/orders', $this->orderPayload($product, phone: '01919012183', cartSessionId: 'cart-3'))
+            ->assertStatus(429)
+            ->assertJsonPath('checkout_guard.matched_by.0', 'store_velocity')
+            ->assertJsonPath('message', 'Unusual checkout activity detected.');
+
+        $this->assertDatabaseCount('orders', 2);
     }
 
     public function test_checkout_guard_can_be_disabled_for_incomplete_orders(): void
