@@ -163,6 +163,10 @@ class AdminSettingsService
                 'surge_order_threshold' => 10,
                 'surge_action' => 'otp_or_block',
                 'surge_message' => 'Order verification is temporarily required because unusual checkout activity was detected.',
+                'minimum_form_time_enabled' => true,
+                'minimum_form_seconds' => 3,
+                'minimum_form_time_for_authenticated' => false,
+                'minimum_form_time_message' => 'Please take a moment to review your order before submitting.',
             ],
             'ai_calling' => [
                 'enabled' => false,

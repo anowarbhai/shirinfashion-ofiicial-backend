@@ -32,6 +32,10 @@ class CheckoutGuardSettingsUpdateRequest extends FormRequest
             'surge_order_threshold' => ['required', 'integer', 'min:2', 'max:10000'],
             'surge_action' => ['required', Rule::in(['otp_or_block', 'block'])],
             'surge_message' => ['nullable', 'string', 'max:255'],
+            'minimum_form_time_enabled' => ['required', 'boolean'],
+            'minimum_form_seconds' => ['required', 'integer', 'min:1', 'max:60'],
+            'minimum_form_time_for_authenticated' => ['required', 'boolean'],
+            'minimum_form_time_message' => ['nullable', 'string', 'max:255'],
         ];
     }
 }

@@ -72,6 +72,18 @@ class OrderController extends Controller
         $payload = $this->validateOrderPayload($request);
 
         $customer = $this->resolveAuthenticatedUser($request);
+        $timeLock = $this->resolveMinimumFormTimeBlock(
+            $payload['checkout_intent_token'] ?? null,
+            $customer !== null,
+        );
+
+        if ($timeLock) {
+            return response()->json([
+                'message' => $timeLock['message'],
+                'retry_after_seconds' => $timeLock['retry_after_seconds'],
+            ], $timeLock['status']);
+        }
+
         $clientIp = $this->resolveClientIp($request);
         $fraudProtection = $this->resolveLocalFraudProtectionBlock(
             $payload['phone'],
@@ -818,6 +830,21 @@ class OrderController extends Controller
         ]);
     }
 
+    public function checkoutIntent(): JsonResponse
+    {
+        $issuedAt = Carbon::now()->timestamp;
+        $payload = $issuedAt.'|'.Str::random(32);
+        $encodedPayload = rtrim(strtr(base64_encode($payload), '+/', '-_'), '=');
+        $signature = hash_hmac('sha256', $encodedPayload, (string) config('app.key'));
+
+        return response()->json([
+            'data' => [
+                'token' => $encodedPayload.'.'.$signature,
+                'issued_at' => Carbon::createFromTimestamp($issuedAt)->toIso8601String(),
+            ],
+        ]);
+    }
+
     protected function purchaseVerificationToken(Order $order): string
     {
         return hash_hmac(
@@ -841,6 +868,7 @@ class OrderController extends Controller
             'shipping_charge' => ['nullable', 'numeric', 'min:0'],
             'coupon_code' => ['nullable', 'string', 'max:80'],
             'otp_session_token' => ['nullable', 'string'],
+            'checkout_intent_token' => ['nullable', 'string', 'max:512'],
             'device_id' => ['nullable', 'string', 'max:120'],
             'cart_session_id' => ['nullable', 'string', 'max:120'],
             'order_source' => ['nullable', 'string', 'max:80'],
@@ -1816,6 +1844,56 @@ class OrderController extends Controller
             'matched_by' => ['store_velocity'],
             'otp_available' => $otpAvailable,
         ];
+    }
+
+    protected function resolveMinimumFormTimeBlock(?string $token, bool $authenticated): ?array
+    {
+        $settings = $this->settings->getGroup('checkout_guard');
+
+        if (
+            ! ($settings['minimum_form_time_enabled'] ?? true) ||
+            ($authenticated && ! ($settings['minimum_form_time_for_authenticated'] ?? false))
+        ) {
+            return null;
+        }
+
+        $message = (string) ($settings['minimum_form_time_message'] ?? 'Please take a moment to review your order before submitting.');
+        $minimumSeconds = max(1, min(60, (int) ($settings['minimum_form_seconds'] ?? 3)));
+        $parts = explode('.', trim((string) $token), 2);
+
+        if (count($parts) !== 2) {
+            return ['status' => 422, 'message' => $message, 'retry_after_seconds' => $minimumSeconds];
+        }
+
+        [$encodedPayload, $signature] = $parts;
+        $expectedSignature = hash_hmac('sha256', $encodedPayload, (string) config('app.key'));
+        $decodedPayload = base64_decode(strtr($encodedPayload, '-_', '+/'), true);
+
+        if (! hash_equals($expectedSignature, $signature) || ! is_string($decodedPayload)) {
+            return ['status' => 422, 'message' => $message, 'retry_after_seconds' => $minimumSeconds];
+        }
+
+        [$issuedAt] = array_pad(explode('|', $decodedPayload, 2), 2, null);
+
+        if (! ctype_digit((string) $issuedAt)) {
+            return ['status' => 422, 'message' => $message, 'retry_after_seconds' => $minimumSeconds];
+        }
+
+        $age = Carbon::now()->timestamp - (int) $issuedAt;
+
+        if ($age < 0 || $age > 7200) {
+            return ['status' => 422, 'message' => $message, 'retry_after_seconds' => $minimumSeconds];
+        }
+
+        if ($age < $minimumSeconds) {
+            return [
+                'status' => 425,
+                'message' => $message,
+                'retry_after_seconds' => $minimumSeconds - $age,
+            ];
+        }
+
+        return null;
     }
 
     protected function localFraudProtectionResponse(

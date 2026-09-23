@@ -585,6 +585,32 @@ class IncompleteOrderTest extends TestCase
         $this->assertDatabaseCount('orders', 2);
     }
 
+    public function test_guest_order_requires_a_valid_checkout_intent(): void
+    {
+        $product = $this->createProduct();
+        $payload = $this->orderPayload($product);
+        unset($payload['checkout_intent_token']);
+
+        $this->postJson('/api/orders', $payload)
+            ->assertUnprocessable()
+            ->assertJsonPath('retry_after_seconds', 3);
+
+        $this->assertDatabaseCount('orders', 0);
+    }
+
+    public function test_guest_order_is_time_locked_before_minimum_form_time(): void
+    {
+        $product = $this->createProduct();
+        $payload = $this->orderPayload($product);
+        $payload['checkout_intent_token'] = $this->checkoutIntentToken(now()->timestamp);
+
+        $this->postJson('/api/orders', $payload)
+            ->assertStatus(425)
+            ->assertJsonPath('retry_after_seconds', 3);
+
+        $this->assertDatabaseCount('orders', 0);
+    }
+
     public function test_checkout_guard_can_be_disabled_for_incomplete_orders(): void
     {
         app(AdminSettingsService::class)->saveGroup('checkout_guard', [
@@ -687,6 +713,7 @@ class IncompleteOrderTest extends TestCase
             'shipping_method' => 'inside-dhaka',
             'device_id' => 'test-device',
             'cart_session_id' => $cartSessionId,
+            'checkout_intent_token' => $this->checkoutIntentToken(now()->subSeconds(3)->timestamp),
             'shipping_address' => [
                 'address' => $address,
             ],
@@ -697,6 +724,15 @@ class IncompleteOrderTest extends TestCase
                 ],
             ],
         ];
+    }
+
+    private function checkoutIntentToken(int $issuedAt): string
+    {
+        $payload = $issuedAt.'|test-checkout-intent';
+        $encodedPayload = rtrim(strtr(base64_encode($payload), '+/', '-_'), '=');
+        $signature = hash_hmac('sha256', $encodedPayload, (string) config('app.key'));
+
+        return $encodedPayload.'.'.$signature;
     }
 
     private function enableSuspiciousOrderOtp(array $overrides = []): void

@@ -46,6 +46,7 @@ Route::prefix('auth')->group(function (): void {
 
 Route::post('/coupons/validate', [CouponController::class, 'validateCode'])->middleware('throttle:public-write');
 Route::post('/orders', [StorefrontOrderController::class, 'store'])->middleware('throttle:checkout-submit');
+Route::post('/orders/checkout-intent', [StorefrontOrderController::class, 'checkoutIntent'])->middleware('throttle:public-write');
 Route::post('/orders/incomplete', [StorefrontOrderController::class, 'storeIncomplete'])->middleware('throttle:checkout-draft');
 Route::post('/orders/send-otp', [StorefrontOrderController::class, 'sendOtp'])->middleware('throttle:otp-send');
 Route::post('/orders/verify-otp', [StorefrontOrderController::class, 'verifyOtp'])->middleware('throttle:otp-verify');

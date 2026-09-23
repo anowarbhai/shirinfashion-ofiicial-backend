@@ -123,6 +123,7 @@ Route::get('/tags', [TagController::class, 'index']);
 Route::get('/brands', [AdminBrandController::class, 'publicIndex']);
 Route::post('/coupons/validate', [CouponController::class, 'validateCode'])->middleware('throttle:public-write');
 Route::post('/orders', [OrderController::class, 'store'])->middleware('throttle:checkout-submit');
+Route::post('/orders/checkout-intent', [OrderController::class, 'checkoutIntent'])->middleware('throttle:public-write');
 Route::post('/orders/incomplete', [OrderController::class, 'storeIncomplete'])->middleware('throttle:checkout-draft');
 Route::post('/orders/send-otp', [OrderController::class, 'sendOtp'])->middleware('throttle:otp-send');
 Route::post('/orders/verify-otp', [OrderController::class, 'verifyOtp'])->middleware('throttle:otp-verify');
