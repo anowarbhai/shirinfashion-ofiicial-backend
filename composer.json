@@ -5,7 +5,14 @@
     "description": "The skeleton application for the Laravel framework.",
     "keywords": ["laravel", "framework"],
     "license": "MIT",
+    "repositories": [
+        {
+            "type": "path",
+            "url": "packages/digitrix/omnibarta-connect"
+        }
+    ],
     "require": {
+        "digitrix/omnibarta-laravel": "@dev",
         "php": "^8.2",
         "firebase/php-jwt": "^7.0",
         "laravel/framework": "^12.0",

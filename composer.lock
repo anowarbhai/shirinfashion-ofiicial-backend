@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "53c1d0cfb9e069a958e1d49d682ecee6",
+    "content-hash": "e29d00331546f4e5f581d138d0a2099a",
     "packages": [
         {
             "name": "aws/aws-crt-php",
@@ -360,6 +360,40 @@
                 "source": "https://github.com/dflydev/dflydev-dot-access-data/tree/v3.0.3"
             },
             "time": "2024-07-08T12:26:09+00:00"
+        },
+        {
+            "name": "digitrix/omnibarta-laravel",
+            "version": "dev-main",
+            "dist": {
+                "type": "path",
+                "url": "packages/digitrix/omnibarta-connect",
+                "reference": "12791be2b4492dc8e18010dbcb83c33887745222"
+            },
+            "require": {
+                "illuminate/http": "^10.0|^11.0|^12.0|^13.0",
+                "illuminate/support": "^10.0|^11.0|^12.0|^13.0",
+                "php": "^8.1"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "Digitrix\\OmniBarta\\OmniBartaServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Digitrix\\OmniBarta\\": "src/"
+                }
+            },
+            "license": [
+                "MIT"
+            ],
+            "description": "Signed two-way order integration for Laravel stores and OmniBarta.",
+            "transport-options": {
+                "relative": true
+            }
         },
         {
             "name": "doctrine/inflector",
@@ -8802,7 +8836,9 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {},
+    "stability-flags": {
+        "digitrix/omnibarta-laravel": 20
+    },
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

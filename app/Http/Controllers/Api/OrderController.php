@@ -22,6 +22,7 @@ use App\Services\SmsOtpService;
 use App\Services\SslCommerzService;
 use App\Support\BangladeshPhone;
 use App\Support\ClientIp;
+use Digitrix\OmniBarta\OmniBartaClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -2061,6 +2062,7 @@ class OrderController extends Controller
             $this->sendOrderNotification($order);
             $this->metaConversionsApi->sendPurchase($order->loadMissing('items'));
             $this->aiOrderCallingService->triggerForOrder($order);
+            $this->sendOrderToOmniBarta($order->loadMissing('items'));
 
             if ($order->user_id) {
                 $this->customerNotificationService->sendToUser(
@@ -2079,6 +2081,67 @@ class OrderController extends Controller
 
             $this->runPostResponseFraudCheck($order);
         });
+    }
+
+    protected function sendOrderToOmniBarta(Order $order): void
+    {
+        if (! $order->placed_at || $order->status !== 'processing' || ! config('omnibarta.webhook_url')) {
+            return;
+        }
+
+        $address = is_array($order->shipping_address) ? $order->shipping_address : [];
+        try {
+            app(OmniBartaClient::class)->sendOrder([
+                'order' => [
+                    'id' => (string) $order->id,
+                    'number' => (string) $order->order_number,
+                    'status' => 'processing',
+                    'currency' => 'BDT',
+                    'created_at' => $order->created_at?->toIso8601String(),
+                    'updated_at' => $order->updated_at?->toIso8601String(),
+                    'subtotal' => (float) $order->subtotal,
+                    'discount' => (float) $order->discount_total,
+                    'shipping' => (float) $order->shipping_total,
+                    'tax' => 0,
+                    'total' => (float) $order->grand_total,
+                    'payment_method' => (string) $order->payment_method,
+                    'customer_note' => $order->notes,
+                ],
+                'customer' => [
+                    'id' => $order->user_id ? (string) $order->user_id : null,
+                    'first_name' => (string) $order->customer_name,
+                    'last_name' => '',
+                    'email' => (string) $order->email,
+                    'phone' => (string) $order->phone,
+                ],
+                'billing_address' => [
+                    'address_1' => $address['address'] ?? '',
+                    'city' => $address['city'] ?? '',
+                    'country' => $address['country'] ?? 'Bangladesh',
+                ],
+                'shipping_address' => [
+                    'address_1' => $address['address'] ?? '',
+                    'city' => $address['city'] ?? '',
+                    'country' => $address['country'] ?? 'Bangladesh',
+                ],
+                'items' => $order->items->map(fn ($item): array => [
+                    'external_line_id' => (string) $item->id,
+                    'product_id' => $item->product_id ? (string) $item->product_id : null,
+                    'name' => (string) $item->product_name,
+                    'sku' => (string) ($item->sku ?? ''),
+                    'quantity' => (float) $item->quantity,
+                    'subtotal' => (float) $item->line_total,
+                    'total' => (float) $item->line_total,
+                    'tax' => 0,
+                ])->all(),
+            ], 'order.created', 'shirinfashion-order-'.$order->id.'-'.$order->updated_at->timestamp);
+        } catch (Throwable $exception) {
+            Log::warning('OmniBarta order synchronization failed.', [
+                'order_id' => $order->id,
+                'order_number' => $order->order_number,
+                'reason' => $exception->getMessage(),
+            ]);
+        }
     }
 
     protected function dispatchPostResponseFraudCheck(Order $order): void
