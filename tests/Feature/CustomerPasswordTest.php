@@ -137,7 +137,11 @@ class CustomerPasswordTest extends TestCase
             'base_url' => 'https://sms.example.test',
         ]);
         Http::fake([
-            '*' => Http::response(['response_code' => '202'], 200),
+            '*' => Http::response([
+                'status' => 'success',
+                'message' => 'OTP sent.',
+                'data' => ['message_id' => 'test-message-id'],
+            ], 200),
         ]);
     }
 

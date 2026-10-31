@@ -29,14 +29,8 @@ class SmsOtpService
         $code = (string) random_int(100000, 999999);
         $sessionToken = (string) Str::uuid();
 
-        DB::transaction(function () use ($purpose, $phone, $user, $context, $code, $sessionToken): void {
-            SmsOtp::query()
-                ->where('purpose', $purpose)
-                ->where('phone', $phone)
-                ->whereNull('consumed_at')
-                ->delete();
-
-            SmsOtp::query()->create([
+        $otp = DB::transaction(function () use ($purpose, $phone, $user, $context, $code, $sessionToken): SmsOtp {
+            return SmsOtp::query()->create([
                 'session_token' => $sessionToken,
                 'purpose' => $purpose,
                 'user_id' => $user?->id,
@@ -47,10 +41,25 @@ class SmsOtpService
             ]);
         });
 
-        $this->smsGateway->sendMessage(
-            $phone,
-            $this->renderTemplate($purpose, $code, $phone, $context)
-        );
+        try {
+            $this->smsGateway->sendOtpMessage(
+                $phone,
+                $this->renderTemplate($purpose, $code, $phone, $context)
+            );
+        } catch (\Throwable $exception) {
+            $otp->delete();
+            throw $exception;
+        }
+
+        // Keep the previous OTP usable if the provider rejects a resend due to
+        // its v3 cooldown. Retire older sessions only after the new SMS was
+        // accepted successfully.
+        SmsOtp::query()
+            ->where('purpose', $purpose)
+            ->where('phone', $phone)
+            ->whereNull('consumed_at')
+            ->whereKeyNot($otp->getKey())
+            ->delete();
 
         return [
             'purpose' => $purpose,

@@ -4,47 +4,25 @@ namespace App\Services;
 
 use App\Support\BangladeshPhone;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 class SmsGatewayService
 {
-    public function __construct(private readonly AdminSettingsService $settings)
-    {
-    }
+    public function __construct(private readonly AdminSettingsService $settings) {}
 
     public function getBalance(): array
     {
-        $config = $this->config();
-        $provider = $this->resolvedProvider($config);
-
-        if ($provider !== 'onecodesoft') {
-            throw new RuntimeException('Balance check is currently available only for OneCodeSoft.');
-        }
-
-        $this->ensureReady($config);
-
-        try {
-            $response = Http::acceptJson()
-                ->timeout(15)
-                ->get($this->endpoint($config, 'get-balance'), [
-                    'api_key' => $config['api_key'],
-                ]);
-        } catch (ConnectionException $exception) {
-            throw new RuntimeException('Unable to reach the SMS provider right now.');
-        }
-
-        if (! $response->successful()) {
-            throw new RuntimeException('Unable to fetch SMS balance from provider.');
-        }
-
-        $payload = $response->json();
+        $config = $this->oneCodeSoftConfig();
+        $response = $this->request($config, 'GET', 'balance');
+        $payload = $this->successfulPayload($response, 'fetch SMS balance');
 
         return [
             'provider' => 'onecodesoft',
-            'balance' => (string) Arr::get($payload, 'balance', '0'),
-            'estimate_sms' => (int) Arr::get($payload, 'estimate_sms', 0),
+            'balance' => (string) Arr::get($payload, 'data.balance', '0'),
+            'estimate_sms' => (int) Arr::get($payload, 'data.estimate_sms', 0),
             'raw' => $payload,
         ];
     }
@@ -56,56 +34,17 @@ class SmsGatewayService
 
     public function sendMessage(string $number, string $message): array
     {
-        $config = $this->config();
-        $provider = $this->resolvedProvider($config);
-        $number = $this->normalizeRecipient($number);
-        $senderId = $this->normalizeSenderId((string) ($config['sender_id'] ?? ''));
+        return $this->send('send-sms', $number, $message);
+    }
 
-        if ($provider !== 'onecodesoft') {
-            throw new RuntimeException('Test message is currently available only for OneCodeSoft.');
-        }
-
-        $this->ensureReady($config);
-
-        try {
-            $response = Http::acceptJson()
-                ->timeout(20)
-                ->get($this->endpoint($config, 'send-sms'), [
-                    'api_key' => $config['api_key'],
-                    'type' => 'text',
-                    'number' => $number,
-                    'senderid' => $senderId,
-                    'message' => $message,
-                ]);
-        } catch (ConnectionException $exception) {
-            throw new RuntimeException('Unable to send a test SMS right now.');
-        }
-
-        $payload = $response->json();
-
-        if (! $response->successful()) {
-            throw new RuntimeException($this->buildProviderErrorMessage($response->status(), $payload, $response->body()));
-        }
-
-        $statusCode = (string) (
-            Arr::get($payload, 'response_code')
-            ?? Arr::get($payload, 'status')
-            ?? Arr::get($payload, 'code')
-            ?? $response->status()
-        );
-
-        if (in_array($statusCode, ['1007', '400', '401', '403', '422', '500'], true)) {
-            throw new RuntimeException($this->buildProviderErrorMessage($response->status(), $payload, $response->body()));
-        }
-
-        return [
-            'provider' => 'onecodesoft',
-            'status_code' => $statusCode,
-            'message' => Arr::get($payload, 'message')
-                ?? Arr::get($payload, 'response_message')
-                ?? 'Test SMS request submitted successfully.',
-            'raw' => $payload,
-        ];
+    /**
+     * Send an application-managed OTP through OneCodeSoft's custom OTP endpoint.
+     * Verification remains local so existing login, checkout, and password-reset
+     * sessions keep their current security and single-use guarantees.
+     */
+    public function sendOtpMessage(string $number, string $message): array
+    {
+        return $this->send('otp', $number, $message);
     }
 
     public function normalizeRecipient(string $number): string
@@ -117,104 +56,152 @@ class SmsGatewayService
         }
     }
 
-    public function normalizeSenderId(string $senderId): string
+    /** @return array<string, mixed> */
+    private function send(string $endpoint, string $number, string $message): array
     {
-        $cleaned = trim($senderId);
+        $config = $this->oneCodeSoftConfig();
+        $body = [
+            'number' => $this->normalizeRecipient($number),
+            'message' => $message,
+        ];
+        $senderId = trim((string) ($config['sender_id'] ?? ''));
 
-        if ($cleaned === '') {
-            throw new RuntimeException('Sender ID is missing.');
+        // Sender ID is optional in v3. Omitting it enables provider-managed
+        // non-masking sender selection and OTP sender rotation.
+        if ($endpoint === 'send-sms' && $senderId !== '') {
+            $body['senderid'] = $senderId;
         }
 
-        if (preg_match('/^\+?[0-9\s-]+$/', $cleaned) === 1) {
-            return preg_replace('/\D+/', '', $cleaned) ?? $cleaned;
+        $response = $this->request($config, 'POST', $endpoint, $body, true);
+        $payload = $this->successfulPayload($response, 'send SMS');
+        $result = Arr::get($payload, 'data.results.0', []);
+        $recipientStatus = strtolower((string) (
+            Arr::get($result, 'status')
+            ?? Arr::get($result, 'would_be')
+            ?? 'sent'
+        ));
+
+        if ($recipientStatus !== 'sent') {
+            $code = Arr::get($result, 'code');
+            throw new RuntimeException(trim(sprintf(
+                'SMS was not accepted for delivery%s: %s.',
+                $code ? " [code: {$code}]" : '',
+                $recipientStatus ?: 'failed'
+            )));
         }
 
-        return $cleaned;
+        return [
+            'provider' => 'onecodesoft',
+            'status_code' => $recipientStatus,
+            'message' => (string) ($payload['message'] ?? 'SMS request processed.'),
+            'message_id' => Arr::get($result, 'message_id')
+                ?? Arr::get($payload, 'data.message_id'),
+            'sms_count' => (int) (Arr::get($result, 'sms_count') ?? 0),
+            'total_cost' => Arr::get($payload, 'data.total_cost'),
+            'balance' => Arr::get($payload, 'data.balance'),
+            'sandbox' => (bool) ($config['sandbox_mode'] ?? false),
+            'raw' => $payload,
+        ];
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private function config(): array
+    /** @return array<string, mixed> */
+    private function oneCodeSoftConfig(): array
     {
-        return $this->settings->getGroup('sms_integration');
-    }
+        $config = $this->settings->getGroup('sms_integration');
 
-    /**
-     * @param  array<string, mixed>  $config
-     */
-    private function ensureReady(array $config): void
-    {
+        if ($this->resolvedProvider($config) !== 'onecodesoft') {
+            throw new RuntimeException('This SMS provider is not supported by the OneCodeSoft v3 integration.');
+        }
+
         if (! ($config['enabled'] ?? false)) {
             throw new RuntimeException('SMS integration is disabled.');
         }
 
-        if (! ($config['api_key'] ?? null)) {
-            throw new RuntimeException('Secret API key is missing.');
+        if (blank($config['api_key'] ?? null)) {
+            throw new RuntimeException('OneCodeSoft bearer token is missing.');
         }
 
-        if (! ($config['sender_id'] ?? null)) {
-            throw new RuntimeException('Sender ID is missing.');
+        if (blank($config['base_url'] ?? null)) {
+            throw new RuntimeException('OneCodeSoft base URL is missing.');
         }
 
-        if (! ($config['base_url'] ?? null)) {
-            throw new RuntimeException('Base URL is missing.');
-        }
+        return $config;
     }
 
     /**
      * @param  array<string, mixed>  $config
+     * @param  array<string, mixed>  $body
      */
-    private function endpoint(array $config, string $path): string
+    private function request(array $config, string $method, string $path, array $body = [], bool $allowSandbox = false): Response
     {
-        return rtrim((string) $config['base_url'], '/').'/'.$path;
+        $url = $this->endpoint(
+            $config,
+            $path,
+            $allowSandbox && (bool) ($config['sandbox_mode'] ?? false)
+        );
+
+        try {
+            $request = Http::acceptJson()
+                ->asJson()
+                ->withToken((string) $config['api_key'])
+                ->timeout(20);
+
+            return $method === 'GET'
+                ? $request->get($url, $body)
+                : $request->post($url, $body);
+        } catch (ConnectionException) {
+            throw new RuntimeException('Unable to reach the SMS provider right now.');
+        }
     }
 
-    /**
-     * @param  array<string, mixed>  $config
-     */
+    /** @return array<string, mixed> */
+    private function successfulPayload(Response $response, string $action): array
+    {
+        $payload = $response->json();
+
+        if (! is_array($payload)) {
+            throw new RuntimeException("OneCodeSoft returned an invalid response while trying to {$action}.");
+        }
+
+        if (! $response->successful() || ($payload['status'] ?? null) !== 'success') {
+            $message = trim((string) ($payload['message'] ?? ''));
+            throw new RuntimeException($message !== ''
+                ? "OneCodeSoft rejected the request: {$message}"
+                : "OneCodeSoft could not {$action} [HTTP {$response->status()}].");
+        }
+
+        return $payload;
+    }
+
+    /** @param array<string, mixed> $config */
+    private function endpoint(array $config, string $path, bool $sandbox = false): string
+    {
+        $baseUrl = rtrim((string) $config['base_url'], '/');
+        // Accept and upgrade legacy dashboard values that pointed directly at
+        // the old sandbox base path.
+        $baseUrl = preg_replace('#/sandbox$#i', '', $baseUrl) ?: $baseUrl;
+
+        if (! preg_match('#/v3$#i', $baseUrl)) {
+            $baseUrl .= '/v3';
+        }
+
+        return $baseUrl.($sandbox ? '/sandbox' : '').'/'.ltrim($path, '/');
+    }
+
+    /** @param array<string, mixed> $config */
     private function resolvedProvider(array $config): string
     {
         $provider = strtolower((string) ($config['provider'] ?? 'custom'));
         $baseUrl = strtolower((string) ($config['base_url'] ?? ''));
 
-        if ($provider === 'onecodesoft' || str_contains($baseUrl, 'sms.onecodesoft.com')) {
+        if (
+            $provider === 'onecodesoft'
+            || str_contains($baseUrl, 'onecodesoft.com')
+            || str_contains($baseUrl, 'ocs-api.top')
+        ) {
             return 'onecodesoft';
         }
 
         return $provider;
-    }
-
-    /**
-     * @param  array<string, mixed>|null  $payload
-     */
-    private function buildProviderErrorMessage(int $status, ?array $payload, string $rawBody): string
-    {
-        $providerMessage = Arr::get($payload, 'message')
-            ?? Arr::get($payload, 'response_message')
-            ?? Arr::get($payload, 'ErrorDescription')
-            ?? Arr::get($payload, 'error')
-            ?? null;
-
-        $providerCode = Arr::get($payload, 'response_code')
-            ?? Arr::get($payload, 'code')
-            ?? Arr::get($payload, 'ErrorCode')
-            ?? null;
-
-        if ($providerMessage || $providerCode) {
-            return trim(sprintf(
-                'Provider rejected the test SMS request%s%s',
-                $providerCode ? " [code: {$providerCode}]" : '',
-                $providerMessage ? ": {$providerMessage}" : '.',
-            ));
-        }
-
-        $body = trim($rawBody);
-
-        if ($body !== '') {
-            return sprintf('Provider rejected the test SMS request [HTTP %d]: %s', $status, mb_strimwidth($body, 0, 220, '...'));
-        }
-
-        return sprintf('Provider rejected the test SMS request [HTTP %d]. Please check your Sender ID, API key, and balance.', $status);
     }
 }
