@@ -14,6 +14,23 @@ class SmsGatewayServiceTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_it_upgrades_the_saved_legacy_onecodesoft_base_url(): void
+    {
+        $settings = app(AdminSettingsService::class);
+        $saved = $settings->saveGroup('sms_integration', [
+            'enabled' => true,
+            'provider' => 'onecodesoft',
+            'api_key' => 'test-token',
+            'base_url' => 'https://sms.onecodesoft.com/api/',
+        ]);
+
+        $this->assertSame('https://sms.ocs-api.top/api', $saved['base_url']);
+        $this->assertSame(
+            'https://sms.ocs-api.top/api',
+            $settings->getGroup('sms_integration')['base_url']
+        );
+    }
+
     public function test_it_sends_v3_sms_with_bearer_auth_and_json_body(): void
     {
         $this->configureSms();

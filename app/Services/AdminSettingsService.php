@@ -65,6 +65,25 @@ class AdminSettingsService
             }
         }
 
+        if ($group === 'sms_integration') {
+            $legacyBaseUrl = strtolower(rtrim((string) ($merged['base_url'] ?? ''), '/'));
+            $legacyOneCodeSoftUrls = [
+                'https://sms.onecodesoft.com/api',
+                'https://sms.onecodesoft.com/api/sandbox',
+                'https://sms.onecodesoft.com/api/v3',
+                'https://sms.onecodesoft.com/api/v3/sandbox',
+            ];
+
+            if (in_array($legacyBaseUrl, $legacyOneCodeSoftUrls, true)) {
+                $merged['provider'] = 'onecodesoft';
+                $merged['base_url'] = 'https://sms.ocs-api.top/api';
+
+                if (str_ends_with($legacyBaseUrl, '/sandbox')) {
+                    $merged['sandbox_mode'] = true;
+                }
+            }
+        }
+
         return $merged;
     }
 
