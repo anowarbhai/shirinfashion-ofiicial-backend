@@ -23,6 +23,7 @@ class CheckoutGuardSettingsUpdateRequest extends FormRequest
             'cooldown_minutes' => ['required', 'integer', 'min:1', 'max:1440'],
             'message' => ['nullable', 'string', 'max:255'],
             'suspicious_otp_enabled' => ['required', 'boolean'],
+            'allow_repeat_with_otp' => ['sometimes', 'boolean'],
             'suspicious_otp_by_phone' => ['required', 'boolean'],
             'suspicious_otp_by_ip' => ['required', 'boolean'],
             'suspicious_otp_by_device' => ['required', 'boolean'],

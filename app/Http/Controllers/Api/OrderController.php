@@ -1711,7 +1711,7 @@ class OrderController extends Controller
 
         $settings = $this->settings->getGroup('checkout_guard');
 
-        if (! ($settings['suspicious_otp_enabled'] ?? false)) {
+        if (! ($settings['suspicious_otp_enabled'] ?? false) || ! ($settings['allow_repeat_with_otp'] ?? false)) {
             return null;
         }
 

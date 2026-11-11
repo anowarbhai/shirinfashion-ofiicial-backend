@@ -385,6 +385,30 @@ class IncompleteOrderTest extends TestCase
         $this->assertDatabaseCount('orders', 1);
     }
 
+    public function test_repeat_cooldown_cannot_be_bypassed_by_verified_otp_by_default(): void
+    {
+        $this->enableSuspiciousOrderOtp(['allow_repeat_with_otp' => false]);
+        $product = $this->createProduct();
+        $payload = $this->orderPayload($product);
+        $this->postJson('/api/orders', $payload)->assertCreated();
+
+        SmsOtp::query()->create([
+            'session_token' => 'cooldown-must-still-block',
+            'purpose' => 'order',
+            'phone' => '01919012186',
+            'code_hash' => bcrypt('123456'),
+            'expires_at' => now()->addMinutes(5),
+            'verified_at' => now(),
+        ]);
+        $payload['otp_session_token'] = 'cooldown-must-still-block';
+        $payload['cart_session_id'] = 'another-cart-session';
+        $this->postJson('/api/orders', $payload)
+            ->assertStatus(429)
+            ->assertJsonPath('checkout_guard.blocked', true);
+        $this->assertDatabaseCount('orders', 1);
+        $this->assertNull(SmsOtp::query()->firstOrFail()->consumed_at);
+    }
+
     public function test_verified_otp_allows_configured_suspicious_repeat_order(): void
     {
         $this->enableSuspiciousOrderOtp();
@@ -748,6 +772,7 @@ class IncompleteOrderTest extends TestCase
             'block_by_device' => true,
             'cooldown_minutes' => 180,
             'suspicious_otp_enabled' => true,
+            'allow_repeat_with_otp' => true,
             'suspicious_otp_by_phone' => true,
             'suspicious_otp_by_ip' => true,
             'suspicious_otp_by_device' => true,

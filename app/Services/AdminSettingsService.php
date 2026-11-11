@@ -173,6 +173,7 @@ class AdminSettingsService
                 'cooldown_minutes' => 180,
                 'message' => 'You can place another order after {{time}}.',
                 'suspicious_otp_enabled' => false,
+                'allow_repeat_with_otp' => false,
                 'suspicious_otp_by_phone' => true,
                 'suspicious_otp_by_ip' => true,
                 'suspicious_otp_by_device' => true,
