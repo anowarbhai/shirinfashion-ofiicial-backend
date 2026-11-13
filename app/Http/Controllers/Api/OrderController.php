@@ -867,6 +867,10 @@ class OrderController extends Controller
             'mfs_account_id' => ['nullable', 'string', 'max:255'],
             'shipping_method' => ['required', 'string', 'max:80'],
             'shipping_charge' => ['nullable', 'numeric', 'min:0'],
+            'landing_checkout_slug' => ['nullable', 'string', 'max:180', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/'],
+            'landing_checkout_offer' => ['nullable', 'array:block_id,package_index'],
+            'landing_checkout_offer.block_id' => ['required_with:landing_checkout_offer', 'string', 'max:180'],
+            'landing_checkout_offer.package_index' => ['required_with:landing_checkout_offer', 'integer', 'between:1,10'],
             'coupon_code' => ['nullable', 'string', 'max:80'],
             'otp_session_token' => ['nullable', 'string'],
             'checkout_intent_token' => ['nullable', 'string', 'max:512'],
@@ -1038,7 +1042,7 @@ class OrderController extends Controller
                 ?? ($payload['shipping_method'] === 'inside-dhaka' ? 'Dhaka' : 'Outside Dhaka'),
             'country' => $payload['shipping_address']['country'] ?? 'Bangladesh',
         ];
-        $shippingTotal = $this->resolveShippingTotal(
+        $shippingTotal = $this->landingPackageHasFreeDelivery($payload) ? 0.0 : $this->resolveShippingTotal(
             $payload['shipping_method'],
             $subtotal,
             isset($payload['shipping_charge']) ? (float) $payload['shipping_charge'] : null
@@ -1493,6 +1497,41 @@ class OrderController extends Controller
                 }
             })
             ->count();
+    }
+
+    protected function landingPackageHasFreeDelivery(array $payload): bool
+    {
+        $offer = $payload['landing_checkout_offer'] ?? null;
+        $slug = $payload['landing_checkout_slug'] ?? null;
+        $item = $payload['items'][0] ?? null;
+        if (! $offer || ! $slug || ! $item || ! empty($item['variant_id']) ||
+            ! in_array($payload['shipping_method'], ['inside-dhaka', 'outside-dhaka'], true)) {
+            return false;
+        }
+
+        $page = \App\Models\StorefrontPage::query()
+            ->where('slug', $slug)->where('template', 'landing')->where('status', 'published')->first();
+        $blocks = $page?->builder_json ?? [];
+        $index = (int) $offer['package_index'];
+        while ($blocks !== []) {
+            $block = array_pop($blocks);
+            foreach ($block['columns'] ?? [] as $column) {
+                array_push($blocks, ...($column['blocks'] ?? []));
+            }
+            if (($block['id'] ?? null) !== $offer['block_id'] || ($block['type'] ?? null) !== 'landing-checkout') {
+                continue;
+            }
+            $content = $block['content'] ?? [];
+            $quantity = max(1, (int) round((float) ($content["packageQuantity{$index}"] ?? $index)));
+
+            return ($content["packageFreeDelivery{$index}"] ?? false) === true
+                && $index <= min(10, max(1, (int) ($content['packageCount'] ?? 3)))
+                && (int) ($content['productId'] ?? 0) === (int) $item['product_id']
+                && $quantity === (int) $item['quantity']
+                && ! Product::query()->whereKey($item['product_id'])->whereHas('activeVariations')->exists();
+        }
+
+        return false;
     }
 
     protected function resolveShippingTotal(string $shippingMethod, float $subtotal, ?float $customShippingTotal = null): float

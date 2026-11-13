@@ -15,6 +15,32 @@ class IncompleteOrderTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_published_landing_package_can_offer_free_delivery(): void
+    {
+        $product = $this->createProduct();
+        \App\Models\StorefrontPage::query()->create([
+            'title' => 'Delivery offer',
+            'slug' => 'delivery-offer',
+            'template' => 'landing',
+            'status' => 'published',
+            'builder_json' => [[
+                'id' => 'checkout',
+                'type' => 'landing-checkout',
+                'content' => ['productId' => $product->id, 'packageCount' => 2, 'packageFreeDelivery2' => true],
+            ]],
+        ]);
+        $offer = [
+            'landing_checkout_slug' => 'delivery-offer',
+            'landing_checkout_offer' => ['block_id' => 'checkout', 'package_index' => 2],
+        ];
+        $this->postJson('/api/orders/incomplete', array_merge($this->orderPayload($product, quantity: 1), $offer))
+            ->assertOk();
+        $this->assertDatabaseHas('orders', ['shipping_total' => 80]);
+        $this->postJson('/api/orders', array_merge($this->orderPayload($product, quantity: 2), $offer))
+            ->assertCreated();
+        $this->assertDatabaseHas('orders', ['status' => 'processing', 'shipping_total' => 0]);
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
