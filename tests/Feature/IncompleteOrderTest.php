@@ -41,6 +41,33 @@ class IncompleteOrderTest extends TestCase
         $this->assertDatabaseHas('orders', ['status' => 'processing', 'shipping_total' => 0]);
     }
 
+    public function test_quantity_delivery_rule_supports_variations_and_respects_threshold(): void
+    {
+        $product = $this->createProduct();
+        $variant = $product->variations()->create([
+            'title' => 'Carrot', 'price' => 100, 'inventory' => 10, 'is_active' => true,
+        ]);
+        $page = \App\Models\StorefrontPage::query()->create([
+            'title' => 'Variation offer', 'slug' => 'variation-offer', 'template' => 'landing', 'status' => 'published',
+            'builder_json' => [[
+                'id' => 'checkout', 'type' => 'landing-checkout',
+                'content' => ['productId' => $product->id, 'quantityFreeDeliveryEnabled' => true, 'freeDeliveryMinQuantity' => 2],
+            ]],
+        ]);
+        $payload = $this->orderPayload($product);
+        $payload['items'][0]['variant_id'] = $variant->id;
+        $payload['landing_checkout_slug'] = $page->slug;
+        $payload['landing_checkout_offer'] = ['block_id' => 'checkout'];
+        $this->postJson('/api/orders/incomplete', $payload)->assertOk();
+        $this->assertDatabaseHas('orders', ['shipping_total' => 80]);
+        $payload['items'][0]['quantity'] = 2;
+        $this->postJson('/api/orders/incomplete', $payload)->assertOk();
+        $this->assertDatabaseHas('orders', ['shipping_total' => 0]);
+        $payload['items'][0]['quantity'] = 1;
+        $this->postJson('/api/orders/incomplete', $payload)->assertOk();
+        $this->assertDatabaseHas('orders', ['shipping_total' => 80]);
+    }
+
     protected function setUp(): void
     {
         parent::setUp();

@@ -870,7 +870,7 @@ class OrderController extends Controller
             'landing_checkout_slug' => ['nullable', 'string', 'max:180', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/'],
             'landing_checkout_offer' => ['nullable', 'array:block_id,package_index'],
             'landing_checkout_offer.block_id' => ['required_with:landing_checkout_offer', 'string', 'max:180'],
-            'landing_checkout_offer.package_index' => ['required_with:landing_checkout_offer', 'integer', 'between:1,10'],
+            'landing_checkout_offer.package_index' => ['nullable', 'integer', 'between:1,10'],
             'coupon_code' => ['nullable', 'string', 'max:80'],
             'otp_session_token' => ['nullable', 'string'],
             'checkout_intent_token' => ['nullable', 'string', 'max:512'],
@@ -1504,7 +1504,7 @@ class OrderController extends Controller
         $offer = $payload['landing_checkout_offer'] ?? null;
         $slug = $payload['landing_checkout_slug'] ?? null;
         $item = $payload['items'][0] ?? null;
-        if (! $offer || ! $slug || ! $item || ! empty($item['variant_id']) ||
+        if (! $offer || ! $slug || ! $item ||
             ! in_array($payload['shipping_method'], ['inside-dhaka', 'outside-dhaka'], true)) {
             return false;
         }
@@ -1512,7 +1512,7 @@ class OrderController extends Controller
         $page = \App\Models\StorefrontPage::query()
             ->where('slug', $slug)->where('template', 'landing')->where('status', 'published')->first();
         $blocks = $page?->builder_json ?? [];
-        $index = (int) $offer['package_index'];
+        $index = (int) ($offer['package_index'] ?? 0);
         while ($blocks !== []) {
             $block = array_pop($blocks);
             foreach ($block['columns'] ?? [] as $column) {
@@ -1522,6 +1522,20 @@ class OrderController extends Controller
                 continue;
             }
             $content = $block['content'] ?? [];
+            if ((int) ($content['productId'] ?? 0) !== (int) $item['product_id']) {
+                return false;
+            }
+            $product = Product::query()->find($item['product_id']);
+            if (! empty($item['variant_id']) && ! $product?->activeVariations()->whereKey($item['variant_id'])->exists()) {
+                return false;
+            }
+            if (($content['quantityFreeDeliveryEnabled'] ?? false) === true
+                && (int) $item['quantity'] >= max(1, (int) round((float) ($content['freeDeliveryMinQuantity'] ?? 2)))) {
+                return true;
+            }
+            if ($index < 1 || ! empty($item['variant_id'])) {
+                return false;
+            }
             $quantity = max(1, (int) round((float) ($content["packageQuantity{$index}"] ?? $index)));
 
             return ($content["packageFreeDelivery{$index}"] ?? false) === true
