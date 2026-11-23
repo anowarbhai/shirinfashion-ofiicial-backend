@@ -1123,7 +1123,7 @@ class OrderController extends Controller
                 ? round($item['line_total'] / max(1, $item['quantity']), 2)
                 : ($customPrice ?? $product->price);
 
-            $displayTitle = $variantTitle ? (preg_match('/^size:/i', trim($variantTitle)) ? trim($variantTitle) : 'Size: '.trim($variantTitle)) : null;
+            $displayTitle = $variantTitle ? trim($variantTitle) : null;
 
             $orderItemData = [
                 'product_id' => $product->id,
